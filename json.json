@@ -1,0 +1,33 @@
+{
+    "kind": "Config",
+    "apiVersion": "v1",
+    "preferences": {},
+    "clusters": [
+        {
+            "name": "docker-desktop",
+            "cluster": {
+                "server": "https://127.0.0.1:6443",
+                "certificate-authority-data": "DATA+OMITTED"
+            }
+        }
+    ],
+    "users": [
+        {
+            "name": "docker-desktop",
+            "user": {
+                "client-certificate-data": "DATA+OMITTED",
+                "client-key-data": "DATA+OMITTED"
+            }
+        }
+    ],
+    "contexts": [
+        {
+            "name": "docker-desktop",
+            "context": {
+                "cluster": "docker-desktop",
+                "user": "docker-desktop"
+            }
+        }
+    ],
+    "current-context": "docker-desktop"
+}
