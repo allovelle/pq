@@ -1,0 +1,63 @@
+pq 'key1.-key2.{name,phone}'
+    {key1: {key2: {}, name: "", addr: "", phone: +1}}
+    {name: "", addr: "", phone: +1}
+    {name: "", phone: +1}
+
+sigils?
+[?][*][-][!]
+<?><*><-><!>
+
+[] always builds arrays
+[2:4]
+(IT * 3) maps
+(* 3) implicit input?  (if failed to parse, add `(IT)` in front?)
+(IT > 7) filters?
+(> 7) filters?  (if failed to parse, add `(IT)` in front?)
+(age >= 18)  <- this wasn't supported in pique
+(== 'what?')
+
+commands:
+    pick, drop (select, filter)
+    build_arr: [0,7,2,2,3]
+    build_obj: {name,addr,phone,example: "value"}
+    collect, join
+    query
+    fanout, spread
+
+Terminal Query Output Profiles:
+    stdout | pq -
+
+
+    pipe live query: color lines, disable wrapping, cut off the excess columns
+        user wants to drill down namespaces live, the point is key selection
+        stdout | pq
+    pipe static query: color lines, enable wrapping
+        user knows the namespace to drill down
+        stdout | pq 'query'
+    file live query: color lines, disable wrapping
+        user wants to drill down namespaces live
+        pq json.json
+    file static query: color lines, enable wrapping
+        user knows the namespace to drill down
+        pq json.json 'query'
+
+
+
+$ pq
+    print help message
+$ stdout | pq
+    colorize json only
+$ pq .
+    invalid
+$ stdout | pq .
+$ stdout | pq -q
+$ stdout | pq --query
+    live query & colorize
+$ stdout | pq 'query'
+    query & colorize
+$ pq 'query'
+    waits for stdin, err if not pipe
+$ pq -f json.json 'query'
+
+$ stdout | pq -f json.json 'query'
+    what does this do? should it search multiple files? no. json doesn't do that
