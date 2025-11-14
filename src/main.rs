@@ -13,8 +13,6 @@ const SQL_INIT: &str = include_str!("init.sql");
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), sqlx::Error>
 {
-    println!("Hello, world!");
-
     let cli_args = cli::parse();
 
     let json = match cli_args.file
@@ -32,18 +30,6 @@ async fn main() -> Result<(), sqlx::Error>
 
     let mut conn = SqliteConnection::connect("sqlite::memory:").await?;
     conn.execute(SQL_INIT).await?;
-    setup_db(&mut conn).await?;
 
-    Ok(())
-}
-
-async fn read_json() -> Result<(), sqlx::Error>
-{
-    Ok(())
-}
-
-async fn setup_db(conn: &mut SqliteConnection) -> Result<(), sqlx::Error>
-{
-    conn.execute("CREATE TABLE lines2 (id integer primary key);").await?;
     Ok(())
 }
