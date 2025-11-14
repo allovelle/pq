@@ -31,12 +31,5 @@ async fn main() -> Result<(), sqlx::Error>
     let mut conn = SqliteConnection::connect("sqlite::memory:").await?;
     conn.execute(SQL_INIT).await?;
 
-    starlark();
-
     Ok(())
-}
-
-fn starlark()
-{
-    use starlark;
 }

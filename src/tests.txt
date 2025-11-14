@@ -1,0 +1,25 @@
+pq 'key1.-key2.{name,phone}'
+    {key1: {key2: {}, name: "", addr: "", phone: +1}}
+    {name: "", addr: "", phone: +1}
+    {name: "", phone: +1}
+
+sigils?
+[?][*][-][!]
+<?><*><-><!>
+
+[] always builds arrays
+[2:4]
+(IT * 3) maps
+(* 3) implicit input?  (if failed to parse, add `(IT)` in front?)
+(IT > 7) filters?
+(> 7) filters?  (if failed to parse, add `(IT)` in front?)
+(age >= 18)  <- this wasn't supported in pique
+(== 'what?')
+
+commands:
+    pick, drop (select, filter)
+    build_arr: [0,7,2,2,3]
+    build_obj: {name,addr,phone,example: "value"}
+    collect, join
+    query
+    fanout, spread
