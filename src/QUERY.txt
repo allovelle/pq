@@ -61,3 +61,33 @@ $ pq -f json.json 'query'
 
 $ stdout | pq -f json.json 'query'
     what does this do? should it search multiple files? no. json doesn't do that
+
+
+
+Query Types:
+    a
+    a.b
+    (expr)  <-------- Starlark can handle this
+
+The query DSL parser doesn't have to be afraid of Starlark expressions because
+    they should go into (). Now there are some other divergences from Pique tho:
+        {a,b: c, d: e + 8, f.capitalize(), "gg": g}
+        ^^^ shouldn't the interpreter define all var names?
+
+
+
+fuzzy find files golang fzf
+• Custom JSON parser: stream as you go
+• Colorize nodes manually during stream
+• fzf: filter by key/query live with results as you type!
+• fzf: filter live results with cutoff, show partial query results
+• Negative keys: handle multiple: -(a, b, c)
+• SQLite?
+• Breadcrumbs progressive filtering
+• Char Tokenizer: Emit Events: BeginArr, EndObj, KeyName, etc. that allows the parser to push JSON objects to SQL
+• Each sql row is one formatted line so limit queries can directly display terminal height
+• json is formatted from sql rows
+• Custom type in Starlark for reading JSON io
+• Pq: foo.bar.baz streaming flat namespaces
+• width handling for simple objs/arrs [1,2,3] {a:b}
+• Can Starlark provide all defined names in a module? This would allow build_obj to work
