@@ -75,6 +75,12 @@ The query DSL parser doesn't have to be afraid of Starlark expressions because
         ^^^ shouldn't the interpreter define all var names?
 
 
+        ^^^ starlark vs sql vs pique-py: NON STRING KEYS
+        ^^^ starlark vs sql vs pique-py: NON STRING KEYS {a,b: c, 123: e}
+        ^^^ starlark vs sql vs pique-py: NON STRING KEYS
+        ^^^ starlark vs sql vs pique-py: NON STRING KEYS
+
+
 
 fuzzy find files golang fzf
 • Custom JSON parser: stream as you go
@@ -91,3 +97,21 @@ fuzzy find files golang fzf
 • Pq: foo.bar.baz streaming flat namespaces
 • width handling for simple objs/arrs [1,2,3] {a:b}
 • Can Starlark provide all defined names in a module? This would allow build_obj to work
+
+
+
+Implementation Paths:
+    SerdeJson -> Starlark
+    SerdeJson -> Sql -> CustomExprLang
+    SerdeJson -> Sql -> Starlark
+
+    PiqueJson -> SerdeJson
+
+    PiqueJson -> Sql; Starlark -> SQL
+    PiqueJson -> Starlark
+
+    ExprLang
+    Starlark
+    Custom -> Sql
+
+    Starlark -> ToSerdeJson
