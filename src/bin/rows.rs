@@ -138,7 +138,8 @@ fn traverse(
 )
 {
     let new_id = table.len() as u32;
-    let indent = table[parent as usize].indent + 1;
+    // let indent = table[parent as usize].indent + 1;
+    let indent = table.get(parent as usize).map_or(0, |row| row.indent + 1);
 
     // Return Some/None based on value/container?
     match value
