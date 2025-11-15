@@ -63,11 +63,45 @@ $ stdout | pq -f json.json 'query'
     what does this do? should it search multiple files? no. json doesn't do that
 
 
+SomeKey(key, val) + 1
+    value modified (__add__)
+SomeKey(key, val).upper()
+    value modified (__getitem__, __call__)
+SomeKey(key, val) > 32
+    value compared (__gt__)
+-SomeKey(key, val)
+    value negated (__neg__)
 
 Query Types:
-    a
-    a.b
-    (expr)  <-------- Starlark can handle this
+    a a.b
+        Select key
+    (a) (a.b)
+        Expr select nested
+    (name.capitalize())
+        Expr map
+    [0] [0:] [0::]
+        Expr select index
+    [0, 8]
+        Expr build array
+    [len(temperatures) // 2 + 1:]
+        Expr build array
+    [temperature > 32]
+        Expr filter (indexing by boolean doesn't make sense 👍)
+    [temperature > 32, name.upper()]
+        Expr filter map (indexing by tuple doesn't make sense 👍)
+    {a,b}
+        Inclusive build object, no err on missing
+    {-a,-b}
+        Exlusive build object, no err on missing
+    {a,-b}
+        Inclusive first, no-op exclusive keys, err on missing
+    {-a,b}
+        Exclusive first, no-op inclusive keys, err on missing
+    {a, b: b + 1, "c": c}
+        Build object with expression handling
+    {a, {b: b + 1, "c": c}}
+        Build object using set & nested dicts for expr parsing
+
 
 The query DSL parser doesn't have to be afraid of Starlark expressions because
     they should go into (). Now there are some other divergences from Pique tho:

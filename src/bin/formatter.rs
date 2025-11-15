@@ -28,8 +28,62 @@ fn main() -> Result<(), std::io::Error>
     // All of this assumes that no rows are deleted or inserted in between
     #[rustfmt::skip]
     #[repr(u8)]
-    #[derive(Debug, Clone, Copy)]
+    #[derive(Clone, Copy)]
     enum ValType { NewObj, EndObj, NewArr, EndArr, Null, Bool, Str, Num, }
+
+    enum Cmd
+    {
+        MapExpr,
+        FilterExpr,
+        SelectKey,
+        BuildObj,
+        BuildArr,
+        Fanout,
+        Join,
+        // FilterKeys,
+    }
+
+    impl std::fmt::Display for ValType
+    {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
+        {
+            format!("{self:?}")
+                .split_once("::")
+                .map(|(_, a)| f.write_str(a))
+                .ok_or(Err(std::fmt::Error));
+
+            let name =
+                format!("{self:?}").split_once("::").ok_or(std::fmt::Error)?;
+
+            // if let Some((_, type_name)) = format!("{self:?}").split_once("::")
+            // {
+            //     f.write_fmt(format_args!("{type_name}"))
+            // }
+            // else
+            // {
+            //     Err(std::fmt::Error)
+            // }
+        }
+    }
+
+    impl std::fmt::Debug for ValType
+    {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
+        {
+            match self
+            {
+                Self::NewObj => write!(f, "new_obj"),
+                Self::EndObj => write!(f, "end_obj"),
+                Self::NewArr => write!(f, "new_arr"),
+                Self::EndArr => write!(f, "end_arr"),
+                Self::Null => write!(f, "null"),
+                Self::Bool => write!(f, "bool"),
+                Self::Str => write!(f, "str"),
+                Self::Num => write!(f, "num"),
+            }
+        }
+    }
+
     type KeysRow = (u32, String, u32); // parent id, key, value id
     type ValsRow = (ValType, String); // type, value (bool/null/num/str stringified)
 
@@ -85,6 +139,20 @@ fn main() -> Result<(), std::io::Error>
                 tab_vals.push((ValType::EndObj, String::new()));
             }
         }
+    }
+
+    println!("parent id, key, value id");
+    for (udx_parent, key, udx_val) in tab_keys.into_iter()
+    {
+        println!("{udx_parent}, {key}, {udx_val}");
+    }
+
+    println!();
+
+    println!("type, value");
+    for (val_type, value) in tab_vals.into_iter()
+    {
+        println!("{val_type}, {value}");
     }
 
     Ok(())
