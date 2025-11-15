@@ -103,18 +103,15 @@ Query Types:
         Build object using set & nested dicts for expr parsing
 
 
+    Use op logging for:
+        -a: remove key entirely, not negate
+        a > b: filter object where key a greater than key b, not bool expr
+
+
 The query DSL parser doesn't have to be afraid of Starlark expressions because
     they should go into (). Now there are some other divergences from Pique tho:
         {a,b: c, d: e + 8, f.capitalize(), "gg": g}
         ^^^ shouldn't the interpreter define all var names?
-
-
-        ^^^ starlark vs sql vs pique-py: NON STRING KEYS
-        ^^^ starlark vs sql vs pique-py: NON STRING KEYS {a,b: c, 123: e}
-        ^^^ starlark vs sql vs pique-py: NON STRING KEYS
-        ^^^ starlark vs sql vs pique-py: NON STRING KEYS
-
-
 
 fuzzy find files golang fzf
 • Custom JSON parser: stream as you go
