@@ -1,155 +1,161 @@
 //! Convert JSON to rows
 //!
-use serde_json::Value;
+use std::convert::From;
+
+use serde_json::{Number, Value};
 
 fn main() -> Result<(), std::io::Error>
 {
     let value: serde_json::Value = serde_json::from_reader(std::io::stdin())?;
 
-    let mut queue = Vec::new();
-    traverse(&mut queue, "", value, 0);
-    view_table(&queue);
+    let mut table = Vec::new();
+    traverse(&mut table, String::new(), value, 0);
+    view_table(&table);
 
     Ok(())
 }
 
-fn view_table(queue: &Vec<Row>)
+fn view_table(table: &Vec<Row>)
 {
-    use RowType::*;
-
-    let mut level = 0;
-    let mut prev_parent = 0;
-
-    for (row_id, row) in queue.iter().skip(1).enumerate()
+    for row in table
     {
         println!("{row:?}");
-        let indent = " ".repeat(4).repeat(level);
-
-        if row.parent > prev_parent
-        {
-            match &queue[prev_parent].ty
-            {
-                Arr => println!("{} | {:?}: [", row_id, row.key),
-                Obj => println!("{} | {:?}: {{", row_id, row.key),
-                _ => todo!(),
-            }
-            prev_parent = row.parent;
-        }
-        else
-        {
-            match row.ty
-            {
-                Null | Bool | Num =>
-                {
-                    print!("{} | {:?}: {}", row_id, row.key, row.value)
-                }
-                Str => print!("{} | {:?}: {:?}", row_id, row.key, row.value),
-                _ => todo!(),
-            }
-        }
     }
-    println!();
 }
 
-fn show(txt: String, indent: usize)
-{
-    let tab = "    ".repeat(indent);
-    println!("{tab}{txt}");
-
-    /*
-    Value::Null => show("null".to_string(), parent),
-    Value::Bool(tf) => show(format!("{tf}"), parent),
-    Value::Number(num) => show(format!("{num}"), parent),
-    Value::String(txt) => show(txt.to_string(), parent),
-    */
-}
-
+#[rustfmt::skip]
 #[derive(Debug, Clone, Copy)]
 #[repr(u8)]
-enum RowType
-{
-    Arr,
-    Obj,
-    Null,
-    Bool,
-    Str,
-    Num,
-}
+enum RowType { Arr, Obj, Nil, Bool, Txt, Num, }
 
 /// Invariant: Self::Id is the index within it's container.
 #[derive(Debug, Clone)]
 struct Row
 {
-    ty: RowType,
+    #[cfg(not(feature = "implicit_row_ids"))]
+    id: u32,
+    parent: u32,
     key: String,
     value: String,
-    parent: usize,
+    ty: RowType,
+    #[cfg(not(feature = "log_n_indentation"))]
+    indent: u32,
 }
 
-fn traverse(
-    queue: &mut Vec<Row>,
-    key: impl AsRef<str>,
-    value: Value,
-    parent: usize,
-)
+impl Row
 {
-    use RowType::*;
+    fn new<K: ToString, V: ToString>(
+        id: u32,
+        parent: u32,
+        key: K,
+        value: V,
+        ty: RowType,
+        indent: u32,
+    ) -> Self
+    {
+        let key = key.to_string();
+        let value = value.to_string();
+        Self { id, parent, key, value, ty, indent }
+    }
 
-    let key = key.as_ref().to_string();
+    fn nil<K: ToString>(id: u32, parent: u32, key: K, indent: u32) -> Self
+    {
+        Self::new(id, parent, key.to_string(), "null", RowType::Nil, indent)
+    }
+
+    fn txt<K: ToString, V: ToString>(
+        id: u32,
+        parent: u32,
+        key: K,
+        val: V,
+        indent: u32,
+    ) -> Self
+    {
+        Self::new(id, parent, key, val, RowType::Txt, indent)
+    }
+
+    fn boolean<K: ToString>(
+        id: u32,
+        parent: u32,
+        key: K,
+        val: bool,
+        indent: u32,
+    ) -> Self
+    {
+        Self::new(id, parent, key, val.to_string(), RowType::Bool, indent)
+    }
+
+    fn num<K: ToString, V>(
+        id: u32,
+        parent: u32,
+        key: K,
+        val: V,
+        indent: u32,
+    ) -> Self
+    where
+        Number: From<V>,
+    {
+        let val = Number::from(val).to_string();
+        Self::new(id, parent, key, val, RowType::Num, indent)
+    }
+
+    fn arr<K: ToString>(id: u32, parent: u32, key: K, indent: u32) -> Self
+    {
+        Self::new(id, parent, key, String::new(), RowType::Arr, indent)
+    }
+
+    fn obj<K: ToString>(id: u32, parent: u32, key: K, indent: u32) -> Self
+    {
+        Self::new(id, parent, key, String::new(), RowType::Obj, indent)
+    }
+
+    fn indent_level(&self, table: &Vec<Row>) -> u32
+    {
+        if cfg!(feature = "log_n_indentation")
+        {
+            let mut parent = self.parent;
+            let mut levels_deep = 0;
+            while let Some(row) = table.get(parent as usize)
+            {
+                parent = row.parent;
+                levels_deep += 1;
+            }
+            levels_deep
+        }
+        else
+        {
+            self.indent
+        }
+    }
+}
+
+fn traverse(table: &mut Vec<Row>, key: String, value: Value, parent: u32)
+{
+    let new_id = table.len() as u32;
+    let prev_parent_id =
+        table.last().map(|row| row.parent).unwrap_or_default() as u32;
 
     // Return Some/None based on value/container?
     match value
     {
-        Value::Null => queue.push(Row {
-            ty: Null,
-            key: key.to_string(),
-            value: "null".to_string(),
-            parent,
-        }),
-        Value::Bool(tf) => queue.push(Row {
-            ty: Bool,
-            key: key.to_string(),
-            value: tf.to_string(),
-            parent,
-        }),
-        Value::Number(num) => queue.push(Row {
-            ty: Num,
-            key: key.to_string(),
-            value: num.to_string(),
-            parent,
-        }),
-        Value::String(txt) => queue.push(Row {
-            ty: Str,
-            key: key.to_string(),
-            value: txt,
-            parent,
-        }),
+        Value::Null => table.push(Row::nil(new_id, parent, key, 0)),
+        Value::Bool(tf) => table.push(Row::boolean(new_id, parent, key, tf, 0)),
+        Value::Number(num) => table.push(Row::num(new_id, parent, key, num, 0)),
+        Value::String(txt) => table.push(Row::txt(new_id, parent, key, txt, 0)),
         Value::Array(arr) =>
         {
-            queue.push(Row {
-                ty: Arr,
-                key: key.to_string(),
-                value: "".to_string(),
-                parent,
-            });
-
+            table.push(Row::arr(new_id, parent, key.clone(), 0));
             for element in arr
             {
-                traverse(queue, &key, element, parent + 1);
+                traverse(table, key.clone(), element, parent + 1);
             }
         }
         Value::Object(map) =>
         {
-            queue.push(Row {
-                ty: Obj,
-                key: key.to_string(),
-                value: "".to_string(),
-                parent,
-            });
-
+            table.push(Row::obj(new_id, parent, key, 0));
             for (name, element) in map
             {
-                traverse(queue, name, element, parent + 1);
+                traverse(table, name, element, parent + 1);
             }
         }
     }
