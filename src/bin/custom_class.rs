@@ -22,20 +22,20 @@ impl<'v> StarlarkValue<'v> for Foo {}
 //
 
 #[derive(Debug, Display, ProvidesStaticType, NoSerialize, Allocative)]
-// For more basic
+#[display("Point({}, {:?})", val, log)]
 struct MyNumber
 {
-    #[display("int: {_0}")]
-    val: i32,
     // #[display("int: {_0}")]
-    // log: Vec<&'static str>, // record operations
+    val: i32,
+    // #[display(fmt = "Success({})", code)]
+    log: Vec<&'static str>,
 }
 
 impl MyNumber
 {
     fn new(val: i32) -> Self
     {
-        Self { val }
+        Self { val, log: vec![] }
     }
 }
 
@@ -66,13 +66,13 @@ impl<'v> StarlarkValue<'v> for MyNumber
     {
         if let Some(int_rhs) = rhs.unpack_i32()
         {
-            let mut new = MyNumber {
+            let new = MyNumber {
                 val: self.val + int_rhs,
-                // log: {
-                //     let mut l = self.log.clone();
-                //     l.push("add called");
-                //     l
-                // },
+                log: {
+                    let mut l = self.log.clone();
+                    l.push("add called");
+                    l
+                },
             };
             Some(Ok(heap.alloc(new)))
         }
@@ -104,7 +104,8 @@ fn main() -> Result<(), starlark::Error>
     let allocated_value: Value = module.heap().alloc(MyNumber::new(-123456));
     module.set("my_num", allocated_value);
 
-    let value: Value = eval.eval_module(ast_for("my_num")?, &globals)?;
+    let value: Value =
+        eval.eval_module(ast_for("my_num + 1 + 1 + 1")?, &globals)?;
     println!("expr => {}", value);
 
     Ok(())
