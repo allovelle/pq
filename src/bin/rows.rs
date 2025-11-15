@@ -18,41 +18,33 @@ fn view_table(queue: &Vec<Row>)
     use RowType::*;
 
     let mut level = 0;
+    let mut prev_parent = 0;
 
-    for (line, row) in queue.iter().enumerate()
+    for (row_id, row) in queue.iter().skip(1).enumerate()
     {
+        println!("{row:?}");
         let indent = " ".repeat(4).repeat(level);
 
-        if matches!(row.ty, NewObj)
+        if row.parent > prev_parent
         {
-            println!("{}{{", indent);
-        }
-        else if matches!(row.ty, EndObj)
-        {
-            println!("{}}}", indent);
-        }
-        if matches!(row.ty, NewArr)
-        {
-            println!("{}[", indent);
-        }
-        else if matches!(row.ty, EndArr)
-        {
-            println!("{}]", indent);
-        }
-        else if matches!(row.ty, Null | Bool | Num)
-        {
-            print!("{:?}: {}", row.key, row.value);
-            if line < queue.len() - 1
+            match &queue[prev_parent].ty
             {
-                println!(",")
+                Arr => println!("{} | {:?}: [", row_id, row.key),
+                Obj => println!("{} | {:?}: {{", row_id, row.key),
+                _ => todo!(),
             }
+            prev_parent = row.parent;
         }
         else
         {
-            print!("{:?}: {:?}", row.key, row.value);
-            if line < queue.len() - 1
+            match row.ty
             {
-                println!(",")
+                Null | Bool | Num =>
+                {
+                    print!("{} | {:?}: {}", row_id, row.key, row.value)
+                }
+                Str => print!("{} | {:?}: {:?}", row_id, row.key, row.value),
+                _ => todo!(),
             }
         }
     }
@@ -72,24 +64,26 @@ fn show(txt: String, indent: usize)
     */
 }
 
+#[derive(Debug, Clone, Copy)]
+#[repr(u8)]
 enum RowType
 {
-    NewArr,
-    EndArr,
-    NewObj,
-    EndObj,
+    Arr,
+    Obj,
     Null,
     Bool,
     Str,
     Num,
 }
 
+/// Invariant: Self::Id is the index within it's container.
+#[derive(Debug, Clone)]
 struct Row
 {
     ty: RowType,
     key: String,
     value: String,
-    parent_id: usize,
+    parent: usize,
 }
 
 fn traverse(
@@ -110,63 +104,53 @@ fn traverse(
             ty: Null,
             key: key.to_string(),
             value: "null".to_string(),
-            parent_id: parent,
+            parent,
         }),
         Value::Bool(tf) => queue.push(Row {
             ty: Bool,
             key: key.to_string(),
             value: tf.to_string(),
-            parent_id: parent,
+            parent,
         }),
         Value::Number(num) => queue.push(Row {
             ty: Num,
             key: key.to_string(),
             value: num.to_string(),
-            parent_id: parent,
+            parent,
         }),
         Value::String(txt) => queue.push(Row {
             ty: Str,
             key: key.to_string(),
             value: txt,
-            parent_id: parent,
+            parent,
         }),
         Value::Array(arr) =>
         {
             queue.push(Row {
-                ty: NewArr,
-                key: key.clone(),
-                value: String::new(),
-                parent_id: parent,
+                ty: Arr,
+                key: key.to_string(),
+                value: "".to_string(),
+                parent,
             });
+
             for element in arr
             {
                 traverse(queue, &key, element, parent + 1);
             }
-            queue.push(Row {
-                ty: EndArr,
-                key: key.clone(),
-                value: String::new(),
-                parent_id: parent,
-            });
         }
         Value::Object(map) =>
         {
             queue.push(Row {
-                ty: NewObj,
-                key: key.clone(),
-                value: String::new(),
-                parent_id: parent,
+                ty: Obj,
+                key: key.to_string(),
+                value: "".to_string(),
+                parent,
             });
+
             for (name, element) in map
             {
                 traverse(queue, name, element, parent + 1);
             }
-            queue.push(Row {
-                ty: EndObj,
-                key: key.clone(),
-                value: String::new(),
-                parent_id: parent,
-            });
         }
     }
 }
