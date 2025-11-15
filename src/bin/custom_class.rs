@@ -1,56 +1,14 @@
-/*
-use starlark::values::UnpackValue;
-use starlark::values::ValueError;
-use starlark::values::ValueResult;
-use starlark::values::typing::Ty;
-use starlark::values::{AllocValue, Heap, StarlarkValue, Value};
-
-#[derive(Debug)]
-struct MyNumber
-{
-    val: i32,
-    log: Vec<&'static str>, // record operations
-}
-
-impl<'v> StarlarkValue<'v> for MyNumber
-{
-    type Canonical = Self;
-
-    fn get_type(&self) -> &'static str
-    {
-        "MyNumber"
-    }
-
-    fn add(&self, rhs: Value<'v>, heap: &'v Heap) -> ValueResult<'v>
-    {
-        if let Some(int_rhs) = rhs.unpack_int()
-        {
-            let mut new = MyNumber {
-                val: self.val + int_rhs,
-                log: {
-                    let mut l = self.log.clone();
-                    l.push("add called");
-                    l
-                },
-            };
-            Ok(heap.alloc(new))
-        }
-        else
-        {
-            Err(ValueError::IncorrectType(rhs.get_type().to_owned()))
-        }
-    }
-}
-*/
-
 use allocative::Allocative;
 use derive_more::Display;
-use starlark::environment::{Globals, Module};
+use starlark::environment::Module;
 use starlark::eval::Evaluator;
 use starlark::syntax::{AstModule, Dialect};
-use starlark::values::{FrozenValue, ProvidesStaticType};
-use starlark::values::{NoSerialize, Value};
-use starlark::values::{StarlarkValue, StringValue};
+use starlark::typing::Ty;
+use starlark::values::Value;
+use starlark::values::type_repr::StarlarkTypeRepr;
+use starlark::values::{AllocValue, StarlarkValue};
+use starlark::values::{Heap, ProvidesStaticType};
+use starlark::values::{NoSerialize, ValueError};
 use starlark_derive::starlark_value;
 
 #[derive(Debug, Display, ProvidesStaticType, NoSerialize, Allocative)]
@@ -58,6 +16,64 @@ use starlark_derive::starlark_value;
 struct Foo;
 #[starlark_value(type = "foo")]
 impl<'v> StarlarkValue<'v> for Foo {}
+
+//
+//
+//
+
+#[derive(Debug, Display, ProvidesStaticType, NoSerialize, Allocative)]
+// For more basic
+struct MyNumber
+{
+    #[display("int: {_0}")]
+    val: i32,
+    // #[display("int: {_0}")]
+    // log: Vec<&'static str>, // record operations
+}
+
+impl<'v> AllocValue<'v> for MyNumber
+{
+    fn alloc_value(self, heap: &'v Heap) -> Value<'v>
+    {
+        heap.alloc_simple(self)
+    }
+}
+
+#[starlark_value(type = "my_num", UnpackValue, StarlarkTypeRepr)]
+impl<'v> StarlarkValue<'v> for MyNumber
+{
+    type Canonical = Self;
+
+    // fn get_type(&self) -> &'static str
+    // {
+    //     "MyNumber"
+    // }
+
+    // fn add(&self, rhs: Value<'v>, heap: &'v Heap) -> ValueResult<'v>        Option<crate::Result<Value<'v>>>
+    fn add(
+        &self,
+        rhs: Value<'v>,
+        heap: &'v Heap,
+    ) -> Option<starlark::Result<Value<'v>>>
+    {
+        if let Some(int_rhs) = rhs.unpack_i32()
+        {
+            let mut new = MyNumber {
+                val: self.val + int_rhs,
+                // log: {
+                //     let mut l = self.log.clone();
+                //     l.push("add called");
+                //     l
+                // },
+            };
+            Some(Ok(heap.alloc(new)))
+        }
+        else
+        {
+            Some(Err(ValueError::IncorrectParameterType.into()))
+        }
+    }
+}
 
 fn main() -> Result<(), starlark::Error>
 {
