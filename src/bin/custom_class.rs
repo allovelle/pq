@@ -31,6 +31,14 @@ struct MyNumber
     // log: Vec<&'static str>, // record operations
 }
 
+impl MyNumber
+{
+    fn new(val: i32) -> Self
+    {
+        Self { val }
+    }
+}
+
 impl<'v> AllocValue<'v> for MyNumber
 {
     fn alloc_value(self, heap: &'v Heap) -> Value<'v>
@@ -91,6 +99,12 @@ fn main() -> Result<(), starlark::Error>
     module.set("prev", value);
 
     let value: Value = eval.eval_module(ast_for("[prev, IT]")?, &globals)?;
+    println!("expr => {}", value);
+
+    let allocated_value: Value = module.heap().alloc(MyNumber::new(-123456));
+    module.set("my_num", allocated_value);
+
+    let value: Value = eval.eval_module(ast_for("my_num")?, &globals)?;
     println!("expr => {}", value);
 
     Ok(())
