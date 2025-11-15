@@ -115,3 +115,10 @@ Implementation Paths:
     Custom -> Sql
 
     Starlark -> ToSerdeJson
+
+
+Json Outputing Rules
+    recurse into lower layers to find minimal width
+        rule: space before `{` and `}`
+        rule: fit [...] on one line if sum is less than terminal width
+        rule: fit {...} on one line if sum is less than terminal width
