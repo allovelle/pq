@@ -9,7 +9,7 @@ fn main() -> Result<(), std::io::Error>
     let value: serde_json::Value = serde_json::from_reader(std::io::stdin())?;
 
     let mut table = Vec::new();
-    traverse(&mut table, String::new(), value, 0, 0);
+    traverse(&mut table, String::new(), value, 0);
     view_table(&table);
 
     Ok(())
@@ -21,10 +21,41 @@ fn view_table(table: &Vec<Row>)
     {
         println!("{row:?}");
     }
+
+    // Idea: for any given row, render it in JSON with proper indentation
+    // Row { id: 7, parent: 3, key: "3", value: "818", ty: Num, indent: 2 };
+    // `........"3": 818,`
+    // ? Add row types for commas with id 0 and parent=node?
+
+    let mut rows = table.iter().peekable();
+    for row in rows
+    {
+        let tab = "    ".repeat(row.indent as usize);
+        let key = &row.key;
+        let mut val = row.value.clone();
+        if row.ty == RowType::Txt
+        {
+            val = format!("{:?}", &row.value);
+        }
+
+        println!("{tab}{key:?}: {val},");
+
+        // match row.ty
+        // {
+        //     RowType::Arr => todo!(),
+        //     RowType::Obj => todo!(),
+        //     RowType::Nil => todo!(),
+        //     RowType::Bool => todo!(),
+        //     RowType::Txt => todo!(),
+        //     RowType::Num => todo!(),
+        // }
+    }
 }
 
+fn _format_table(_table: &Vec<Row>) {}
+
 #[rustfmt::skip]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(u8)]
 enum RowType { Arr, Obj, Nil, Bool, Txt, Num, }
 
@@ -129,13 +160,7 @@ impl Row
     }
 }
 
-fn traverse(
-    table: &mut Vec<Row>,
-    key: String,
-    value: Value,
-    parent: u32,
-    indent: u32,
-)
+fn traverse(table: &mut Vec<Row>, key: String, value: Value, parent: u32)
 {
     let new_id = table.len() as u32;
     // let indent = table[parent as usize].indent + 1;
@@ -162,7 +187,7 @@ fn traverse(
             table.push(Row::arr(new_id, parent, key.clone(), indent));
             for (i, element) in arr.into_iter().enumerate()
             {
-                traverse(table, i.to_string(), element, new_id, indent + 1);
+                traverse(table, i.to_string(), element, new_id);
             }
         }
         Value::Object(map) =>
@@ -170,7 +195,7 @@ fn traverse(
             table.push(Row::obj(new_id, parent, key, 0));
             for (name, element) in map
             {
-                traverse(table, name, element, new_id, indent + 1);
+                traverse(table, name, element, new_id);
             }
         }
     }

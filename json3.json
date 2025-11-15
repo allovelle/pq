@@ -5,6 +5,8 @@
         "iPhone",
         "MacBook Air",
         "Windows PC",
+        null,
+        3.33,
         818
     ]
 }
