@@ -28,7 +28,7 @@ fn main() -> Result<(), std::io::Error>
     // All of this assumes that no rows are deleted or inserted in between
     #[rustfmt::skip]
     #[repr(u8)]
-    #[derive(Clone, Copy)]
+    #[derive(Debug, Clone, Copy)]
     enum ValType { NewObj, EndObj, NewArr, EndArr, Null, Bool, Str, Num, }
 
     enum Cmd
@@ -47,40 +47,10 @@ fn main() -> Result<(), std::io::Error>
     {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
         {
-            format!("{self:?}")
-                .split_once("::")
-                .map(|(_, a)| f.write_str(a))
-                .ok_or(Err(std::fmt::Error));
-
-            let name =
-                format!("{self:?}").split_once("::").ok_or(std::fmt::Error)?;
-
-            // if let Some((_, type_name)) = format!("{self:?}").split_once("::")
-            // {
-            //     f.write_fmt(format_args!("{type_name}"))
-            // }
-            // else
-            // {
-            //     Err(std::fmt::Error)
-            // }
-        }
-    }
-
-    impl std::fmt::Debug for ValType
-    {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
-        {
-            match self
-            {
-                Self::NewObj => write!(f, "new_obj"),
-                Self::EndObj => write!(f, "end_obj"),
-                Self::NewArr => write!(f, "new_arr"),
-                Self::EndArr => write!(f, "end_arr"),
-                Self::Null => write!(f, "null"),
-                Self::Bool => write!(f, "bool"),
-                Self::Str => write!(f, "str"),
-                Self::Num => write!(f, "num"),
-            }
+            let dbg = format!("{self:?}");
+            // let (_, name) = dbg.split_once("::").ok_or(std::fmt::Error)?;
+            // f.write_str(name)
+            f.write_fmt(format_args!("{}", dbg.to_lowercase()))
         }
     }
 
@@ -141,18 +111,18 @@ fn main() -> Result<(), std::io::Error>
         }
     }
 
-    println!("parent id, key, value id");
-    for (udx_parent, key, udx_val) in tab_keys.into_iter()
+    println!("row id: parent id, key, value id");
+    for (i, (udx_parent, key, udx_val)) in tab_keys.into_iter().enumerate()
     {
-        println!("{udx_parent}, {key}, {udx_val}");
+        println!("{i}: {udx_parent}, {key}, {udx_val}");
     }
 
     println!();
 
-    println!("type, value");
-    for (val_type, value) in tab_vals.into_iter()
+    println!("row id: type, value");
+    for (i, (val_type, value)) in tab_vals.into_iter().enumerate()
     {
-        println!("{val_type}, {value}");
+        println!("{i}: {val_type}, {value}");
     }
 
     Ok(())
