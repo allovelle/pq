@@ -9,7 +9,7 @@ fn main() -> Result<(), std::io::Error>
     let value: serde_json::Value = serde_json::from_reader(std::io::stdin())?;
 
     let mut table = Vec::new();
-    traverse(&mut table, String::new(), value, 0);
+    traverse(&mut table, String::new(), value, 0, 0);
     view_table(&table);
 
     Ok(())
@@ -129,25 +129,38 @@ impl Row
     }
 }
 
-fn traverse(table: &mut Vec<Row>, key: String, value: Value, parent: u32)
+fn traverse(
+    table: &mut Vec<Row>,
+    key: String,
+    value: Value,
+    parent: u32,
+    indent: u32,
+)
 {
     let new_id = table.len() as u32;
-    let prev_parent_id =
-        table.last().map(|row| row.parent).unwrap_or_default() as u32;
 
     // Return Some/None based on value/container?
     match value
     {
-        Value::Null => table.push(Row::nil(new_id, parent, key, 0)),
-        Value::Bool(tf) => table.push(Row::boolean(new_id, parent, key, tf, 0)),
-        Value::Number(num) => table.push(Row::num(new_id, parent, key, num, 0)),
-        Value::String(txt) => table.push(Row::txt(new_id, parent, key, txt, 0)),
+        Value::Null => table.push(Row::nil(new_id, parent, key, indent)),
+        Value::Bool(tf) =>
+        {
+            table.push(Row::boolean(new_id, parent, key, tf, indent))
+        }
+        Value::Number(num) =>
+        {
+            table.push(Row::num(new_id, parent, key, num, indent))
+        }
+        Value::String(txt) =>
+        {
+            table.push(Row::txt(new_id, parent, key, txt, indent))
+        }
         Value::Array(arr) =>
         {
-            table.push(Row::arr(new_id, parent, key.clone(), 0));
+            table.push(Row::arr(new_id, parent, key.clone(), indent));
             for element in arr
             {
-                traverse(table, key.clone(), element, parent + 1);
+                traverse(table, key.clone(), element, new_id, indent + 1);
             }
         }
         Value::Object(map) =>
@@ -155,7 +168,7 @@ fn traverse(table: &mut Vec<Row>, key: String, value: Value, parent: u32)
             table.push(Row::obj(new_id, parent, key, 0));
             for (name, element) in map
             {
-                traverse(table, name, element, parent + 1);
+                traverse(table, name, element, new_id, indent + 1);
             }
         }
     }
