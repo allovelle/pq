@@ -45,9 +45,12 @@ impl<'v> StarlarkValue<'v> for MyNumber
 
 use allocative::Allocative;
 use derive_more::Display;
-use starlark::values::NoSerialize;
+use starlark::environment::{Globals, Module};
+use starlark::eval::Evaluator;
+use starlark::syntax::{AstModule, Dialect};
 use starlark::values::ProvidesStaticType;
 use starlark::values::StarlarkValue;
+use starlark::values::{NoSerialize, Value};
 use starlark_derive::starlark_value;
 
 #[derive(Debug, Display, ProvidesStaticType, NoSerialize, Allocative)]
@@ -58,5 +61,22 @@ impl<'v> StarlarkValue<'v> for Foo {}
 
 fn main() -> Result<(), starlark::Error>
 {
+    let globals = Globals::standard();
+    let module = Module::new();
+    let mut eval = Evaluator::new(&module);
+
+    let code = r#"
+        it = IT
+        it
+    "#;
+    let code = r#""hello" + " world!""#;
+
+    let ast =
+        AstModule::parse("[MODULE]", code.to_owned(), &Dialect::Standard)?;
+
+    let value: Value = eval.eval_module(ast, &globals)?;
+
+    println!("expr => {}", value);
+
     Ok(())
 }
