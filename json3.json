@@ -1,4 +1,10 @@
 {
     "name": "Allovelle",
-    "age": 30
+    "age": 30,
+    "tech-devices": [
+        "iPhone",
+        "MacBook Air",
+        "Windows PC",
+        818
+    ]
 }

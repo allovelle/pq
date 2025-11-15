@@ -17,7 +17,7 @@ fn main() -> Result<(), std::io::Error>
 
 fn view_table(table: &Vec<Row>)
 {
-    for row in table
+    for row in table.iter().skip(1)
     {
         println!("{row:?}");
     }
@@ -158,9 +158,9 @@ fn traverse(
         Value::Array(arr) =>
         {
             table.push(Row::arr(new_id, parent, key.clone(), indent));
-            for element in arr
+            for (i, element) in arr.into_iter().enumerate()
             {
-                traverse(table, key.clone(), element, new_id, indent + 1);
+                traverse(table, i.to_string(), element, new_id, indent + 1);
             }
         }
         Value::Object(map) =>
