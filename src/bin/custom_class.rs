@@ -48,9 +48,9 @@ use derive_more::Display;
 use starlark::environment::{Globals, Module};
 use starlark::eval::Evaluator;
 use starlark::syntax::{AstModule, Dialect};
-use starlark::values::ProvidesStaticType;
-use starlark::values::StarlarkValue;
+use starlark::values::{FrozenValue, ProvidesStaticType};
 use starlark::values::{NoSerialize, Value};
+use starlark::values::{StarlarkValue, StringValue};
 use starlark_derive::starlark_value;
 
 #[derive(Debug, Display, ProvidesStaticType, NoSerialize, Allocative)]
@@ -61,22 +61,26 @@ impl<'v> StarlarkValue<'v> for Foo {}
 
 fn main() -> Result<(), starlark::Error>
 {
-    let globals = Globals::standard();
+    // let globals = Globals::standard();
+    let mut builder = starlark::environment::GlobalsBuilder::standard();
+    builder.set("IT", 123);
+    let globals = builder.build();
+
     let module = Module::new();
     let mut eval = Evaluator::new(&module);
 
-    let code = r#"
-        it = IT
-        it
-    "#;
-    let code = r#""hello" + " world!""#;
+    let value: Value = eval.eval_module(ast_for("IT")?, &globals)?;
+    println!("expr => {}", value);
 
-    let ast =
-        AstModule::parse("[MODULE]", code.to_owned(), &Dialect::Standard)?;
+    module.set("prev", value);
 
-    let value: Value = eval.eval_module(ast, &globals)?;
-
+    let value: Value = eval.eval_module(ast_for("[prev, IT]")?, &globals)?;
     println!("expr => {}", value);
 
     Ok(())
+}
+
+fn ast_for(code: impl AsRef<str>) -> Result<AstModule, starlark::Error>
+{
+    AstModule::parse("[MODULE]", code.as_ref().to_owned(), &Dialect::Standard)
 }
