@@ -1,8 +1,8 @@
 //! Convert JSON to rows
 //!
-use std::convert::From;
-
+use crossterm::style::Stylize;
 use serde_json::{Number, Value};
+use std::convert::From;
 
 fn main() -> Result<(), std::io::Error>
 {
@@ -28,27 +28,77 @@ fn view_table(table: &Vec<Row>)
     // ? Add row types for commas with id 0 and parent=node?
 
     let mut rows = table.iter().peekable();
-    for row in rows
+
+    while let Some(row) = rows.next()
     {
         let tab = "    ".repeat(row.indent as usize);
-        let key = &row.key;
+        let key = row.key.clone();
         let mut val = row.value.clone();
+
+        let key = format!("{:?}", key);
         if row.ty == RowType::Txt
         {
             val = format!("{:?}", &row.value);
         }
 
-        println!("{tab}{key:?}: {val},");
+        let key_style = <&str as Stylize>::green;
+        let val_style = match row.ty
+        {
+            RowType::Nil => <&str as Stylize>::red,
+            RowType::Bool => Stylize::yellow,
+            RowType::Txt => Stylize::blue,
+            RowType::Num => Stylize::cyan,
+            _ => Stylize::green,
+        };
 
-        // match row.ty
-        // {
-        //     RowType::Arr => todo!(),
-        //     RowType::Obj => todo!(),
-        //     RowType::Nil => todo!(),
-        //     RowType::Bool => todo!(),
-        //     RowType::Txt => todo!(),
-        //     RowType::Num => todo!(),
-        // }
+        if row.ty == RowType::Obj && row.id == 0
+        {
+            println!("{tab}{{")
+        }
+        else if row.ty == RowType::Obj && row.id > 0
+        {
+            println!("{tab}{}: {{", key_style(&key));
+        }
+        else if row.ty == RowType::Arr
+        {
+            // TODO: EmitCommand(Indent, NewArr, StayOnOneLine)
+            println!("{tab}{}: [", key_style(&key));
+        }
+        // Next element is part of another parent so don't place a comma
+        else if let Some(next) = rows.peek()
+            && row.parent != next.parent
+        {
+            println!("{tab}{}: {}", key_style(&key), val_style(&val));
+        }
+        else
+        {
+            // println!("{tab}{key:?}: {val},");
+            println!("{tab}{}: {},", key_style(&key), val_style(&val));
+        }
+
+        // TODO: how to solve the comma? add a blank element? lookup parent?
+        // If next element's parent is different, don't put a comma?
+
+        // Put ] or } for each parent element until the root
+        if rows.peek().is_none()
+        {
+            let mut prev_parent = row;
+            while let Some(prev) = table.get(prev_parent.parent as usize)
+                && prev_parent.id > prev.id
+            {
+                // Commas not needed since all of these will be the last element
+                // of the parent collection, all the way to the root
+                let tab = "    ".repeat(prev.indent as usize);
+                match prev.ty
+                {
+                    RowType::Arr => println!("{tab}]"),
+                    RowType::Obj => println!("{tab}}}"),
+                    _ => todo!(),
+                }
+
+                prev_parent = prev;
+            }
+        }
     }
 }
 

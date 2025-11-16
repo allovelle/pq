@@ -4,6 +4,7 @@
     "tech-devices": [
         "iPhone",
         "MacBook Air",
+        true,
         "Windows PC",
         null,
         3.33,
