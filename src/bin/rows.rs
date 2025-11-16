@@ -15,29 +15,23 @@ fn main() -> Result<(), std::io::Error>
     Ok(())
 }
 
+/// Idea: for any single row, render with proper indents using only the table
 fn view_table(table: &Vec<Row>)
 {
+    use RowType::*;
+
     for row in table.iter().skip(1)
     {
         println!("{row:?}");
     }
 
-    // Idea: for any given row, render it in JSON with proper indentation
-    // Row { id: 7, parent: 3, key: "3", value: "818", ty: Num, indent: 2 };
-    // `........"3": 818,`
-    // ? Add row types for commas with id 0 and parent=node?
-
-    use RowType::*;
-
     let mut rows = table.iter().peekable();
 
     while let Some(row) = rows.next()
     {
-        let tab = "    ".repeat(row.indent as usize);
-        let key = row.key.clone();
-        let mut val = row.value.clone();
+        let key = &format!("{:?}", row.key);
 
-        let key = format!("{:?}", key);
+        let mut val = row.value.clone();
         if row.ty == Txt
         {
             val = format!("{:?}", &row.value);
@@ -53,79 +47,56 @@ fn view_table(table: &Vec<Row>)
             _ => Stylize::green,
         };
 
-        // if row.ty == RowType::Obj && row.id == 0
-        // {
-        //     println!("{tab}{{")
-        // }
-        // else if row.ty == RowType::Obj && row.id > 0
-        // {
-        //     println!("{tab}{}: {{", key_style(&key));
-        // }
-        // else if row.ty == RowType::Arr
-        // {
-        //     // TODO: EmitCommand(Indent, NewArr, StayOnOneLine)
-        //     println!("{tab}{}: [", key_style(&key));
-        // }
-        // else
-        // {
-        //     // * Place comma if next element is not a sibling (obj/arr closing)
-        //     let comma = rows
-        //         .peek()
-        //         .filter(|next| row.parent == next.parent)
-        //         .map_or("", |_| ",");
-
-        //     println!("{tab}{}: {}{comma}", key_style(&key), val_style(&val));
-        // }
+        let tab = "    ".repeat(row.indent as usize);
 
         match row.ty
         {
             Obj if row.id == 0 =>
             {
+                // ? This could be: Row {val: "{", ty: Obj}
                 println!("{tab}{{");
             }
             Obj if row.id > 0 =>
             {
-                println!("{tab}{}: {{", key_style(&key));
+                // ? This could be: Row {val: "{", ty: Obj}
+                println!("{tab}{}: {{", key_style(key));
             }
             Arr =>
             {
+                // ? This could be: Row {val: "[", ty: Arr}
+                println!("{tab}{}: [", key_style(key));
+
                 // TODO: EmitCommand(Indent, NewArr, StayOnOneLine)
-                println!("{tab}{}: [", key_style(&key));
             }
             Obj | Nil | Bool | Txt | Num =>
             {
                 // * Place comma if next element is not a sibling (obj/arr closing)
+                // TODO: table.get(row.id + 1).filter().map_or()
                 let comma = rows
                     .peek()
                     .filter(|next| row.parent == next.parent)
                     .map_or("", |_| ",");
 
-                println!(
-                    "{tab}{}: {}{comma}",
-                    key_style(&key),
-                    val_style(&val)
-                );
+                println!("{tab}{}: {}{comma}", key_style(key), val_style(&val));
             }
         }
 
-        // * Put ] or } for each parent element until the root
+        // * Put ] or } to finish each parent collection but don't place commas
+        // TODO: if table.get(row.id + 1).is_none() {}
         if rows.peek().is_none()
         {
-            let mut prev_parent = row;
-            while let Some(prev) = table.get(prev_parent.parent as usize)
-                && prev_parent.id > prev.id
+            let mut prev = row;
+            while let Some(parent) = table.get(prev.parent as usize)
+                && prev.id > parent.id
             {
-                // Commas not needed since all of these will be the last element
-                // of the parent collection, all the way to the root
-                let tab = "    ".repeat(prev.indent as usize);
-                match prev.ty
+                let tab = "    ".repeat(parent.indent as usize);
+                match parent.ty
                 {
-                    RowType::Arr => println!("{tab}]"),
-                    RowType::Obj => println!("{tab}}}"),
+                    Arr => println!("{tab}]"),
+                    Obj => println!("{tab}}}"),
                     _ => todo!(),
                 }
-
-                prev_parent = prev;
+                prev = parent;
             }
         }
     }
