@@ -49,10 +49,12 @@ fn view_table(table: &Vec<Row>)
 
         let tab = "    ".repeat(row.indent as usize);
 
-        // Rendering rules:
-        // Don't emit key if id is 0 or parent is arr
-        // Don't emit comma if
-        // Emit comma if next row is not sibling
+        // * Rendering rules:
+        // Omit key if id is 0 or parent is arr
+        // Emit comma if next row is sibling
+        // Omit comma if next row is not sibling
+        // Emit ] if ty is arr and next row is not sibling
+        // Emit } if ty is obj and next row is not sibling
 
         match row.ty
         {
@@ -92,7 +94,7 @@ fn view_table(table: &Vec<Row>)
             }
             Obj | Nil | Bool | Txt | Num =>
             {
-                // * Place comma if next element is not a sibling (obj/arr closing)
+                // * Place comma if next row *is* a sibling (continue obj/arr)
                 // TODO: table.get(row.id + 1).filter().map_or()
                 let comma = rows
                     .peek()
