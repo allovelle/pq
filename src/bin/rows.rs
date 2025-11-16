@@ -36,15 +36,15 @@ fn view_table(table: &Vec<Row>)
     //     Arr | Obj => todo!(),
     // };
 
-    for row in table.iter().skip(1)
+    for (id, row) in table.iter().enumerate()
     {
-        println!("{row:?}");
+        println!("ROW[{id}]: {row:?}");
     }
 
-    let mut rows = table.iter().peekable();
-
-    while let Some(row) = rows.next()
+    for (id, row) in table.iter().enumerate()
     {
+        debug_assert_eq!(row.id, id as u32);
+
         let key = &format!("{:?}", row.key);
 
         let mut val = row.value.clone();
@@ -150,22 +150,50 @@ fn view_table(table: &Vec<Row>)
         let begin = [["", ""], ["[", "{"]]
             [(row.ty == Obj || row.ty == Arr) as usize]
             [(row.ty == Obj) as usize];
-        let comma = [",", ""][(row.ty == Obj || row.ty == Arr) as usize];
 
-        // table.get(row.id + 1)
+        let comma = [",", ""][(row.ty == Obj || row.ty == Arr) as usize]; // !!
 
         // The comma should not be part of the table the same way the indent
         // shouldn't be. They can both be calculated using the row and table.
         // ? Should the brace be a val?
         println!("{}{}{}{}{}{}", tab, key, ": ".to_owned(), begin, val, comma);
 
-        let parent = table.get(row.parent as usize);
-        let not_sibling = rows.peek().filter(|next| row.parent != next.parent);
+        // If next row and not sibling: no comma, dedent, and place } or ]
+        if let Some(next) = table.get(row.id as usize + 1)
+            && row.parent != next.parent
+        {
+            println!("{}{}", tab, comma);
+        }
+        // If no next row, end output
+        else
+        {
+            // * Emit opens ] or } for each parent but don't place commas
+            // TODO: if table.get(row.id + 1).is_none() {}
+            // * Emit ends ] and } for all parents all the way up the tree
+
+            let mut prev = row;
+            while let Some(parent) = table.get(prev.parent as usize)
+                && prev.id > parent.id
+            {
+                let tab = "    ".repeat(parent.indent as usize);
+                match parent.ty
+                {
+                    Arr => println!("{tab}]"),
+                    Obj => println!("{tab}}}"),
+                    _ => todo!(),
+                }
+                prev = parent;
+            }
+        }
+
+        // let parent = table.get(row.parent as usize);
+        // let not_sibling = rows.peek().filter(|next| row.parent != next.parent);
 
         // * Put ] or } to finish each parent collection but don't place commas
         // TODO: if table.get(row.id + 1).is_none() {}
         // * Place end braces ] and } for all parents all the way up the tree
-        if rows.peek().is_none()
+        /*
+        if table.get(row.id as usize + 1).is_none()
         {
             let mut prev = row;
             while let Some(parent) = table.get(prev.parent as usize)
@@ -181,6 +209,7 @@ fn view_table(table: &Vec<Row>)
                 prev = parent;
             }
         }
+        */
     }
 }
 
