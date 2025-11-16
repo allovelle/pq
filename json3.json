@@ -10,5 +10,17 @@
         3.33,
         818
     ],
-    "another-one": []
+    "another-one": [],
+    "omit-comma:arr:last-elem-in-obj": {
+        "_": []
+    },
+    "omit-comma:obj:last-elem-in-obj": {
+        "_": {}
+    },
+    "omit-comma:arr:last-elem-in-arr": [
+        []
+    ],
+    "omit-comma:obj:last-elem-in-arr": [
+        {}
+    ]
 }

@@ -20,6 +20,22 @@ fn view_table(table: &Vec<Row>)
 {
     use RowType::*;
 
+    let style_new_arr = <&str as Stylize>::red;
+    let style_new_obj = <&str as Stylize>::red;
+    let style_nil = <&str as Stylize>::red;
+    let style_bool = <&str as Stylize>::yellow;
+    let style_txt = <&str as Stylize>::blue;
+    let style_num = <&str as Stylize>::cyan;
+
+    // let style_value = |val: &Row| match val.ty
+    // {
+    //     Nil => <&str as Stylize>::blue(&val.value),
+    //     Bool => todo!(),
+    //     Txt => todo!(),
+    //     Num => todo!(),
+    //     Arr | Obj => todo!(),
+    // };
+
     for row in table.iter().skip(1)
     {
         println!("{row:?}");
@@ -56,57 +72,99 @@ fn view_table(table: &Vec<Row>)
         // Emit ] if ty is arr and next row is not sibling
         // Emit } if ty is obj and next row is not sibling
 
-        match row.ty
-        {
-            Obj if row.id == 0 =>
-            {
-                // ? This could be: Row {val: "{", ty: Obj}
-                println!("{tab}{{");
+        // ! Emit comma either way, unless it's the toplevel or last elem
 
-                // * Don't print the key
-            }
-            Obj if row.id > 0 =>
-            {
-                // ? This could be: Row {val: "{", ty: Obj}
-                println!("{tab}{}: {{", key_style(key));
-            }
-            Arr =>
-            {
-                // ? This could be: Row {val: "[", ty: Arr}
-                println!("{tab}{}: [", key_style(key));
+        // TODO: Emit color for all quotes (keys & txt vals). Follow `bat`
 
-                // TODO: EmitCommand(Indent, NewArr, StayOnOneLine)
-            }
-            Obj | Nil | Bool | Txt | Num
-                if table
-                    .get(row.parent as usize)
-                    .filter(|prev| prev.ty == Arr)
-                    .is_some() =>
-            {
-                // TODO: table.get(row.id + 1).filter().map_or()
-                let comma = rows
-                    .peek()
-                    .filter(|next| row.parent == next.parent)
-                    .map_or("", |_| ",");
-                println!("{tab}{}{comma}", val_style(&val));
+        /*
+               match row.ty
+               {
+                   Obj if row.id == 0 =>
+                   {
+                       // ? This could be: Row {val: "{", ty: Obj}
+                       println!("{tab}{{");
 
-                // * Don't print the key
-            }
-            Obj | Nil | Bool | Txt | Num =>
-            {
-                // * Place comma if next row *is* a sibling (continue obj/arr)
-                // TODO: table.get(row.id + 1).filter().map_or()
-                let comma = rows
-                    .peek()
-                    .filter(|next| row.parent == next.parent)
-                    .map_or("", |_| ",");
+                       // * Don't print the key
+                   }
+                   Obj if row.id > 0 =>
+                   {
+                       // ? This could be: Row {val: "{", ty: Obj}
+                       println!("{tab}{}: {{", key_style(key));
+                   }
+                   Arr =>
+                   {
+                       // ? This could be: Row {val: "[", ty: Arr}
+                       println!("{tab}{}: [", key_style(key));
 
-                println!("{tab}{}: {}{comma}", key_style(key), val_style(&val));
-            }
-        }
+                       // TODO: EmitCommand(Indent, NewArr, StayOnOneLine)
+                   }
+                   Obj | Nil | Bool | Txt | Num
+                       if table
+                           .get(row.parent as usize)
+                           .filter(|prev| prev.ty == Arr)
+                           .is_some() =>
+                   {
+                       // TODO: table.get(row.id + 1).filter().map_or()
+                       let comma = rows
+                           .peek()
+                           .filter(|next| row.parent == next.parent)
+                           .map_or("", |_| ",");
+                       println!("{tab}{}{comma}", val_style(&val));
+
+                       // * Don't print the key
+                   }
+                   Obj | Nil | Bool | Txt | Num =>
+                   {
+                       // * Place comma if next row *is* a sibling (continue obj/arr)
+                       // TODO: table.get(row.id + 1).filter().map_or()
+                       let comma = rows
+                           .peek()
+                           .filter(|next| row.parent == next.parent)
+                           .map_or("", |_| ",");
+
+                       println!("{tab}{}: {}{comma}", key_style(key), val_style(&val));
+                   }
+               }
+        */
+
+        // ? Compare next node indent: if less, don't place comma, place end }]
+
+        // ! Emit key in all cases unless inside arr or is first element (id 0)
+        // ! Emit end brace ] } when *end* arr|obj
+        // ! Emit comma in *all* cases unless *new* arr|obj
+        // ! Omit comma when next row is not sibling
+        // ! Increment indent when ...
+        // ! Decrement indent when ...
+
+        // let braces = ["{", ""];
+        // let blocks = ["[", ""];
+        // let commas = [",", ""];
+        // let brace = braces[usize::from(row.ty == Obj)];
+        // let block = blocks[usize::from(row.ty == Arr)];
+        // let comma = commas[usize::from(row.ty == Obj || row.ty == Arr)];
+        // let brace = ['\0', '{'][usize::from(row.ty == Obj)];
+        // let block = ['\0', '['][usize::from(row.ty == Arr)];
+        // let comma = ["", ","][usize::from(row.ty != Obj || row.ty != Arr)];
+        // let begin = String::from(brace) + block;
+
+        let begin = [["", ""], ["[", "{"]]
+            [(row.ty == Obj || row.ty == Arr) as usize]
+            [(row.ty == Obj) as usize];
+        let comma = [",", ""][(row.ty == Obj || row.ty == Arr) as usize];
+
+        // table.get(row.id + 1)
+
+        // The comma should not be part of the table the same way the indent
+        // shouldn't be. They can both be calculated using the row and table.
+        // ? Should the brace be a val?
+        println!("{}{}{}{}{}{}", tab, key, ": ".to_owned(), begin, val, comma);
+
+        let parent = table.get(row.parent as usize);
+        let not_sibling = rows.peek().filter(|next| row.parent != next.parent);
 
         // * Put ] or } to finish each parent collection but don't place commas
         // TODO: if table.get(row.id + 1).is_none() {}
+        // * Place end braces ] and } for all parents all the way up the tree
         if rows.peek().is_none()
         {
             let mut prev = row;
