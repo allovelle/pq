@@ -64,22 +64,18 @@ fn view_table(table: &Vec<Row>)
             // TODO: EmitCommand(Indent, NewArr, StayOnOneLine)
             println!("{tab}{}: [", key_style(&key));
         }
-        // Next element is part of another parent so don't place a comma
-        else if let Some(next) = rows.peek()
-            && row.parent != next.parent
-        {
-            println!("{tab}{}: {}", key_style(&key), val_style(&val));
-        }
         else
         {
-            // println!("{tab}{key:?}: {val},");
-            println!("{tab}{}: {},", key_style(&key), val_style(&val));
+            // * Place comma if next element is not a sibling (obj/arr closing)
+            let comma = rows
+                .peek()
+                .filter(|next| row.parent == next.parent)
+                .map_or("", |_| ",");
+
+            println!("{tab}{}: {}{comma}", key_style(&key), val_style(&val));
         }
 
-        // TODO: how to solve the comma? add a blank element? lookup parent?
-        // If next element's parent is different, don't put a comma?
-
-        // Put ] or } for each parent element until the root
+        // * Put ] or } for each parent element until the root
         if rows.peek().is_none()
         {
             let mut prev_parent = row;
