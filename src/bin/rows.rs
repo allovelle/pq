@@ -27,6 +27,8 @@ fn view_table(table: &Vec<Row>)
     // `........"3": 818,`
     // ? Add row types for commas with id 0 and parent=node?
 
+    use RowType::*;
+
     let mut rows = table.iter().peekable();
 
     while let Some(row) = rows.next()
@@ -36,7 +38,7 @@ fn view_table(table: &Vec<Row>)
         let mut val = row.value.clone();
 
         let key = format!("{:?}", key);
-        if row.ty == RowType::Txt
+        if row.ty == Txt
         {
             val = format!("{:?}", &row.value);
         }
@@ -44,35 +46,66 @@ fn view_table(table: &Vec<Row>)
         let key_style = <&str as Stylize>::green;
         let val_style = match row.ty
         {
-            RowType::Nil => <&str as Stylize>::red,
-            RowType::Bool => Stylize::yellow,
-            RowType::Txt => Stylize::blue,
-            RowType::Num => Stylize::cyan,
+            Nil => <&str as Stylize>::red,
+            Bool => Stylize::yellow,
+            Txt => Stylize::blue,
+            Num => Stylize::cyan,
             _ => Stylize::green,
         };
 
-        if row.ty == RowType::Obj && row.id == 0
-        {
-            println!("{tab}{{")
-        }
-        else if row.ty == RowType::Obj && row.id > 0
-        {
-            println!("{tab}{}: {{", key_style(&key));
-        }
-        else if row.ty == RowType::Arr
-        {
-            // TODO: EmitCommand(Indent, NewArr, StayOnOneLine)
-            println!("{tab}{}: [", key_style(&key));
-        }
-        else
-        {
-            // * Place comma if next element is not a sibling (obj/arr closing)
-            let comma = rows
-                .peek()
-                .filter(|next| row.parent == next.parent)
-                .map_or("", |_| ",");
+        // if row.ty == RowType::Obj && row.id == 0
+        // {
+        //     println!("{tab}{{")
+        // }
+        // else if row.ty == RowType::Obj && row.id > 0
+        // {
+        //     println!("{tab}{}: {{", key_style(&key));
+        // }
+        // else if row.ty == RowType::Arr
+        // {
+        //     // TODO: EmitCommand(Indent, NewArr, StayOnOneLine)
+        //     println!("{tab}{}: [", key_style(&key));
+        // }
+        // else
+        // {
+        //     // * Place comma if next element is not a sibling (obj/arr closing)
+        //     let comma = rows
+        //         .peek()
+        //         .filter(|next| row.parent == next.parent)
+        //         .map_or("", |_| ",");
 
-            println!("{tab}{}: {}{comma}", key_style(&key), val_style(&val));
+        //     println!("{tab}{}: {}{comma}", key_style(&key), val_style(&val));
+        // }
+
+        match row.ty
+        {
+            Obj if row.id == 0 =>
+            {
+                println!("{tab}{{");
+            }
+            Obj if row.id > 0 =>
+            {
+                println!("{tab}{}: {{", key_style(&key));
+            }
+            Arr =>
+            {
+                // TODO: EmitCommand(Indent, NewArr, StayOnOneLine)
+                println!("{tab}{}: [", key_style(&key));
+            }
+            Obj | Nil | Bool | Txt | Num =>
+            {
+                // * Place comma if next element is not a sibling (obj/arr closing)
+                let comma = rows
+                    .peek()
+                    .filter(|next| row.parent == next.parent)
+                    .map_or("", |_| ",");
+
+                println!(
+                    "{tab}{}: {}{comma}",
+                    key_style(&key),
+                    val_style(&val)
+                );
+            }
         }
 
         // * Put ] or } for each parent element until the root
