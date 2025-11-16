@@ -49,12 +49,19 @@ fn view_table(table: &Vec<Row>)
 
         let tab = "    ".repeat(row.indent as usize);
 
+        // Rendering rules:
+        // Don't emit key if id is 0 or parent is arr
+        // Don't emit comma if
+        // Emit comma if next row is not sibling
+
         match row.ty
         {
             Obj if row.id == 0 =>
             {
                 // ? This could be: Row {val: "{", ty: Obj}
                 println!("{tab}{{");
+
+                // * Don't print the key
             }
             Obj if row.id > 0 =>
             {
@@ -67,6 +74,21 @@ fn view_table(table: &Vec<Row>)
                 println!("{tab}{}: [", key_style(key));
 
                 // TODO: EmitCommand(Indent, NewArr, StayOnOneLine)
+            }
+            Obj | Nil | Bool | Txt | Num
+                if table
+                    .get(row.parent as usize)
+                    .filter(|prev| prev.ty == Arr)
+                    .is_some() =>
+            {
+                // TODO: table.get(row.id + 1).filter().map_or()
+                let comma = rows
+                    .peek()
+                    .filter(|next| row.parent == next.parent)
+                    .map_or("", |_| ",");
+                println!("{tab}{}{comma}", val_style(&val));
+
+                // * Don't print the key
             }
             Obj | Nil | Bool | Txt | Num =>
             {
