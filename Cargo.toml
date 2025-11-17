@@ -17,7 +17,7 @@ allocative = "0.3.4"
 starlark_derive = "0.13.0"
 derive_more = { version = "2.0.1", features = ["display"] }
 
-# [features]
+[features]
 # default = []
 # log_n_indentation = []
 # implicit_row_ids = []

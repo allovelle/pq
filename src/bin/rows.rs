@@ -386,23 +386,18 @@ impl Row
         Self::new(id, parent, key, String::new(), RowType::Obj, indent)
     }
 
-    fn indent_level(&self, table: &Vec<Row>) -> u32
+    fn indent_level(&self, table: &[Row]) -> u32
     {
-        if cfg!(feature = "log_n_indentation")
+        let (mut indents, mut row) = (0, self);
+
+        while let Some(next) = table.get(row.parent as usize)
+            && row.id != 0
         {
-            let mut parent = self.parent;
-            let mut levels_deep = 0;
-            while let Some(row) = table.get(parent as usize)
-            {
-                parent = row.parent;
-                levels_deep += 1;
-            }
-            levels_deep
+            row = next;
+            indents += 1;
         }
-        else
-        {
-            self.indent
-        }
+
+        indents
     }
 }
 
