@@ -63,7 +63,7 @@ fn view_table(table: &Vec<Row>)
             _ => Stylize::green,
         };
 
-        let tab = "    ".repeat(row.indent as usize);
+        let tab = "    ".repeat(row.indent_level(table) as usize);
 
         // * Rendering rules:
         // Omit key if id is 0 or parent is arr
@@ -131,10 +131,53 @@ fn view_table(table: &Vec<Row>)
 
         // ! Emit key in all cases unless inside arr or is first element (id 0)
         // ! Emit end brace ] } when *end* arr|obj
-        // ! Emit comma in *all* cases unless *new* arr|obj
-        // ! Omit comma when next row is not sibling
+        // ! Emit comma in *all* cases except *new* arr|obj or *end* elem
         // ! Increment indent when ...
         // ! Decrement indent when ...
+
+        // Row { id: 0, parent: 0, key: "", value: "", ty: Obj, indent: 0 }
+        // Row { id: 1, parent: 0, key: "name", value: "Allovelle", ty: Txt, indent: 1 }
+
+        /*
+        emit key
+        emit colon
+        emit new arr/obj
+        emit val
+        emit comma
+        emit end arr/obj
+        */
+
+        let Some(next) = table.get(id + 1)
+        else
+        {
+            let mut prev = row;
+            return while let Some(parent) = table.get(prev.parent as usize)
+                && prev.id != 0
+            {
+                // && prev.id > parent.id
+                let tab = "    ".repeat(parent.indent_level(table) as usize);
+                let end = ["]", "}"][(parent.ty == Obj) as usize];
+                println!("{tab}{end}");
+                prev = parent;
+            };
+        };
+
+        let is_first_elem = id == 0;
+        let in_arr_or_first_elem = id == 0
+            || table
+                .get(row.parent as usize)
+                .map(|parent| parent.ty == Arr)
+                .unwrap_or_default();
+        let is_last_sibling = table
+            .get(id + 1)
+            .map(|next| row.parent != next.parent)
+            .unwrap_or_default();
+
+        let is_sibling = true; // Inverse of below
+        let is_last_elem = true; // Next.parent != this.parent
+        let is_arr = true;
+        let is_obj = true;
+        let breadcrumbs = vec![Arr, Obj, Arr, Arr, Obj];
 
         // let braces = ["{", ""];
         // let blocks = ["[", ""];
@@ -171,19 +214,19 @@ fn view_table(table: &Vec<Row>)
             // TODO: if table.get(row.id + 1).is_none() {}
             // * Emit ends ] and } for all parents all the way up the tree
 
-            let mut prev = row;
-            while let Some(parent) = table.get(prev.parent as usize)
-                && prev.id > parent.id
-            {
-                let tab = "    ".repeat(parent.indent as usize);
-                match parent.ty
-                {
-                    Arr => println!("{tab}]"),
-                    Obj => println!("{tab}}}"),
-                    _ => todo!(),
-                }
-                prev = parent;
-            }
+            // let mut prev = row;
+            // while let Some(parent) = table.get(prev.parent as usize)
+            //     && prev.id > parent.id
+            // {
+            //     let tab = "    ".repeat(parent.indent as usize);
+            //     match parent.ty
+            //     {
+            //         Arr => println!("{tab}]"),
+            //         Obj => println!("{tab}}}"),
+            //         _ => todo!(),
+            //     }
+            //     prev = parent;
+            // }
         }
 
         // let parent = table.get(row.parent as usize);
