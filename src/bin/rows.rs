@@ -44,6 +44,7 @@ fn view_table(table: &Vec<Row>)
     for (id, row) in table.iter().enumerate()
     {
         debug_assert_eq!(row.id, id as u32);
+        println!("  alast row {:?}", row);
 
         let key = &format!("{:?}", row.key);
 
@@ -235,7 +236,7 @@ fn view_table(table: &Vec<Row>)
 
         if last_sibling && !is_root
         {
-            println!("  {}, {}, {}", parent.id, row.id, next.id);
+            // println!("  {}, {}, {}", parent.id, row.id, next.id);
             // Root has indent level of 0 (underflow)
             let tab = "    ".repeat(row.indent_level(table) as usize - 1);
             println!("{}{}", tab, close);
