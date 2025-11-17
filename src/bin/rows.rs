@@ -45,6 +45,8 @@ fn view_table(table: &Vec<Row>)
     {
         debug_assert_eq!(row.id, id as u32);
 
+        let _breadcrumbs = [Arr, Obj, Arr, Arr, Obj];
+
         let key_style = <&str as Stylize>::green;
         let val_style = match row.ty
         {
@@ -126,17 +128,6 @@ fn view_table(table: &Vec<Row>)
         // ! Increment indent when ...
         // ! Decrement indent when ...
 
-        // Row { id: 0, parent: 0, key: "", value: "", ty: Obj, indent: 0 }
-        // Row { id: 1, parent: 0, key: "name", value: "Allovelle", ty: Txt, indent: 1 }
-
-        /*
-        emit key
-        emit colon
-        emit new arr/obj
-        emit val
-        emit comma
-        emit end arr/obj
-        */
         let tab = "    ".repeat(row.indent_level(table) as usize);
 
         let parent = table
@@ -146,22 +137,40 @@ fn view_table(table: &Vec<Row>)
         let Some(next) = table.get(id + 1)
         else
         {
-            // TODO: Set flag to run this at and if no next
-            // TODO: Set flag to run this at and if no next
-            // TODO: Set flag to run this at and if no next
-            // TODO: Set flag to run this at and if no next
-            // TODO: Set flag to run this at and if no next
-            // TODO: Set flag to run this at and if no next
-            // TODO: Set flag to run this at and if no next
-            // TODO: Set flag to run this at and if no next
-            // TODO: Set flag to run this at and if no next
-            // TODO: Set flag to run this at and if no next
-            // TODO: Set flag to run this at and if no next
-            // TODO: Set flag to run this at and if no next
-            // TODO: Set flag to run this at and if no next
-            // TODO: Set flag to run this at and if no next
-            // TODO: Set flag to run this at and if no next
-            // TODO: Set flag to run this at and if no next
+            // TODO: Set flag to run this at end if no next
+            // TODO: Set flag to run this at end if no next
+            // TODO: Set flag to run this at end if no next
+            // TODO: Set flag to run this at end if no next
+            // TODO: Set flag to run this at end if no next
+            // TODO: Set flag to run this at end if no next
+            // TODO: Set flag to run this at end if no next
+            // TODO: Set flag to run this at end if no next
+            // TODO: Set flag to run this at end if no next
+            // TODO: Set flag to run this at end if no next
+            // TODO: Set flag to run this at end if no next
+            // TODO: Set flag to run this at end if no next
+            // TODO: Set flag to run this at end if no next
+            // TODO: Set flag to run this at end if no next
+            // TODO: Set flag to run this at end if no next
+            // TODO: Set flag to run this at end if no next
+
+            let colon = ": ";
+            let begin = ["[]", "{}"][(row.ty == Obj) as usize];
+            let comma = "";
+            // let close = ["]", "}"][(parent.ty == Obj) as usize];
+
+            println!(
+                "{}{}{}{}{}{}",
+                tab, row.key, colon, begin, row.value, comma
+            );
+
+            let is_root = row.id == 0;
+            // if last_sibling && !is_root
+            // {
+            //     // Root has indent level of 0 (underflow)
+            //     let tab = "    ".repeat(row.indent_level(table) as usize - 1);
+            //     println!("{}{}", tab, close);
+            // }
 
             let mut prev = row;
             return while let Some(parent) = table.get(prev.parent as usize)
@@ -175,25 +184,6 @@ fn view_table(table: &Vec<Row>)
             };
         };
 
-        let is_first_elem = id == 0;
-        let in_arr_or_first_elem = id == 0
-            || table
-                .get(row.parent as usize)
-                .map(|parent| parent.ty == Arr)
-                .unwrap_or_default();
-        let is_last_sibling = table
-            .get(id + 1)
-            .map(|next| row.parent != next.parent)
-            .unwrap_or_default();
-
-        let _breadcrumbs = [Arr, Obj, Arr, Arr, Obj];
-
-        // let brace = ['\0', '{'][usize::from(row.ty == Obj)];
-        // let block = ['\0', '['][usize::from(row.ty == Arr)];
-        // let comma = ["", ","][usize::from(row.ty != Obj || row.ty != Arr)];
-        // let begin = String::from(brace) + block;
-        // let close = "";
-
         // * Predicates for emission rules
         // let last_sibling = row.parent != next.parent; // ************** ! wrong when it's first child node
         let last_sibling = next.parent < row.parent;
@@ -205,8 +195,6 @@ fn view_table(table: &Vec<Row>)
 
         let is_root = row.id == 0;
         let in_arr = parent.ty == Arr;
-        let is_new = row.id == next.parent; // *******************
-        let is_end = next.parent == parent.parent; // *******************
 
         // Doesn't work when it's a new arr or new obj
         // let place_comma = !last_sibling && !is_empty;
