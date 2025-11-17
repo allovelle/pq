@@ -201,6 +201,8 @@ fn view_table(table: &Vec<Row>)
         // ? Should the brace be a val?
         println!("{}{}{}{}{}{}", tab, key, ": ".to_owned(), begin, val, comma);
 
+        continue;
+
         // If next row and not sibling: no comma, dedent, and place } or ]
         if let Some(next) = table.get(row.id as usize + 1)
             && row.parent != next.parent
