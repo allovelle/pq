@@ -132,6 +132,7 @@ fn view_table(table: &Vec<Row>)
         // ! Emit key in all cases unless inside arr or is first element (id 0)
         // ! Emit end brace ] } when *end* arr|obj
         // ! Emit comma in *all* cases except *new* arr|obj or *end* elem
+        // ! Omit colon when root row or arr elem
         // ! Increment indent when ...
         // ! Decrement indent when ...
 
@@ -146,6 +147,10 @@ fn view_table(table: &Vec<Row>)
         emit comma
         emit end arr/obj
         */
+
+        let parent = table
+            .get(row.parent as usize)
+            .expect("All rows should have a parent, even the root row");
 
         let Some(next) = table.get(id + 1)
         else
@@ -194,12 +199,17 @@ fn view_table(table: &Vec<Row>)
             [(row.ty == Obj || row.ty == Arr) as usize]
             [(row.ty == Obj) as usize];
 
-        let comma = [",", ""][(row.ty == Obj || row.ty == Arr) as usize]; // !!
+        let comma = [",", ""][(row.ty == Obj || row.ty == Arr) as usize];
+        let colon = [": ", ""][(row.id == 0 || parent.ty == Arr) as usize];
 
         // The comma should not be part of the table the same way the indent
         // shouldn't be. They can both be calculated using the row and table.
         // ? Should the brace be a val?
-        println!("{}{}{}{}{}{}", tab, key, ": ".to_owned(), begin, val, comma);
+
+        let key = [key, ""][(row.id == 0 || parent.ty == Arr) as usize];
+        let key = key.red();
+
+        println!("{}{}{}{}{}{}", tab, key, colon, begin, val, comma);
 
         continue;
 
