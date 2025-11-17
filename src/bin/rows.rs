@@ -44,15 +44,6 @@ fn view_table(table: &Vec<Row>)
     for (id, row) in table.iter().enumerate()
     {
         debug_assert_eq!(row.id, id as u32);
-        println!("  alast row {:?}", row);
-
-        let key = &format!("{:?}", row.key);
-
-        let mut val = row.value.clone();
-        if row.ty == Txt
-        {
-            val = format!("{:?}", &row.value);
-        }
 
         let key_style = <&str as Stylize>::green;
         let val_style = match row.ty
@@ -155,6 +146,23 @@ fn view_table(table: &Vec<Row>)
         let Some(next) = table.get(id + 1)
         else
         {
+            // TODO: Set flag to run this at and if no next
+            // TODO: Set flag to run this at and if no next
+            // TODO: Set flag to run this at and if no next
+            // TODO: Set flag to run this at and if no next
+            // TODO: Set flag to run this at and if no next
+            // TODO: Set flag to run this at and if no next
+            // TODO: Set flag to run this at and if no next
+            // TODO: Set flag to run this at and if no next
+            // TODO: Set flag to run this at and if no next
+            // TODO: Set flag to run this at and if no next
+            // TODO: Set flag to run this at and if no next
+            // TODO: Set flag to run this at and if no next
+            // TODO: Set flag to run this at and if no next
+            // TODO: Set flag to run this at and if no next
+            // TODO: Set flag to run this at and if no next
+            // TODO: Set flag to run this at and if no next
+
             let mut prev = row;
             return while let Some(parent) = table.get(prev.parent as usize)
                 && prev.id != 0
@@ -196,6 +204,7 @@ fn view_table(table: &Vec<Row>)
         let is_empty = matches!(row.ty, Obj | Arr if row.id != next.parent);
 
         let is_root = row.id == 0;
+        let in_arr = parent.ty == Arr;
         let is_new = row.id == next.parent; // *******************
         let is_end = next.parent == parent.parent; // *******************
 
@@ -211,9 +220,18 @@ fn view_table(table: &Vec<Row>)
 
         // let comma = [",", ""]
         //     [(row.ty == Obj || row.ty == Arr || last_sibling) as usize];
-        let comma = ["", ","][(place_comma) as usize]; // * wrong when it's end arr/obj
 
-        let colon = [": ", ""][(row.id == 0 || parent.ty == Arr) as usize];
+        // ! Comma breaks when obj|arr ends when parent|single when sibling|cousin?
+        // Emit comma in *ALL* cases, *EXCEPT*:
+        //     root-elem, last-elem, lone-elem, is-parent (!single)
+        let root_elem = row.id == 0;
+        // let lone_elem = next.parent == parent.parent && false;
+        let last_elem = next.parent < row.parent;
+        let is_parent = next.parent == row.id;
+        // SIBLING-SINGLE, SIBLING-PARENT
+        let comma = [",", ""][(root_elem || is_parent || last_elem) as usize]; // ! EXCEPT
+
+        let colon = [": ", ""][(is_root || in_arr) as usize];
         let close = [["", ""], ["]", "}"]][last_sibling as usize]
             [(parent.ty == Obj) as usize];
 
@@ -221,18 +239,17 @@ fn view_table(table: &Vec<Row>)
         // shouldn't be. They can both be calculated using the row and table.
         // ? Should the brace be a val?
 
-        let key = [key, ""][(row.id == 0 || parent.ty == Arr) as usize];
+        let key = &format!("{:?}", row.key);
+        let key = [key, ""][(is_root || in_arr) as usize];
         let key = key.red();
 
-        println!(
-            "{}{}{}{}{}{}",
-            tab,
-            key,
-            colon,
-            begin,
-            val,
-            comma.on_dark_green()
-        );
+        let mut val = row.value.clone();
+        if row.ty == Txt
+        {
+            val = format!("{:?}", &row.value);
+        }
+
+        println!("{}{}{}{}{}{}", tab, key, colon, begin, val, comma);
 
         if last_sibling && !is_root
         {

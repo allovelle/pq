@@ -1,17 +1,17 @@
 {
-    "name": "Allovelle",
-    "age": 30,
-    "tech-devices": [
-        "iPhone",
-        "MacBook Air",
-        true,
-        "Windows PC",
-        null,
-        3.33,
-        818
-    ],
-    "another-one": [],
-    "another-one-": {},
+    "{parent}{elem}{next}(val ty)": "",
+    "0. {}[is-elem](bit)": {
+        "_": [
+            true
+        ]
+    },
+    "----------------": "----------------",
+    "1. in obj for obj is-elem:emit-comma": {},
+    "1. in arr for arr is-elem emit-comma": [],
+    "2. in{} for{is-elem} emit-comma": {},
+    "2. in[] for[is-elem] emit-comma": [],
+    "3. {in [for]} emit-comma:is-elem": {},
+    "3. [in [for]] emit-comma:is-elem": [],
     "emit-comma:obj:is-elem-in-obj": {
         "a": {},
         "b": ""
