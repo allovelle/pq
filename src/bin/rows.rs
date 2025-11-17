@@ -63,8 +63,6 @@ fn view_table(table: &Vec<Row>)
             _ => Stylize::green,
         };
 
-        let tab = "    ".repeat(row.indent_level(table) as usize);
-
         // * Rendering rules:
         // Omit key if id is 0 or parent is arr
         // Emit comma if next row is sibling
@@ -147,6 +145,7 @@ fn view_table(table: &Vec<Row>)
         emit comma
         emit end arr/obj
         */
+        let tab = "    ".repeat(row.indent_level(table) as usize);
 
         let parent = table
             .get(row.parent as usize)
@@ -195,12 +194,16 @@ fn view_table(table: &Vec<Row>)
         // let comma = ["", ","][usize::from(row.ty != Obj || row.ty != Arr)];
         // let begin = String::from(brace) + block;
 
+        let last_sibling = row.parent != next.parent;
+
         let begin = [["", ""], ["[", "{"]]
             [(row.ty == Obj || row.ty == Arr) as usize]
             [(row.ty == Obj) as usize];
-
-        let comma = [",", ""][(row.ty == Obj || row.ty == Arr) as usize];
+        let comma = [",", ""]
+            [(row.ty == Obj || row.ty == Arr || last_sibling) as usize];
         let colon = [": ", ""][(row.id == 0 || parent.ty == Arr) as usize];
+        let close = [["", ""], ["]", "}"]][last_sibling as usize]
+            [(parent.ty == Obj) as usize];
 
         // The comma should not be part of the table the same way the indent
         // shouldn't be. They can both be calculated using the row and table.
@@ -210,6 +213,11 @@ fn view_table(table: &Vec<Row>)
         let key = key.red();
 
         println!("{}{}{}{}{}{}", tab, key, colon, begin, val, comma);
+
+        if last_sibling
+        {
+            println!("{}{}", "           ", close);
+        }
 
         continue;
 
