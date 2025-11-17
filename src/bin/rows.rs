@@ -177,30 +177,41 @@ fn view_table(table: &Vec<Row>)
             .map(|next| row.parent != next.parent)
             .unwrap_or_default();
 
-        let is_sibling = true; // Inverse of below
-        let is_last_elem = true; // Next.parent != this.parent
-        let is_arr = true;
-        let is_obj = true;
-        let breadcrumbs = vec![Arr, Obj, Arr, Arr, Obj];
+        let _breadcrumbs = [Arr, Obj, Arr, Arr, Obj];
 
-        // let braces = ["{", ""];
-        // let blocks = ["[", ""];
-        // let commas = [",", ""];
-        // let brace = braces[usize::from(row.ty == Obj)];
-        // let block = blocks[usize::from(row.ty == Arr)];
-        // let comma = commas[usize::from(row.ty == Obj || row.ty == Arr)];
         // let brace = ['\0', '{'][usize::from(row.ty == Obj)];
         // let block = ['\0', '['][usize::from(row.ty == Arr)];
         // let comma = ["", ","][usize::from(row.ty != Obj || row.ty != Arr)];
         // let begin = String::from(brace) + block;
+        // let close = "";
 
-        let last_sibling = row.parent != next.parent;
+        // * Predicates for emission rules
+        // let last_sibling = row.parent != next.parent; // ************** ! wrong when it's first child node
+        let last_sibling = next.parent < row.parent;
 
-        let begin = [["", ""], ["[", "{"]]
-            [(row.ty == Obj || row.ty == Arr) as usize]
+        let is_dedenting_possibly_more_than_1 = row.id <= next.parent;
+        let is_parent = row.id == next.parent;
+        // let is_empty = !is_parent && matches!(row.ty, Obj | Arr);
+        let is_empty = matches!(row.ty, Obj | Arr if row.id != next.parent);
+
+        let is_root = row.id == 0;
+        let is_new = row.id == next.parent; // *******************
+        let is_end = next.parent == parent.parent; // *******************
+
+        // Doesn't work when it's a new arr or new obj
+        // let place_comma = !last_sibling && !is_empty;
+        let place_comma = !last_sibling && !is_parent && !is_empty;
+
+        // ! This can be fixed by: storing { or {} during parsing (it's easy)
+        // ? [is_parent as usize * 2 + (row.ty == Obj) as usize]
+        let begin = [[["", ""], ["", ""]], [["[]", "{}"], ["[", "{"]]]
+            [(matches!(row.ty, Obj | Arr)) as usize][is_parent as usize]
             [(row.ty == Obj) as usize];
-        let comma = [",", ""]
-            [(row.ty == Obj || row.ty == Arr || last_sibling) as usize];
+
+        // let comma = [",", ""]
+        //     [(row.ty == Obj || row.ty == Arr || last_sibling) as usize];
+        let comma = ["", ","][(place_comma) as usize]; // * wrong when it's end arr/obj
+
         let colon = [": ", ""][(row.id == 0 || parent.ty == Arr) as usize];
         let close = [["", ""], ["]", "}"]][last_sibling as usize]
             [(parent.ty == Obj) as usize];
@@ -212,11 +223,22 @@ fn view_table(table: &Vec<Row>)
         let key = [key, ""][(row.id == 0 || parent.ty == Arr) as usize];
         let key = key.red();
 
-        println!("{}{}{}{}{}{}", tab, key, colon, begin, val, comma);
+        println!(
+            "{}{}{}{}{}{}",
+            tab,
+            key,
+            colon,
+            begin,
+            val,
+            comma.on_dark_green()
+        );
 
-        if last_sibling
+        if last_sibling && !is_root
         {
-            println!("{}{}", "           ", close);
+            println!("  {}, {}, {}", parent.id, row.id, next.id);
+            // Root has indent level of 0 (underflow)
+            let tab = "    ".repeat(row.indent_level(table) as usize - 1);
+            println!("{}{}", tab, close);
         }
 
         continue;
