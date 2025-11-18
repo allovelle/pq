@@ -36,7 +36,7 @@ fn view_table(table: &[Row])
         let val = Stylize::yellow(row.value.clone());
         let quote = Stylize::yellow(["", "\""][(row.ty == Txt) as usize]);
 
-        // [parent][row][next]
+        // TODO: [parent][row][next]
 
         println!("{}{}: {}{}{}", tab, key, quote, val, quote);
     }
