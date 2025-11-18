@@ -18,10 +18,33 @@ fn view_table(table: &[Row])
 {
     use RowType::*;
 
+    let header = ("id", "parent", "key", "value", "type", "indent");
+    println!(
+        "{}",
+        format!(
+            "{:<4.4}{:<8.7}{:<22.21}{:<22.21}{:<6.6}{:<6.6}",
+            header.0, header.1, header.2, header.3, header.4, header.5
+        )
+        .red()
+    );
+
     for (id, row) in table.iter().enumerate()
     {
-        println!("ROW[{id}]: {row:?}");
+        // println!("ROW[{id}]: {row:?}");
+
+        // println!("`{:<10.4}`", alo);
+
+        println!(
+            "{:<4.4}{:<8.7}{:<22.21}{:<22.21}{:<6.6}{:<6.6}",
+            row.id.to_string(),
+            row.parent.to_string(),
+            row.key,
+            row.value,
+            format!("{:?}", row.ty),
+            row.indent_level(table)
+        );
     }
+    return;
 
     for row in table
     {
@@ -30,13 +53,12 @@ fn view_table(table: &[Row])
         // Prepare styled key-value emission:
         let tab = "    ".repeat(row.indent as usize);
         let key = Stylize::blue(format!("{:?}", row.key));
-        // let val = Stylize::yellow(format!("{:?}", row.value));
-
-        // let fmt_dbg = matches!(row.ty, Obj | Arr | Txt);
+        // TODO: [parent][row][next]
+        // let colon = Stylize::underline_red(
+        //     ["", ": "][(row.id != 0 && parent.ty != Arr) as usize],
+        // );
         let val = Stylize::yellow(row.value.clone());
         let quote = Stylize::yellow(["", "\""][(row.ty == Txt) as usize]);
-
-        // TODO: [parent][row][next]
 
         println!("{}{}: {}{}{}", tab, key, quote, val, quote);
     }
@@ -52,7 +74,7 @@ fn traverse(table: &mut Vec<Row>, key: String, value: Value, parent: u32)
         Value::Null => table.push(Row::nil(new_id, parent, key, indent)),
         Value::Bool(tf) =>
         {
-            table.push(Row::boolean(new_id, parent, key, tf, indent))
+            table.push(Row::bit(new_id, parent, key, tf, indent))
         }
         Value::Number(num) =>
         {
@@ -84,7 +106,7 @@ fn traverse(table: &mut Vec<Row>, key: String, value: Value, parent: u32)
 #[rustfmt::skip]
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(u8)]
-enum RowType { Arr, Obj, Nil, Bool, Txt, Num, }
+enum RowType { Arr, Obj, Nil, Bit, Txt, Num, }
 
 /// Invariant: Self::Id is the index within it's container.
 #[derive(Debug, Clone)]
@@ -129,7 +151,7 @@ impl Row
         Self::new(id, parent, key, val, RowType::Txt, indent)
     }
 
-    fn boolean<K: ToString>(
+    fn bit<K: ToString>(
         id: u32,
         parent: u32,
         key: K,
@@ -137,7 +159,7 @@ impl Row
         indent: u32,
     ) -> Self
     {
-        Self::new(id, parent, key, val.to_string(), RowType::Bool, indent)
+        Self::new(id, parent, key, val.to_string(), RowType::Bit, indent)
     }
 
     fn num<K: ToString, V>(
