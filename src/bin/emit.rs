@@ -30,10 +30,6 @@ fn view_table(table: &[Row])
 
     for (id, row) in table.iter().enumerate()
     {
-        // println!("ROW[{id}]: {row:?}");
-
-        // println!("`{:<10.4}`", alo);
-
         println!(
             "{:<4.4}{:<8.7}{:<22.21}{:<22.21}{:<6.6}{:<6.6}",
             row.id.to_string(),
@@ -44,23 +40,42 @@ fn view_table(table: &[Row])
             row.indent_level(table)
         );
     }
-    return;
 
     for row in table
     {
         // TODO: Emit {[ends]} *first*: prev elems could've been multi-lvls-deep
 
+        // ? Why not next=tab.get(row.id + 1).or(row) since root.parent=root?
+        let parent = table.get(row.parent as usize).unwrap_or(row);
+        let next = table.get(row.id as usize + 1).unwrap_or(row);
+
+        // TODO: tabulation with cost minimization to hit 80 char line-len-lim
+        // TODO: use the 'only take 1/2' rule (example) or other constraints
+
         // Prepare styled key-value emission:
+        let parent = table.get(row.parent as usize).expect("invalid parent id");
+        let next = table.get(row.id as usize + 1);
         let tab = "    ".repeat(row.indent as usize);
-        let key = Stylize::blue(format!("{:?}", row.key));
-        // TODO: [parent][row][next]
-        // let colon = Stylize::underline_red(
-        //     ["", ": "][(row.id != 0 && parent.ty != Arr) as usize],
-        // );
+        // let key = Stylize::blue(format!(
+        //     "{1:.2$}{0}{1:.2$}",
+        //     row.key,
+        //     "\"",
+        //     (row.id != 0 && parent.ty != Arr) as usize
+        // ));
+
+        let key = Stylize::blue(format!(
+            "{1}{0}{1}",
+            row.key.repeat((row.id != 0 && parent.ty != Arr) as usize),
+            "\"".repeat((row.id != 0 && parent.ty != Arr) as usize),
+        ));
+
+        let colon = Stylize::underline_red(
+            ["", ": "][(row.id != 0 && parent.ty != Arr) as usize],
+        );
         let val = Stylize::yellow(row.value.clone());
         let quote = Stylize::yellow(["", "\""][(row.ty == Txt) as usize]);
 
-        println!("{}{}: {}{}{}", tab, key, quote, val, quote);
+        println!("{}{}{}{}{}{}", tab, key, colon, quote, val, quote);
     }
 }
 
