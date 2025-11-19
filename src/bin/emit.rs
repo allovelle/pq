@@ -45,24 +45,18 @@ fn view_table(table: &[Row])
     {
         // TODO: Emit {[ends]} *first*: prev elems could've been multi-lvls-deep
 
-        // ? Why not next=tab.get(row.id + 1).or(row) since root.parent=root?
-        let parent = table.get(row.parent as usize).unwrap_or(row);
-        let next = table.get(row.id as usize + 1).unwrap_or(row);
-
         // TODO: tabulation with cost minimization to hit 80 char line-len-lim
         // TODO: use the 'only take 1/2' rule (example) or other constraints
 
         // Prepare styled key-value emission:
-        let parent = table.get(row.parent as usize).expect("invalid parent id");
-        let next = table.get(row.id as usize + 1);
-        let tab = "    ".repeat(row.indent as usize);
-        // let key = Stylize::blue(format!(
-        //     "{1:.2$}{0}{1:.2$}",
-        //     row.key,
-        //     "\"",
-        //     (row.id != 0 && parent.ty != Arr) as usize
-        // ));
 
+        // ? let parent = table.get(row.parent as usize).expect("invalid parent id");
+        // ? let next = table.get(row.id as usize + 1);
+        // ? Why not next=tab.get(row.id + 1).or(row) since root.parent=root?
+        let parent = table.get(row.parent as usize).unwrap_or(row);
+        let next = table.get(row.id as usize + 1).unwrap_or(row);
+
+        let tab = "    ".repeat(row.indent as usize);
         let key = Stylize::blue(format!(
             "{1}{0}{1}",
             row.key.repeat((row.id != 0 && parent.ty != Arr) as usize),
@@ -75,7 +69,28 @@ fn view_table(table: &[Row])
         let val = Stylize::yellow(row.value.clone());
         let quote = Stylize::yellow(["", "\""][(row.ty == Txt) as usize]);
 
-        println!("{}{}{}{}{}{}", tab, key, colon, quote, val, quote);
+        // Omit comma when last/lone for all types
+        // Omit comma when obj/arr unless empty
+        // let empty = matches!(row.ty, Obj | Arr if next.parent != row.id);
+        // let last = next.parent != row.parent && next.parent != row.id;
+        // let emit_comma = lone || (empty && !last);
+
+        // Justification: next.parent can be row.id if parent. Last if less.
+        let last = next.parent < row.parent;
+
+        // Justification: nested elements have higher id than parents
+        let lone = next.parent <= row.parent;
+
+        let dense_collection = true;
+        let empty_collection = true;
+        let omit = (last || lone || dense_collection) && !empty_collection;
+        let omit = (last || lone);
+
+        // prev element can be a child, yet prev elements are not considered.
+
+        let comma = Stylize::grey(",".repeat(!omit as usize));
+
+        println!("{}{}{}{}{}{}{}", tab, key, colon, quote, val, quote, comma);
     }
 }
 
