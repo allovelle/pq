@@ -28,6 +28,7 @@ fn view_table(table: &[Row])
     {
         // TODO: Print the calculated attributes for each row
         let parent = table.get(row.parent as usize).unwrap_or(row);
+        debug_assert!(matches!(parent.ty, Obj | Arr), "parent isn't obj/arr"); // TODO: REMOVE THIS
         let first = table.get(row.parent as usize + 1).unwrap_or(row);
         debug_assert_eq!(first.parent, row.parent, "sibling isn't sibling"); // TODO: REMOVE THIS
         let next = table.get(row.id as usize + 1).unwrap_or(row);
@@ -50,6 +51,7 @@ fn view_table(table: &[Row])
         // TODO: what about object, value, array, string? can that work for """"
         let comma = !last as usize;
 
+        // End means end of collection (place end brackets all the way up)
         let end = (matches!(parent.ty, Obj | Arr)
             && (next.id == row.id || next.parent < row.parent))
             as usize;
@@ -70,6 +72,51 @@ fn view_table(table: &[Row])
         {
             let val = ["object, ", "array, "][(parent.ty == Arr) as usize];
             println!("{}  implicit end {}", "| ".green(), val);
+
+            // TODO: do this for root now
+        }
+
+        // ! this needs to exit iteration when the next parent's sibling is hit
+
+        // Verify node is still end
+        // Emit end brace per parent's type
+        // Verify parent is end
+        // Emit end brace per parent.parent's type
+        // Verify parent.parent is end
+        // Emit end brace per parent.parent.parent's type
+
+        let is_end = |node: &Row| {
+            let parent = table.get(node.parent as usize).unwrap_or(node);
+            let first = table.get(node.parent as usize + 1).unwrap_or(node);
+            let next = table.get(node.id as usize + 1).unwrap_or(node);
+
+            // next.parent < row.parent: less by how many? when row.parent == up.parent
+            // Decrease row.parent until row.parent == next.parent
+            // # The next row is a value or collection of an upper parent
+            let mut up_one = row; // Start at self
+            while next.parent != parent.id
+            {}
+
+            let end = (next.id == row.id || next.parent < row.parent) as usize;
+        };
+
+        if end == 1
+        {
+            // ? While next.parent < row.parent { place(); }
+
+            let mut prev = row;
+            while let Some(parent) = table.get(prev.parent as usize)
+                && prev.id > parent.id
+            {
+                let tab = "    ".repeat(parent.indent as usize);
+                match parent.ty
+                {
+                    Arr => println!("{tab}]"),
+                    Obj => println!("{tab}}}"),
+                    _ => todo!(),
+                }
+                prev = parent;
+            }
         }
     }
 
