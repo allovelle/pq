@@ -18,10 +18,18 @@ fn view_table(table: &[Row])
 {
     use RowType::*;
 
+    // ! Invariants:
+    // ! Table must not allow row modification (immutable)
+    // Prevents: row reordering, even with ID updates (obj|arr child reorder)
+    // ! Row IDs must start at 0 and increase only by 1 (table indices == ids).
+    // Allows: parent, first child, & next offset-calculation
+
     for row in table
     {
         // TODO: Print the calculated attributes for each row
         let parent = table.get(row.parent as usize).unwrap_or(row);
+        let first = table.get(row.parent as usize + 1).unwrap_or(row);
+        debug_assert_eq!(first.parent, row.parent, "sibling isn't sibling"); // TODO: REMOVE THIS
         let next = table.get(row.id as usize + 1).unwrap_or(row);
 
         let key = (parent.ty != Arr && row.id != 0) as usize;
@@ -31,40 +39,38 @@ fn view_table(table: &[Row])
         let par = (row.id == next.parent) as usize;
         let empty =
             (matches!(row.ty, Obj | Arr) && row.id != next.parent) as usize;
-        // First row, last row, last elem in collection, or ending bracket/brace
-        let last = (next.id == row.id || next.parent < row.parent) as usize;
-
-        let sibling = (); // If u can't tell sibling (missing prev), calc last
-        let lone = ();
+        let last = (next.id == row.id || next.parent < row.parent) as usize; // First row, last row, last elem in collection, or ending bracket/brace
+        let first_is_not_self = row.id != 0 && first.id < row.id;
+        let next_same_parent = row.id != 0 && next.parent == row.parent;
+        let is_sibling = (first_is_not_self || next_same_parent) as usize;
+        // let lone = (!last || !is_sibling) as usize;
 
         // TODO: Implicit end rows
         // TODO: Implicit last for objs/arrs using end rows
         // TODO: what about object, value, array, string? can that work for """"
-
         let comma = !last as usize;
 
-        let first = table.get(row.parent as usize + 1).unwrap_or(row);
-        debug_assert_eq!(first.parent, row.parent, "sibling isn't sibling");
-
-        let first_is_not_self = row.id != 0 && first.id < row.id;
-        let next_same_parent = row.id != 0 && next.parent == row.parent;
-        let is_sibling = (first_is_not_self || next_same_parent) as usize;
-
-        // let is_sibling = (/*not first or last node*/(row.id != 0 && next.id != row.id)
-        //     && (/*sibling not self*/first.id != row.id)
-        //     || next.parent == row.parent) as usize;
+        let end = (matches!(parent.ty, Obj | Arr)
+            && (next.id == row.id || next.parent < row.parent))
+            as usize;
 
         println!(
             "{}{}{}{}{}{}{}",
-            "|".red(),
+            "| ".red(),
             "key, ".repeat(key),
             val,
             "parent, ".repeat(par),
             "empty, ".repeat(empty),
             // "comma, ".repeat(comma)
-            "sibling, ".repeat(is_sibling).red(),
+            "sibling, ".repeat(is_sibling),
             "last".repeat(last),
         );
+
+        if end == 1
+        {
+            let val = ["object, ", "array, "][(parent.ty == Arr) as usize];
+            println!("{}  implicit end {}", "| ".green(), val);
+        }
     }
 
     // let header = ("id", "parent", "key", "value", "type", "indent");
