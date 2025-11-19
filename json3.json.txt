@@ -36,7 +36,7 @@ object, parent (no last/lone to be known at this point)
         object, empty, sibling
         value, sibling, last
     implicit end array, sibling
-    key, array, parent, sibling????
+    key, array, parent, sibling       ????
         value, sibling
         object, empty, sibling, last
     implicit end array, sibling, last <<<<<< calced here?

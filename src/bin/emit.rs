@@ -25,15 +25,38 @@ fn view_table(table: &[Row])
         let next = table.get(row.id as usize + 1).unwrap_or(row);
 
         let key = (parent.ty != Arr && row.id != 0) as usize;
-        let obj = !matches!(row.ty, Obj) as usize;
-        let arr = matches!(row.ty, Arr) as usize;
-        let val = matches!(row.ty, Nil | Bit | Num | Txt) as usize;
-        let val = 0;
-        let val = ["object, ", "value, ", "array, "][val + obj + arr];
+        let arr = !matches!(row.ty, Obj) as usize;
+        let var = matches!(row.ty, Nil | Bit | Num | Txt) as usize;
+        let val = ["object, ", "array, ", "value, "][arr + var];
+        let par = (row.id == next.parent) as usize;
+        let empty =
+            (matches!(row.ty, Obj | Arr) && row.id != next.parent) as usize;
+        // First row, last row, last elem in collection, or ending bracket/brace
+        let last = (next.id == row.id || next.parent < row.parent) as usize;
 
+        let sibling = (); // If u can't tell sibling (missing prev), calc last
+        let lone = ();
+
+        // TODO: Implicit end rows
+        // TODO: Implicit last for objs/arrs using end rows
         // TODO: what about object, value, array, string? can that work for """"
 
-        println!("|{}{}", "key, ".repeat(key), val);
+        let comma = !last as usize;
+
+        let sibling = row.id != table[row.parent as usize + 1].id
+            || next.parent == row.parent;
+
+        let row = format!("{:?}", row);
+        println!(
+            "{}\n\t|{}{}{}{}{}{}",
+            row.grey(),
+            "key, ".repeat(key),
+            val,
+            "parent, ".repeat(par),
+            "empty, ".repeat(empty),
+            "last, ".repeat(last),
+            "comma, ".repeat(comma)
+        );
     }
 
     let header = ("id", "parent", "key", "value", "type", "indent");
