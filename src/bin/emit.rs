@@ -31,6 +31,8 @@ fn view_table(table: &[Row])
         let val = 0;
         let val = ["object, ", "value, ", "array, "][val + obj + arr];
 
+        // TODO: what about object, value, array, string? can that work for """"
+
         println!("|{}{}", "key, ".repeat(key), val);
     }
 
