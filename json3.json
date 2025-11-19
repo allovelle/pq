@@ -38,6 +38,12 @@
     ],
     "omit-comma:obj:last-elem-in-arr": [
         "",
+        {
+            "this-is-a-long-key": {
+                "sib1": 1,
+                "sib2": 2
+            }
+        },
         {}
     ]
 }
