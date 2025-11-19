@@ -18,6 +18,22 @@ fn view_table(table: &[Row])
 {
     use RowType::*;
 
+    for row in table
+    {
+        // TODO: Print the calculated attributes for each row
+        let parent = table.get(row.parent as usize).unwrap_or(row);
+        let next = table.get(row.id as usize + 1).unwrap_or(row);
+
+        let key = (parent.ty != Arr && row.id != 0) as usize;
+        let obj = !matches!(row.ty, Obj) as usize;
+        let arr = matches!(row.ty, Arr) as usize;
+        let val = matches!(row.ty, Nil | Bit | Num | Txt) as usize;
+        let val = 0;
+        let val = ["object, ", "value, ", "array, "][val + obj + arr];
+
+        println!("|{}{}", "key, ".repeat(key), val);
+    }
+
     let header = ("id", "parent", "key", "value", "type", "indent");
     println!(
         "{}",
@@ -28,7 +44,7 @@ fn view_table(table: &[Row])
         .red()
     );
 
-    for (id, row) in table.iter().enumerate()
+    for (id, row) in table.iter().enumerate().take(0)
     {
         println!(
             "{:<4.4}{:<8.7}{:<22.21}{:<22.21}{:<6.6}{:<6.6}",
@@ -41,7 +57,7 @@ fn view_table(table: &[Row])
         );
     }
 
-    for row in table
+    for row in table.iter().take(0)
     {
         // TODO: Emit {[ends]} *first*: prev elems could've been multi-lvls-deep
 

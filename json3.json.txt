@@ -1,0 +1,53 @@
+object, parent (no last/lone to be known at this point)
+    key, value, sibling
+    key, value, sibling
+    key, array, parent, sibling
+        value, sibling
+        value, sibling
+        value, sibling
+        value, sibling
+        value, sibling
+        value, sibling
+        value, sibling, last
+    implicit end array, sibling
+    key, array, empty, sibling
+    key, object, empty, sibling
+    key, object, parent, sibling
+        key, object, empty, sibling
+        key, value, sibling, last
+    implicit end object, sibling
+    key, object, parent, sibling
+        key, value, sibling
+        key, object, empty, sibling, last
+    implicit end object, sibling
+    key, object, parent, sibling
+        key, array, empty, last, lone
+    implicit end object, sibling
+    key, object, parent, sibling
+        key, object, empty, last, lone
+    implicit end object, sibling
+    key, array, parent, sibling
+        array, empty, last, lone
+    implicit end array, sibling
+    key, array, parent, sibling
+        object, empty, last, lone
+    implicit end array, sibling
+    key, array, parent, sibling
+        object, empty, sibling
+        value, sibling, last
+    implicit end array, sibling
+    key, array, parent, sibling????
+        value, sibling
+        object, empty, sibling, last
+    implicit end array, sibling, last <<<<<< calced here?
+implicit end object, last, lone
+
+
+
+
+
+quora: when is it *not* a sibling? lone?
+maybe: sibling = comma
+maybe: key = colon
+maybe: last = no comma
+maybe: lone = very low cost to wrap (dynamic programming?)

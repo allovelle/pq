@@ -1,0 +1,13 @@
+the entire formatting engine is a tensor.
+the first 3 input layers are the [parent][row][next] rows, with their ~5
+    attributes each.
+from there, another layer is multiplied to determine the calculated attributes
+    that determine the output formatting.
+the formatted output line can be emitted to the console.
+when determining the max line length, dynamic programming can be used to
+    minimize the cost for formatting each line to keep it equal to or under lll.
+    once lll is reached without accounting for all the values in the array or
+    object, backtracking is performed to then un-collapse them all like normal.
+all of the formatting rules can be encoded as tensor layers. this would make it
+    so that the entire process is mostly just matrix multiplication.
+using these strategies, json can be reliably formatted with minimal maintenance.
