@@ -1,4 +1,4 @@
-object, parent (no last/lone to be known at this point)
+object, parent
     key, value, sibling
     key, value, sibling
     key, array, parent, sibling

@@ -43,32 +43,39 @@ fn view_table(table: &[Row])
 
         let comma = !last as usize;
 
-        let sibling = row.id != table[row.parent as usize + 1].id
-            || next.parent == row.parent;
+        let first = table.get(row.parent as usize + 1).unwrap_or(row);
+        debug_assert_eq!(first.parent, row.parent, "sibling isn't sibling");
 
-        let row = format!("{:?}", row);
+        let first_is_not_self = row.id != 0 && first.id < row.id;
+        let next_same_parent = row.id != 0 && next.parent == row.parent;
+        let is_sibling = (first_is_not_self || next_same_parent) as usize;
+
+        // let is_sibling = (/*not first or last node*/(row.id != 0 && next.id != row.id)
+        //     && (/*sibling not self*/first.id != row.id)
+        //     || next.parent == row.parent) as usize;
+
         println!(
-            "{}\n\t|{}{}{}{}{}{}",
-            row.grey(),
+            "{}{}{}{}{}{}{}",
+            "|".red(),
             "key, ".repeat(key),
             val,
             "parent, ".repeat(par),
             "empty, ".repeat(empty),
-            "last, ".repeat(last),
-            "comma, ".repeat(comma)
+            // "comma, ".repeat(comma)
+            "sibling, ".repeat(is_sibling).red(),
+            "last".repeat(last),
         );
     }
 
-    let header = ("id", "parent", "key", "value", "type", "indent");
-    println!(
-        "{}",
-        format!(
-            "{:<4.4}{:<8.7}{:<22.21}{:<22.21}{:<6.6}{:<6.6}",
-            header.0, header.1, header.2, header.3, header.4, header.5
-        )
-        .red()
-    );
-
+    // let header = ("id", "parent", "key", "value", "type", "indent");
+    // println!(
+    //     "{}",
+    //     format!(
+    //         "{:<4.4}{:<8.7}{:<22.21}{:<22.21}{:<6.6}{:<6.6}",
+    //         header.0, header.1, header.2, header.3, header.4, header.5
+    //     )
+    //     .red()
+    // );
     for (id, row) in table.iter().enumerate().take(0)
     {
         println!(
