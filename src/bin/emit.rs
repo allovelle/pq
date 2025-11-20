@@ -44,13 +44,8 @@ fn view_table(table: &[Row])
         let first_is_not_self = row.id != 0 && first.id < row.id;
         let next_same_parent = row.id != 0 && next.parent == row.parent;
         let is_sibling = (first_is_not_self || next_same_parent) as usize;
-        // let lone = (!last || !is_sibling) as usize;
 
-        // TODO: Implicit end rows
-        // TODO: Implicit last for objs/arrs using end rows
-        // TODO: what about object, value, array, string? can that work for """"
-        let comma = !last as usize;
-
+        /*
         println!(
             "{}{}{}{}{}{}{}",
             "|| ".red(),
@@ -58,14 +53,40 @@ fn view_table(table: &[Row])
             val,
             "parent, ".repeat(par),
             "empty, ".repeat(empty),
-            // "comma, ".repeat(comma)
+            "sibling, ".repeat(is_sibling),
+            "last".repeat(last),
+        );
+        */
+
+        // Tags (except for implicit rows)
+        let tags = format!(
+            "{}{}{}{}{}{}{}",
+            "|| ".red(),
+            "key, ".repeat(key),
+            val,
+            "parent, ".repeat(par),
+            "empty, ".repeat(empty),
             "sibling, ".repeat(is_sibling),
             "last".repeat(last),
         );
 
-        // End means end of collection (place end brackets all the way up)
-        let _end = (next.id == row.id || next.parent < row.parent) as usize;
+        // Key-Value (except for implicit brackend end rows)
+        {
+            let indent = "  ".repeat(1);
+            let colon = ": ";
+            let comma = ",";
+            let key = format!("{:?}", row.key);
+            let val = format!(
+                "{1:.2$}{0}{1:.2$}",
+                row.value,
+                "\"",
+                (row.ty == Txt) as usize
+            );
 
+            println!("{:<60}{indent}{key}{colon}{val}{comma}", tags);
+        }
+
+        // End means end of collection (place end brackets all the way up)
         let is_end = |node: &Row| {
             let parent = table.get(node.parent as usize).unwrap_or(node);
             let first = table.get(node.parent as usize + 1).unwrap_or(node);
@@ -73,16 +94,7 @@ fn view_table(table: &[Row])
             next.id == node.id || next.parent < node.parent
         };
 
-        if is_end(row)
-        {
-            let val = ["object, ", "array, "][(parent.ty == Arr) as usize];
-            println!("{}  implicit end {}", "|| ".green(), val);
-
-            // TODO: do this for root now
-        }
-
         let mut node = row;
-        // while is_end(node)
         while node.parent > next.parent || is_end(node)
         {
             let parent = table.get(node.parent as usize).unwrap_or(node);
@@ -91,7 +103,7 @@ fn view_table(table: &[Row])
             node = parent;
         }
 
-        if let Some(root) = table.get(0)
+        if let Some(_root) = table.first()
         {
             let last_before_root = next.id == row.id;
             if last_before_root
@@ -99,38 +111,6 @@ fn view_table(table: &[Row])
                 println!("{}implicit end of root", "|| ".yellow());
             }
         }
-
-        // ! this needs to exit iteration when the next parent's sibling is hit
-
-        // Verify node is still end
-        // Emit end brace per parent's type
-        // Verify parent is end
-        // Emit end brace per parent.parent's type
-        // Verify parent.parent is end
-        // Emit end brace per parent.parent.parent's type
-
-        let is_end = |node: &Row| {
-            let parent = table.get(node.parent as usize).unwrap_or(node);
-            let first = table.get(node.parent as usize + 1).unwrap_or(node);
-            let next = table.get(node.id as usize + 1).unwrap_or(node);
-
-            // next.parent < row.parent: less by how many? when row.parent == up.parent
-            // Decrease row.parent until row.parent == next.parent
-            // Dec row.parent until row.parent == next.parent
-            // # The next row is a value or collection of an upper parent
-
-            // Dec row.parent until row.parent == next.parent
-            let mut node = row;
-            while node.id != next.parent
-            {
-                let tab = "    ".repeat(node.indent_level(table));
-                println!("{tab}{}", ["[", "{"][(node.ty == Obj) as usize]);
-
-                node = table.get(node.parent as usize).unwrap_or(node);
-            }
-
-            // ? let end = (next.id == row.id || next.parent < row.parent) as usize;
-        };
     }
 
     // let header = ("id", "parent", "key", "value", "type", "indent");
