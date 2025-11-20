@@ -1,4 +1,4 @@
-use crossterm::style::Stylize;
+use crossterm::style::{Color, Stylize};
 use serde_json::{Number, Value};
 use std::convert::From;
 
@@ -91,10 +91,13 @@ fn view_table(table: &[Row])
             node = parent;
         }
 
-        if row.id == 0
+        if let Some(root) = table.get(0)
         {
-            let val = ["object, ", "array, "][(parent.ty == Arr) as usize];
-            println!("{}  implicit end {}", "|| ".blue(), val);
+            let last_before_root = next.id == row.id;
+            if last_before_root
+            {
+                println!("{}implicit end of root", "|| ".yellow());
+            }
         }
 
         // ! this needs to exit iteration when the next parent's sibling is hit
