@@ -23,6 +23,28 @@ where
     val.try_into().expect("failed to convert")
 }
 
+// #[derive(Default)]
+// struct Theme<V>
+// {
+//     enabled: bool,
+//     style_key: <V as Stylize>::green,
+//     style_quote_key = <V as Stylize>::dark_green,
+// }
+
+// impl Theme
+// {
+//     fn txt() -> Self
+//     {
+//         Self::default()
+//     }
+
+//     fn build() {}
+// }
+
+// TODO: Can style and output individual rows
+// TODO: JsonStyler::new(theme1).key("k1").id(0).empty(false).style();
+// TODO: JsonStyler::new(theme2).key("k1").val(3.14).style();
+
 /// Idea: for any single row, render with proper indents using only the table
 fn view_table(table: &[Row])
 {
@@ -46,19 +68,18 @@ fn view_table(table: &[Row])
     let _style_dot = <&str as Stylize>::cyan; // floats
     let style_bit = <&str as Stylize>::yellow; // bool
 
+    /*
+    TODO: use text attributes in addition to colors
+
+    use crossterm::style::Attribute;
+    println!(
+        "{} Underlined {} No Underline",
+        Attribute::Underlined,
+        Attribute::NoUnderline
+    );
+    */
+
     let mut accumulate_indent = 0;
-
-    // ! Everything looks to be in order except for root node key showing and
-    // ! dedentation commas missing
-
-    // ! Everything looks to be in order except for root node key showing and
-    // ! dedentation commas missing
-
-    // ! Everything looks to be in order except for root node key showing and
-    // ! dedentation commas missing
-
-    // ! Everything looks to be in order except for root node key showing and
-    // ! dedentation commas missing
 
     for row in table
     {
@@ -157,7 +178,7 @@ fn view_table(table: &[Row])
 
         let mut node = row;
         let mut increment_dedent = accumulate_indent;
-        while node.parent > next.parent || is_end(node)
+        while node.parent > next.parent || (next.id == node.id)
         {
             let parent = table.get(udx(node.parent)).unwrap_or(node);
 
@@ -174,12 +195,8 @@ fn view_table(table: &[Row])
 
             // NEED TO DETERMINE IS LAST
             // parent.is_last_from_pov(row <- specifically (landmark))
-            // Current parent is nested deeper than next parent
-            let brace = if node.parent > next.parent
-            {
-                if parent.ty == Obj { "}" } else { "]" }
-            }
-            else if node.id == next.id
+            // Parent is nested deeper than next parent OR node is last in file
+            let brace = if node.parent > next.parent || node.id == next.id
             {
                 if parent.ty == Obj { "}" } else { "]" }
             }
@@ -192,28 +209,14 @@ fn view_table(table: &[Row])
             let comma = if next.parent == parent.parent { "," } else { "" };
 
             let indent = "    ".repeat(increment_dedent);
-            println!("{tags:<66}|{}{}{}", indent, brace.red(), comma);
-
-            // let val = ["array", "object"][udx(parent.ty == Obj)];
-            // let tag_lvl = " ".repeat(increment_dedent);
-            // let tags =
-            //     format!("{}{}<implicit end {}>", "|| ".red(), tag_lvl, val);
-            // let indent = "    ".repeat(increment_dedent);
-            // let end = style_end(["]", "}"][udx(parent.ty == Obj)]);
-
-            // // TODO: CALCULATE THIS USING PARENT IDS NOT ROW IDS. THE 'NEXT' ROW
-            // // TODO: IS THE PREVIOUS PARENT ALL THE WAY TO THE ROOT.
-            // let last =
-            // let comma = ",".repeat(udx(!last));
-
-            // if DEBUG_TAGS
-            // {
-            //     println!("{tags:<66}|{indent}{end}{comma}");
-            // }
-            // else
-            // {
-            //     println!("{indent}{end}{comma}");
-            // };
+            if DEBUG_TAGS
+            {
+                println!("{tags:<66}|{}{}{}", indent, brace.red(), comma);
+            }
+            else
+            {
+                println!("{}{}{}", indent, brace.red(), comma);
+            }
 
             node = parent;
             increment_dedent -= 1;
@@ -224,7 +227,6 @@ fn view_table(table: &[Row])
             accumulate_indent -= 1;
         }
 
-        // TODO: Merge this up into the above, just break out for root node
         if let Some(root) = table.first()
         {
             let last_before_root = next.id == row.id;
@@ -248,79 +250,8 @@ fn view_table(table: &[Row])
         }
     }
 
-    // let header = ("id", "parent", "key", "value", "type", "indent");
-    // println!(
-    //     "{}",
-    //     format!(
-    //         "{:<4.4}{:<8.7}{:<22.21}{:<22.21}{:<6.6}{:<6.6}",
-    //         header.0, header.1, header.2, header.3, header.4, header.5
-    //     )
-    //     .red()
-    // );
-    for (id, row) in table.iter().enumerate().take(0)
-    {
-        println!(
-            "{:<4.4}{:<8.7}{:<22.21}{:<22.21}{:<6.6}{:<6.6}",
-            row.id.to_string(),
-            row.parent.to_string(),
-            row.key,
-            row.value,
-            format!("{:?}", row.ty),
-            row.indent_level(table)
-        );
-    }
-
-    for row in table.iter().take(0)
-    {
-        // TODO: Emit {[ends]} *first*: prev elems could've been multi-lvls-deep
-
-        // TODO: tabulation with cost minimization to hit 80 char line-len-lim
-        // TODO: use the 'only take 1/2' rule (example) or other constraints
-
-        // Prepare styled key-value emission:
-
-        // ? let parent = table.get(row.parent as usize).expect("invalid parent id");
-        // ? let next = table.get(row.id as usize + 1);
-        // ? Why not next=tab.get(row.id + 1).or(row) since root.parent=root?
-        let parent = table.get(row.parent as usize).unwrap_or(row);
-        let next = table.get(row.id as usize + 1).unwrap_or(row);
-
-        let tab = "    ".repeat(row.indent as usize);
-        let key = Stylize::blue(format!(
-            "{1}{0}{1}",
-            row.key.repeat((row.id != 0 && parent.ty != Arr) as usize),
-            "\"".repeat((row.id != 0 && parent.ty != Arr) as usize),
-        ));
-
-        let colon = Stylize::underline_red(
-            ["", ": "][(row.id != 0 && parent.ty != Arr) as usize],
-        );
-        let val = Stylize::yellow(row.value.clone());
-        let quote = Stylize::yellow(["", "\""][(row.ty == Txt) as usize]);
-
-        // Omit comma when last/lone for all types
-        // Omit comma when obj/arr unless empty
-        // let empty = matches!(row.ty, Obj | Arr if next.parent != row.id);
-        // let last = next.parent != row.parent && next.parent != row.id;
-        // let emit_comma = lone || (empty && !last);
-
-        // Justification: next.parent can be row.id if parent. Last if less.
-        let last = next.parent < row.parent;
-
-        // Justification: nested elements have higher id than parents
-        let lone = next.parent <= row.parent;
-
-        let dense_collection = true;
-        let empty_collection = true;
-        let omit = (last || lone || dense_collection) && !empty_collection;
-        let omit = (last || lone);
-
-        // prev element can be a child, yet prev elements are not considered.
-
-        let comma = Stylize::grey(",".repeat(!omit as usize));
-
-        println!("{}{}{}{}{}{}{}", tab, key, colon, quote, val, quote, comma);
-    }
+    // TODO: tabulation with cost minimization to hit 80 char line-len-lim
+    // TODO: use the 'only take 1/2' rule (example) or other constraints
 }
 
 fn traverse(table: &mut Vec<Row>, key: String, value: Value, parent: u32)
