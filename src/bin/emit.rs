@@ -46,6 +46,18 @@ fn view_table(table: &[Row])
 
     let mut accumulate_indent = 0;
 
+    // ! Everything looks to be in order except for root node key showing and
+    // ! dedentation commas missing
+
+    // ! Everything looks to be in order except for root node key showing and
+    // ! dedentation commas missing
+
+    // ! Everything looks to be in order except for root node key showing and
+    // ! dedentation commas missing
+
+    // ! Everything looks to be in order except for root node key showing and
+    // ! dedentation commas missing
+
     for row in table
     {
         // TODO: Print the calculated attributes for each row
@@ -68,9 +80,11 @@ fn view_table(table: &[Row])
         let is_sibling = first_is_not_self || next_same_parent;
 
         // Tags (except for implicit rows)
+        let tag_lvl = "  ".repeat(accumulate_indent);
         let tags = format!(
-            "{}{}{}{}{}{}{}",
+            "{}{}{}{}{}{}{}{}",
             "|| ".red(),
+            tag_lvl,
             "key, ".repeat(key),
             val,
             "parent, ".repeat(udx(is_parent)),
@@ -136,13 +150,20 @@ fn view_table(table: &[Row])
         while node.parent > next.parent || is_end(node)
         {
             let parent = table.get(udx(node.parent)).unwrap_or(node);
-            let val = ["object", "array"][arr];
-            let tags = format!("{}<implicit end {}>", "|| ".red(), val);
+            let val = ["array", "object"][udx(parent.ty == Obj)];
+            let tag_lvl = " ".repeat(increment_dedent);
+            let tags =
+                format!("{}{}<implicit end {}>", "|| ".red(), tag_lvl, val);
             let indent = "    ".repeat(increment_dedent);
             let end = style_end(["]", "}"][udx(parent.ty == Obj)]);
             println!("{tags:<66}|{indent}{end}");
             node = parent;
             increment_dedent -= 1;
+        }
+
+        if accumulate_indent - increment_dedent > 1
+        {
+            accumulate_indent -= 1;
         }
 
         // TODO: Merge this up into the above, just break out for root node
@@ -151,9 +172,11 @@ fn view_table(table: &[Row])
             let last_before_root = next.id == row.id;
             if last_before_root
             {
-                let tags = format!("{}<implicit end of root>", "|| ".red());
+                let tag_lvl = "  ".repeat(increment_dedent);
+                let tags =
+                    format!("{}{}<implicit end of root>", "|| ".red(), tag_lvl);
                 let indent = "    ".repeat(increment_dedent);
-                let end = ["]", "}"][udx(root.ty == Obj)];
+                let end = style_end(["]", "}"][udx(root.ty == Obj)]);
                 println!("{tags:<66}|{indent}{end}");
             }
         }
