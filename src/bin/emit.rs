@@ -13,6 +13,14 @@ fn main() -> Result<(), std::io::Error>
     Ok(())
 }
 
+fn udx<T>(val: T) -> usize
+where
+    T: TryInto<usize>,
+    <T as TryInto<usize>>::Error: std::fmt::Debug,
+{
+    val.try_into().expect("failed to convert")
+}
+
 /// Idea: for any single row, render with proper indents using only the table
 fn view_table(table: &[Row])
 {
@@ -24,20 +32,33 @@ fn view_table(table: &[Row])
     // ! Row IDs must start at 0 and increase only by 1 (table indices == ids).
     // Allows: parent, first child, & next offset-calculation
 
+    // Color theme settings:
+    let style_key = <&str as Stylize>::green;
+    let style_quote_key = <&str as Stylize>::dark_green;
+    let style_open = <&str as Stylize>::red;
+    let style_end = <&str as Stylize>::red;
+    let style_quote_val = <&str as Stylize>::dark_red;
+    let style_txt = <&str as Stylize>::red;
+    let style_nil = <&str as Stylize>::red;
+    let style_num = <&str as Stylize>::cyan;
+    let _style_dot = <&str as Stylize>::cyan; // floats
+    let style_bit = <&str as Stylize>::yellow; // bool
+
     let mut accumulate_indent = 0;
 
     for row in table
     {
         // TODO: Print the calculated attributes for each row
-        let parent = table.get(row.parent as usize).unwrap_or(row);
-        debug_assert!(matches!(parent.ty, Obj | Arr), "parent isn't obj/arr"); // TODO: REMOVE THIS
-        let first = table.get(row.parent as usize + 1).unwrap_or(row);
-        debug_assert_eq!(first.parent, row.parent, "sibling isn't sibling"); // TODO: REMOVE THIS
-        let next = table.get(row.id as usize + 1).unwrap_or(row);
+        let parent = table.get(udx(row.parent)).unwrap_or(row);
+        let first = table.get(udx(row.parent) + 1).unwrap_or(row);
+        let next = table.get(udx(row.id) + 1).unwrap_or(row);
 
-        let key = (parent.ty != Arr && row.id != 0) as usize;
-        let arr = !matches!(row.ty, Obj) as usize;
-        let var = matches!(row.ty, Nil | Bit | Num | Txt) as usize;
+        debug_assert!(matches!(parent.ty, Obj | Arr), "parent isn't obj/arr"); // TODO: REMOVE THIS
+        debug_assert_eq!(first.parent, row.parent, "sibling isn't sibling"); // TODO: REMOVE THIS
+
+        let key = udx(parent.ty != Arr && row.id != 0);
+        let arr = udx(!matches!(row.ty, Obj));
+        let var = udx(matches!(row.ty, Nil | Bit | Num | Txt));
         let val = ["object, ", "array, ", "value, "][arr + var];
         let is_parent = row.id == next.parent;
         let empty = matches!(row.ty, Obj | Arr) && row.id != next.parent;
@@ -46,48 +67,56 @@ fn view_table(table: &[Row])
         let next_same_parent = row.id != 0 && next.parent == row.parent;
         let is_sibling = first_is_not_self || next_same_parent;
 
-        /*
-        println!(
-            "{}{}{}{}{}{}{}",
-            "|| ".red(),
-            "key, ".repeat(key),
-            val,
-            "parent, ".repeat(par),
-            "empty, ".repeat(empty),
-            "sibling, ".repeat(is_sibling),
-            "last".repeat(last),
-        );
-        */
-
         // Tags (except for implicit rows)
         let tags = format!(
             "{}{}{}{}{}{}{}",
             "|| ".red(),
             "key, ".repeat(key),
             val,
-            "parent, ".repeat(is_parent as usize),
-            "empty, ".repeat(empty as usize),
-            "sibling, ".repeat(is_sibling as usize),
-            "last".repeat(last as usize),
+            "parent, ".repeat(udx(is_parent)),
+            "empty, ".repeat(udx(empty)),
+            "sibling, ".repeat(udx(is_sibling)),
+            "last".repeat(udx(last)),
         );
 
         // Key-Value (except for implicit brackend end rows)
         {
             let indent = "    ".repeat(accumulate_indent);
             let colon = ": ";
-            let comma = ",".repeat(((empty || !is_parent) && !last) as usize);
-            let key = Stylize::green(format!("{:?}", row.key));
-            let val = Stylize::red(format!(
-                "{1}{0}{1}",
-                row.value,
-                ["", "\""][(row.ty == Txt) as usize]
-            ));
-            let end = Stylize::red(
-                ["]", "}"][matches!(row.ty, Obj) as usize]
-                    .repeat(empty as usize),
+            let comma = ",".repeat(udx((empty || !is_parent) && !last));
+            let key = format!(
+                "{0}{1}{0}",
+                style_quote_key("\""),
+                style_key(&row.key)
             );
+            let val = match row.ty
+            {
+                Arr if empty =>
+                {
+                    let open = style_open("[");
+                    let end = style_end(if empty { "]" } else { "" });
+                    format!("{open}{end}")
+                }
+                Arr => style_open("[").to_string(),
+                Obj if empty =>
+                {
+                    let open = style_open("{");
+                    let end = style_end(if empty { "}" } else { "" });
+                    format!("{open}{end}")
+                }
+                Obj => style_open("{").to_string(),
+                Nil => style_nil(&row.value).to_string(),
+                Bit => style_bit(&row.value).to_string(),
+                Txt =>
+                {
+                    let quote = style_quote_val("\"");
+                    let txt = style_txt(&row.value);
+                    format!("{quote}{txt}{quote}")
+                }
+                Num => style_num(&row.value).to_string(),
+            };
 
-            println!("{:<60}{indent}{key}{colon}{val}{end}{comma}", tags);
+            println!("{tags:<60}{indent}{key}{colon}{val}{comma}");
 
             if is_parent && !empty
             {
@@ -108,20 +137,28 @@ fn view_table(table: &[Row])
         };
 
         let mut node = row;
+        let mut increment_dedent = accumulate_indent;
         while node.parent > next.parent || is_end(node)
         {
             let parent = table.get(node.parent as usize).unwrap_or(node);
             let val = ["object, ", "array, "][(parent.ty == Arr) as usize];
-            println!("{}  implicit end {}", "|| ".magenta(), val);
+            let tags = format!("{}  implicit end {:<8}", "|| ".magenta(), val);
+            let indent = "    ".repeat(increment_dedent);
+            let end = ["]", "}"][(parent.ty == Obj) as usize];
+            println!("{:<60}{indent}{end}", tags);
             node = parent;
+            increment_dedent -= 1;
         }
 
-        if let Some(_root) = table.first()
+        if let Some(root) = table.first()
         {
             let last_before_root = next.id == row.id;
             if last_before_root
             {
-                println!("{}implicit end of root", "|| ".yellow());
+                let tags = format!("{}implicit end of root", "|| ".yellow());
+                let indent = "    ".repeat(increment_dedent);
+                let end = ["]", "}"][(root.ty == Obj) as usize];
+                println!("{:<60}{indent}{end}", tags);
             }
         }
     }

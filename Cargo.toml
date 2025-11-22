@@ -10,6 +10,7 @@ edition = "2024"
 # starlark = "0.13.0"
 crossterm = "0.29.0"
 serde_json = { version = "1.0.145", features = ["preserve_order"] }
+thiserror = "2.0.17"
 # expr-lang = "0.3.2"
 
 # For adding Rust extension types into Starlark
