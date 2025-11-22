@@ -166,6 +166,8 @@ fn view_table(table: &[Row])
             let indent = "    ".repeat(increment_dedent);
             let end = style_end(["]", "}"][udx(parent.ty == Obj)]);
 
+            // TODO: CALCULATE THIS USING PARENT IDS NOT ROW IDS. THE 'NEXT' ROW
+            // TODO: IS THE PREVIOUS PARENT ALL THE WAY TO THE ROOT.
             let comma = ",".repeat(udx(!last));
 
             if DEBUG_TAGS
