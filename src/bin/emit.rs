@@ -2,6 +2,8 @@ use crossterm::style::{Color, Stylize};
 use serde_json::{Number, Value};
 use std::convert::From;
 
+const DEBUG_TAGS: bool = false;
+
 fn main() -> Result<(), std::io::Error>
 {
     let value: serde_json::Value = serde_json::from_reader(std::io::stdin())?;
@@ -126,6 +128,7 @@ fn view_table(table: &[Row])
             Num => style_num(&row.value).to_string(),
         };
 
+        let tags = if DEBUG_TAGS { tags } else { String::new() };
         println!("{tags:<66}|{indent}{key}{colon}{val}{comma}");
 
         if is_parent && !empty
@@ -156,7 +159,10 @@ fn view_table(table: &[Row])
                 format!("{}{}<implicit end {}>", "|| ".red(), tag_lvl, val);
             let indent = "    ".repeat(increment_dedent);
             let end = style_end(["]", "}"][udx(parent.ty == Obj)]);
+
+            let tags = if DEBUG_TAGS { tags } else { String::new() };
             println!("{tags:<66}|{indent}{end}");
+
             node = parent;
             increment_dedent -= 1;
         }
@@ -177,6 +183,8 @@ fn view_table(table: &[Row])
                     format!("{}{}<implicit end of root>", "|| ".red(), tag_lvl);
                 let indent = "    ".repeat(increment_dedent);
                 let end = style_end(["]", "}"][udx(root.ty == Obj)]);
+
+                let tags = if DEBUG_TAGS { tags } else { String::new() };
                 println!("{tags:<66}|{indent}{end}");
             }
         }
