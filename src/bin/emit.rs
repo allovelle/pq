@@ -97,10 +97,10 @@ fn view_table(table: &[Row])
 
         // Key-Value (except for implicit brackend end rows)
         let indent = "    ".repeat(accumulate_indent);
-        let colon = ": ";
-        let comma = ",".repeat(udx((empty || !is_parent) && !last));
         let key =
-            format!("{0}{1}{0}", style_quote_key("\""), style_key(&row.key));
+            format!("{0}{1}{0}", style_quote_key("\""), style_key(&row.key))
+                .repeat(udx(row.id != 0));
+        let colon = ": ".repeat(udx(row.id != 0));
         let val = match row.ty
         {
             Arr if empty =>
@@ -127,6 +127,7 @@ fn view_table(table: &[Row])
             }
             Num => style_num(&row.value).to_string(),
         };
+        let comma = ",".repeat(udx((empty || !is_parent) && !last));
 
         if DEBUG_TAGS
         {
@@ -159,25 +160,60 @@ fn view_table(table: &[Row])
         while node.parent > next.parent || is_end(node)
         {
             let parent = table.get(udx(node.parent)).unwrap_or(node);
-            let val = ["array", "object"][udx(parent.ty == Obj)];
-            let tag_lvl = " ".repeat(increment_dedent);
-            let tags =
-                format!("{}{}<implicit end {}>", "|| ".red(), tag_lvl, val);
-            let indent = "    ".repeat(increment_dedent);
-            let end = style_end(["]", "}"][udx(parent.ty == Obj)]);
 
-            // TODO: CALCULATE THIS USING PARENT IDS NOT ROW IDS. THE 'NEXT' ROW
-            // TODO: IS THE PREVIOUS PARENT ALL THE WAY TO THE ROOT.
-            let comma = ",".repeat(udx(!last));
+            let tags = format!(
+                "{} node{}{{par={}}} next{}{{par={}}} row{}{{par={}}}",
+                "||".grey(),
+                node.id,
+                node.parent,
+                next.id,
+                next.parent,
+                row.id,
+                row.parent
+            );
 
-            if DEBUG_TAGS
+            // NEED TO DETERMINE IS LAST
+            // parent.is_last_from_pov(row <- specifically (landmark))
+            // Current parent is nested deeper than next parent
+            let brace = if node.parent > next.parent
             {
-                println!("{tags:<66}|{indent}{end}{comma}");
+                if parent.ty == Obj { "}" } else { "]" }
+            }
+            else if node.id == next.id
+            {
+                if parent.ty == Obj { "}" } else { "]" }
             }
             else
             {
-                println!("{indent}{end}{comma}");
+                ""
             };
+
+            // Next node is sibling of current node's parent
+            let comma = if next.parent == parent.parent { "," } else { "" };
+
+            let indent = "    ".repeat(increment_dedent);
+            println!("{tags:<66}|{}{}{}", indent, brace.red(), comma);
+
+            // let val = ["array", "object"][udx(parent.ty == Obj)];
+            // let tag_lvl = " ".repeat(increment_dedent);
+            // let tags =
+            //     format!("{}{}<implicit end {}>", "|| ".red(), tag_lvl, val);
+            // let indent = "    ".repeat(increment_dedent);
+            // let end = style_end(["]", "}"][udx(parent.ty == Obj)]);
+
+            // // TODO: CALCULATE THIS USING PARENT IDS NOT ROW IDS. THE 'NEXT' ROW
+            // // TODO: IS THE PREVIOUS PARENT ALL THE WAY TO THE ROOT.
+            // let last =
+            // let comma = ",".repeat(udx(!last));
+
+            // if DEBUG_TAGS
+            // {
+            //     println!("{tags:<66}|{indent}{end}{comma}");
+            // }
+            // else
+            // {
+            //     println!("{indent}{end}{comma}");
+            // };
 
             node = parent;
             increment_dedent -= 1;
