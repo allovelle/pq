@@ -166,13 +166,15 @@ fn view_table(table: &[Row])
             let indent = "    ".repeat(increment_dedent);
             let end = style_end(["]", "}"][udx(parent.ty == Obj)]);
 
+            let comma = ",".repeat(udx(!last));
+
             if DEBUG_TAGS
             {
-                println!("{tags:<66}|{indent}{end}");
+                println!("{tags:<66}|{indent}{end}{comma}");
             }
             else
             {
-                println!("{indent}{end}");
+                println!("{indent}{end}{comma}");
             };
 
             node = parent;
