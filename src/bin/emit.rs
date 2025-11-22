@@ -80,52 +80,47 @@ fn view_table(table: &[Row])
         );
 
         // Key-Value (except for implicit brackend end rows)
+        let indent = "    ".repeat(accumulate_indent);
+        let colon = ": ";
+        let comma = ",".repeat(udx((empty || !is_parent) && !last));
+        let key =
+            format!("{0}{1}{0}", style_quote_key("\""), style_key(&row.key));
+        let val = match row.ty
         {
-            let indent = "    ".repeat(accumulate_indent);
-            let colon = ": ";
-            let comma = ",".repeat(udx((empty || !is_parent) && !last));
-            let key = format!(
-                "{0}{1}{0}",
-                style_quote_key("\""),
-                style_key(&row.key)
-            );
-            let val = match row.ty
+            Arr if empty =>
             {
-                Arr if empty =>
-                {
-                    let open = style_open("[");
-                    let end = style_end(if empty { "]" } else { "" });
-                    format!("{open}{end}")
-                }
-                Arr => style_open("[").to_string(),
-                Obj if empty =>
-                {
-                    let open = style_open("{");
-                    let end = style_end(if empty { "}" } else { "" });
-                    format!("{open}{end}")
-                }
-                Obj => style_open("{").to_string(),
-                Nil => style_nil(&row.value).to_string(),
-                Bit => style_bit(&row.value).to_string(),
-                Txt =>
-                {
-                    let quote = style_quote_val("\"");
-                    let txt = style_txt(&row.value);
-                    format!("{quote}{txt}{quote}")
-                }
-                Num => style_num(&row.value).to_string(),
-            };
-
-            println!("{tags:<60}{indent}{key}{colon}{val}{comma}");
-
-            if is_parent && !empty
-            {
-                accumulate_indent += 1;
+                let open = style_open("[");
+                let end = style_end(if empty { "]" } else { "" });
+                format!("{open}{end}")
             }
-            else if last
+            Arr => style_open("[").to_string(),
+            Obj if empty =>
             {
-                accumulate_indent -= 1;
+                let open = style_open("{");
+                let end = style_end(if empty { "}" } else { "" });
+                format!("{open}{end}")
             }
+            Obj => style_open("{").to_string(),
+            Nil => style_nil(&row.value).to_string(),
+            Bit => style_bit(&row.value).to_string(),
+            Txt =>
+            {
+                let quote = style_quote_val("\"");
+                let txt = style_txt(&row.value);
+                format!("{quote}{txt}{quote}")
+            }
+            Num => style_num(&row.value).to_string(),
+        };
+
+        println!("{tags:<60}{indent}{key}{colon}{val}{comma}");
+
+        if is_parent && !empty
+        {
+            accumulate_indent += 1;
+        }
+        else if last
+        {
+            accumulate_indent -= 1;
         }
 
         // End means end of collection (place end brackets all the way up)
@@ -141,11 +136,11 @@ fn view_table(table: &[Row])
         while node.parent > next.parent || is_end(node)
         {
             let parent = table.get(node.parent as usize).unwrap_or(node);
-            let val = ["object, ", "array, "][(parent.ty == Arr) as usize];
+            let val = ["object, ", "array, "][arr];
             let tags = format!("{}  implicit end {:<8}", "|| ".magenta(), val);
             let indent = "    ".repeat(increment_dedent);
             let end = ["]", "}"][(parent.ty == Obj) as usize];
-            println!("{:<60}{indent}{end}", tags);
+            println!("{tags:<60}{indent}{end}");
             node = parent;
             increment_dedent -= 1;
         }
