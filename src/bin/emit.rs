@@ -24,6 +24,8 @@ fn view_table(table: &[Row])
     // ! Row IDs must start at 0 and increase only by 1 (table indices == ids).
     // Allows: parent, first child, & next offset-calculation
 
+    let mut accumulate_indent = 0;
+
     for row in table
     {
         // TODO: Print the calculated attributes for each row
@@ -37,13 +39,12 @@ fn view_table(table: &[Row])
         let arr = !matches!(row.ty, Obj) as usize;
         let var = matches!(row.ty, Nil | Bit | Num | Txt) as usize;
         let val = ["object, ", "array, ", "value, "][arr + var];
-        let par = (row.id == next.parent) as usize;
-        let empty =
-            (matches!(row.ty, Obj | Arr) && row.id != next.parent) as usize;
-        let last = (next.id == row.id || next.parent < row.parent) as usize; // First row, last row, last elem in collection, or ending bracket/brace
+        let is_parent = row.id == next.parent;
+        let empty = matches!(row.ty, Obj | Arr) && row.id != next.parent;
+        let last = next.id == row.id || next.parent < row.parent; // First row, last row, last elem in collection, or ending bracket/brace
         let first_is_not_self = row.id != 0 && first.id < row.id;
         let next_same_parent = row.id != 0 && next.parent == row.parent;
-        let is_sibling = (first_is_not_self || next_same_parent) as usize;
+        let is_sibling = first_is_not_self || next_same_parent;
 
         /*
         println!(
@@ -64,26 +65,38 @@ fn view_table(table: &[Row])
             "|| ".red(),
             "key, ".repeat(key),
             val,
-            "parent, ".repeat(par),
-            "empty, ".repeat(empty),
-            "sibling, ".repeat(is_sibling),
-            "last".repeat(last),
+            "parent, ".repeat(is_parent as usize),
+            "empty, ".repeat(empty as usize),
+            "sibling, ".repeat(is_sibling as usize),
+            "last".repeat(last as usize),
         );
 
         // Key-Value (except for implicit brackend end rows)
         {
-            let indent = "  ".repeat(1);
+            let indent = "    ".repeat(accumulate_indent);
             let colon = ": ";
-            let comma = ",";
-            let key = format!("{:?}", row.key);
-            let val = format!(
-                "{1:.2$}{0}{1:.2$}",
+            let comma = ",".repeat(((empty || !is_parent) && !last) as usize);
+            let key = Stylize::green(format!("{:?}", row.key));
+            let val = Stylize::red(format!(
+                "{1}{0}{1}",
                 row.value,
-                "\"",
-                (row.ty == Txt) as usize
+                ["", "\""][(row.ty == Txt) as usize]
+            ));
+            let end = Stylize::red(
+                ["]", "}"][matches!(row.ty, Obj) as usize]
+                    .repeat(empty as usize),
             );
 
-            println!("{:<60}{indent}{key}{colon}{val}{comma}", tags);
+            println!("{:<60}{indent}{key}{colon}{val}{end}{comma}", tags);
+
+            if is_parent && !empty
+            {
+                accumulate_indent += 1;
+            }
+            else if last
+            {
+                accumulate_indent -= 1;
+            }
         }
 
         // End means end of collection (place end brackets all the way up)
