@@ -112,7 +112,7 @@ fn view_table(table: &[Row])
             Num => style_num(&row.value).to_string(),
         };
 
-        println!("{tags:<60}{indent}{key}{colon}{val}{comma}");
+        println!("{tags:<66}|{indent}{key}{colon}{val}{comma}");
 
         if is_parent && !empty
         {
@@ -135,25 +135,26 @@ fn view_table(table: &[Row])
         let mut increment_dedent = accumulate_indent;
         while node.parent > next.parent || is_end(node)
         {
-            let parent = table.get(node.parent as usize).unwrap_or(node);
-            let val = ["object, ", "array, "][arr];
-            let tags = format!("{}  implicit end {:<8}", "|| ".magenta(), val);
+            let parent = table.get(udx(node.parent)).unwrap_or(node);
+            let val = ["object", "array"][arr];
+            let tags = format!("{}<implicit end {}>", "|| ".red(), val);
             let indent = "    ".repeat(increment_dedent);
-            let end = ["]", "}"][(parent.ty == Obj) as usize];
-            println!("{tags:<60}{indent}{end}");
+            let end = style_end(["]", "}"][udx(parent.ty == Obj)]);
+            println!("{tags:<66}|{indent}{end}");
             node = parent;
             increment_dedent -= 1;
         }
 
+        // TODO: Merge this up into the above, just break out for root node
         if let Some(root) = table.first()
         {
             let last_before_root = next.id == row.id;
             if last_before_root
             {
-                let tags = format!("{}implicit end of root", "|| ".yellow());
+                let tags = format!("{}<implicit end of root>", "|| ".red());
                 let indent = "    ".repeat(increment_dedent);
-                let end = ["]", "}"][(root.ty == Obj) as usize];
-                println!("{:<60}{indent}{end}", tags);
+                let end = ["]", "}"][udx(root.ty == Obj)];
+                println!("{tags:<66}|{indent}{end}");
             }
         }
     }
