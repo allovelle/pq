@@ -1,6 +1,7 @@
 use crossterm::event::{KeyEvent, KeyEventKind, KeyModifiers, ModifierKeyCode};
 use crossterm::style::{Attribute, Color, Stylize};
 use crossterm::{ExecutableCommand, QueueableCommand, cursor, style, terminal};
+use serde_json::Value;
 use std::io::{self, Write, stdout};
 
 // fn main() -> Result<(), io::Error>
@@ -39,13 +40,8 @@ fn main() -> Result<(), Box<dyn Error>>
 {
     // Get the json
     let text = std::fs::read_to_string("json3.json")?;
-    let json: serde_json::Value = serde_json::from_str(&text)?;
-
+    let json: Value = serde_json::from_str(&text)?;
     let mut stdout = stdout();
-
-    // Sample string to slice
-    let source = "Line 0\nLine 1\nLine 2\nLine 3\nLine 4\nLine 5\nLine 6\nLine 7\nLine 8\nLine 9";
-    let lines: Vec<&str> = source.lines().collect();
 
     // Enable raw mode
     terminal::enable_raw_mode()?;
@@ -62,8 +58,22 @@ fn main() -> Result<(), Box<dyn Error>>
             cursor::MoveTo(0, 0)
         )?;
 
+        fn query_json(mut json: Value, query: Vec<&str>) -> Option<Value>
+        {
+            for key in query
+            {
+                json = json.get(key.trim())?.clone();
+            }
+            Some(json)
+        }
+
+        let query: Vec<_> = input.split(".").collect();
+        write!(stdout, "{:?}", query)?;
+
+        let filtered = query_json(json.clone(), query).unwrap_or(json.clone());
+        let formatted = serde_json::to_string_pretty(&filtered)?;
+
         stdout.execute(cursor::MoveToColumn(0))?;
-        let formatted = serde_json::to_string_pretty(&json)?;
         for line in formatted.lines()
         {
             stdout.execute(cursor::MoveToColumn(0))?;
