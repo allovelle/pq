@@ -3,6 +3,10 @@ pq 'key1.-key2.{name,phone}'
     {name: "", addr: "", phone: +1}
     {name: "", phone: +1}
 
+the ui allows the user to use arrow-keys to select the next key (row) like a
+    tree in a file manager. this is easier than typing the name of each key when
+    you want to drill down or when the goal is simple exploration of the data.
+
 sigils?
 [?][*][-][!]
 <?><*><-><!>

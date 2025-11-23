@@ -125,7 +125,7 @@ fn main() -> Result<(), Box<dyn Error>>
     execute!(stdout, terminal::EnterAlternateScreen)?;
     execute!(stdout, cursor::Hide)?;
 
-    let mut input = String::new();
+    let mut input = String::from("0:");
 
     loop
     {
