@@ -67,7 +67,8 @@ fn main() -> Result<(), Box<dyn Error>>
             Some(json)
         }
 
-        let query: Vec<_> = input.split(".").collect();
+        let query: Vec<_> =
+            input.split(".").filter(|q| !q.is_empty()).collect();
         write!(stdout, "{:?}", query)?;
 
         let filtered = query_json(json.clone(), query).unwrap_or(json.clone());
