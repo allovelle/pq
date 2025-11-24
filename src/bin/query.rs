@@ -51,6 +51,8 @@ impl Query
     fn parse(&mut self)
     {
         // Replace query commands
+        let mut x = std::collections::HashMap::new();
+        x.insert(&213, 213);
     }
 
     /// Goes to next sibling else first child
@@ -165,7 +167,7 @@ fn main() -> Result<(), Box<dyn Error>>
                 }
                 Event::Key(KeyEvent { code: KeyCode::BackTab, .. }) =>
                 {
-                    cmd_user_backtab = true
+                    input += "";
                 }
                 Event::Key(KeyEvent {
                     code: Char('c'),

@@ -96,41 +96,48 @@ Referent Commands & Relative Commands:
     actual commands and relative commands are like meta commands.
 
 Referent Queries:
-    a a.b
+    a a.b                                   ref sel
         Select key
-    (a) (a.b)
-        Expr select nested
-    (name.capitalize())
+    (a) (a.b)                               ref sel
+        Expr select nested. 'Compute' the nested keys as one expr
+    (name.capitalize())                     ref cmp
         Expr map
-    [0] [0:] [0::]
+    [0] [0:] [0::]                          ref sel
         Expr select index
-    [0, 8]
+    [0, 8]                                  ref sel
         Expr build array
-    [len(temperatures) // 2 + 1:]
-        Expr build array
-    [temperature > 32]
+    [len(temperatures) // 2 + 1:]           ref cmp
+        Expr build array. This is both a compute and select query.
+        The built elements came from the parent, even if computed.
+    [temperature > 32]                      ref sel
         Expr filter (indexing by boolean doesn't make sense 👍)
-    [temperature > 32, name.upper()]
+    [temperature > 32, name.upper()]        ref cmp
         Expr filter map (indexing by tuple doesn't make sense 👍)
-    {a,b}
+    {a,b}                                   ref sel
         Inclusive build object, no err on missing
-    {-a,-b}
+    {-a,-b}                                 ref sel
         Exlusive build object, no err on missing
-    {a,-b}
+    {a,-b}                                  ref sel
         Inclusive first, no-op exclusive keys, err on missing
-    {-a,b}
+    {-a,b}                                  ref sel
         Exclusive first, no-op inclusive keys, err on missing
-    {a, b: b + 1, "c": c}
+    {a, b: b + 1, "c": c}                   ref cmp
+        parent effectivly undoes the compute/calculate operation
         Build object with expression handling
-    {a, {b: b + 1, "c": c}}
+    {a, {b: b + 1, "c": c}}                 ref cmp
         Build object using set & nested dicts for expr parsing
 Relative Queries:
-    b./.b
+    b./.b                                   rel sel
         goto parent
-    \
+    \                                       rel sel
         goto child
-
-
+Compute Queries:
+    produces an entirely new/seperate json tree from the point of invocation.
+    goto-child works as expected, goto-parent can only go to itself (the new
+    root).
+Select Queries:
+    traverses an existing json tree while preserving lineage for parent node
+    traversal.
 
 
 
