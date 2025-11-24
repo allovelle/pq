@@ -36,6 +36,71 @@ use crossterm::{
 };
 use std::{error::Error, time::Duration};
 
+struct Query
+{
+    commands: Vec<Cmd>,
+}
+
+impl Query
+{
+    pub fn new() -> Self
+    {
+        Self { commands: Default::default() }
+    }
+
+    fn parse(&mut self)
+    {
+        // Replace query commands
+    }
+
+    /// Goes to next sibling else first child
+    pub fn next_sibling(&self) -> Option<u8>
+    {
+        let node: Option<u8> = None;
+        node.or(self.goto_child())
+    }
+
+    /// Goes to previous sibling else parent
+    pub fn prev_sibling(&self) -> Option<u8>
+    {
+        let node: Option<u8> = None;
+        node.or(self.goto_parent())
+    }
+
+    /// Goes to parent else root
+    pub fn goto_parent(&self) -> Option<u8>
+    {
+        let node: Option<u8> = None;
+        node
+    }
+
+    /// Goes to first child else next sibling
+    pub fn goto_child(&self) -> Option<u8>
+    {
+        let node: Option<u8> = None;
+        node.or(self.next_sibling())
+    }
+
+    /// Needs the json to know the next keys/indices. Effectively updates the
+    /// query by performing it.
+    fn push(&mut self, from: Value)
+    {
+        // TODO: Inc index if applicable
+        // TODO: Find next key
+    }
+
+    fn pop(&mut self)
+    {
+        self.commands.pop();
+    }
+}
+
+enum Cmd
+{
+    Key(String),
+    Index(usize),
+}
+
 fn main() -> Result<(), Box<dyn Error>>
 {
     // Get the json
@@ -94,6 +159,14 @@ fn main() -> Result<(), Box<dyn Error>>
             use KeyCode::*;
             match event::read()?
             {
+                Event::Key(KeyEvent { code: KeyCode::Tab, .. }) =>
+                {
+                    input += "";
+                }
+                Event::Key(KeyEvent { code: KeyCode::BackTab, .. }) =>
+                {
+                    cmd_user_backtab = true
+                }
                 Event::Key(KeyEvent {
                     code: Char('c'),
                     modifiers: KeyModifiers::CONTROL,

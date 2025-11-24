@@ -7,6 +7,26 @@ the ui allows the user to use arrow-keys to select the next key (row) like a
     tree in a file manager. this is easier than typing the name of each key when
     you want to drill down or when the goal is simple exploration of the data.
 
+
+cursor: traverse the tree using arrow keys. cursor commands are special commands
+    in that they are relative to the key! so instead of a.b.c where c means b[c],
+    a.b.> means the next sibling of b *within a*, meaning the next sibling within
+    a relative to b. a.b.\ means first child of b. without this syntax, every
+    command filters downward *within* the current object not *relative* to it.
+    need special commands for:
+        goto-parent: nest outward
+        goto-child: nest inward
+        next-sibling: move down
+        prev-sibling: move up
+
+    {foo: {bar: {baz: {name: "alo"}}}}
+        foo.bar.[v,].name
+        foo.[>>].name
+    {foo: {bar: [1, 2, 3, 4]}}
+        foo.{>>>>>>}.name
+        "foo"."bar".[2] == 3
+
+
 sigils?
 [?][*][-][!]
 <?><*><-><!>
@@ -67,16 +87,15 @@ $ stdout | pq -f json.json 'query'
     what does this do? should it search multiple files? no. json doesn't do that
 
 
-SomeKey(key, val) + 1
-    value modified (__add__)
-SomeKey(key, val).upper()
-    value modified (__getitem__, __call__)
-SomeKey(key, val) > 32
-    value compared (__gt__)
--SomeKey(key, val)
-    value negated (__neg__)
 
-Query Types:
+
+Referent Commands & Relative Commands:
+    referent commands select object keys, array indices, or perform filtering
+    or data mapping operations. relative commands perform tree-traversals over
+    the selected/filtered/computed resulting tree. referent commands are like
+    actual commands and relative commands are like meta commands.
+
+Referent Queries:
     a a.b
         Select key
     (a) (a.b)
@@ -105,11 +124,17 @@ Query Types:
         Build object with expression handling
     {a, {b: b + 1, "c": c}}
         Build object using set & nested dicts for expr parsing
+Relative Queries:
+    b./.b
+        goto parent
+    \
+        goto child
 
 
-    Use op logging for:
-        -a: remove key entirely, not negate
-        a > b: filter object where key a greater than key b, not bool expr
+
+
+
+
 
 
 The query DSL parser doesn't have to be afraid of Starlark expressions because
@@ -133,6 +158,21 @@ fuzzy find files golang fzf
 • width handling for simple objs/arrs [1,2,3] {a:b}
 • Can Starlark provide all defined names in a module? This would allow build_obj to work
 
+
+
+Operation Logging:
+    Use op logging for:
+        -a: remove key entirely, not negate
+        a > b: filter object where key a greater than key b, not bool expr
+
+    SomeKey(key, val) + 1
+        value modified (__add__)
+    SomeKey(key, val).upper()
+        value modified (__getitem__, __call__)
+    SomeKey(key, val) > 32
+        value compared (__gt__)
+    -SomeKey(key, val)
+        value negated (__neg__)
 
 
 Implementation Paths:
