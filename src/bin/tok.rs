@@ -8,7 +8,6 @@ fn main() -> PqResult<()>
 use std::{
     collections::{HashMap, HashSet},
     ops::Range,
-    range::Range,
 };
 
 use thiserror::Error;
@@ -256,40 +255,17 @@ pub enum Tok
 //     (GAP_OP, "+-*/", OP, ACC),
 // ];
 
-const ALPHAS: &str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
-const DIGITS: &str = "0123456789";
-const ALPHA_DIGITS: &str = concat!(
-    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ",
-    "0123456789"
-);
-const VALID_SYMBOLS: &str = concat!(
-    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ",
-    "0123456789",
-    "-_|/?*&%$#@!X+=;"
-);
-
-/// State transitions are locked to character iteration.
-/// [curr state][ch][next state][tok & buf act]
-const STATE_TRANSITION_TABLE: &[(State, &str, State, Act)] = &[
-    (BEG, "\0", END, IGN),
-    (BEG, "\n \t\r", BEG, IGN),
-    // (BEG, valid_symbols, SYM, ACC),
-    (BEG, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ", SYM, ACC),
-    (BEG, "0123456789", SYM, ACC),
-    (BEG, "-_|/?*&%$#@!X+=;", SYM, ACC),
-    (SYM, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ", SYM, ACC),
-    (SYM, "\0", END, FIN),
-];
-
 fn state_transition_table() -> HashMap<(State, char), (State, Act)>
 {
-    STATE_TRANSITION_TABLE
-        .iter()
-        .copied()
-        .flat_map(|(curr, mat, next, tok_buf_act)| {
-            mat.chars().map(move |c| ((curr, c), (next, tok_buf_act)))
-        })
-        .collect()
+    // TODO: Render the table from the disperate accept/except ranges
+    // STATE_TRANSITION_TABLE
+    //     .iter()
+    //     .cloned() // .copied()
+    //     .flat_map(|(curr, accept, except, next, tok_buf_act)| {
+    //         mat.chars().map(move |c| ((curr, c), (next, tok_buf_act)))
+    //     })
+    //     .collect();
+    Default::default()
 }
 
 fn token_split_out_learn_them()
@@ -309,19 +285,36 @@ fn token_split_out_learn_them()
     impl TokChar for &str {}
     impl TokChar for HashSet<char> {}
 
-    // TODO: Char is `in <this> range and not in <that> range`
-
-    /// State transitions are locked to character iteration.
-    /// [curr state][ch][next state][tok & buf act]
-    const STATE_TRANSITION_TABLE: &[(State, &str, State, Act)] = &[
-        (BEG, "\0", END, IGN),
-        (BEG, "\n \t\r", BEG, IGN),
-        (BEG, '\u{0020}' .. '\u{10FFFF}', SYM, ACC),
-        // (BEG, valid_symbols, SYM, ACC),
-        (BEG, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ", SYM, ACC),
-        (BEG, "0123456789", SYM, ACC),
-        (BEG, "-_|/?*&%$#@!X+=;", SYM, ACC),
-        (SYM, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ", SYM, ACC),
-        (SYM, "\0", END, FIN),
-    ];
+    // State transitions are locked to character iteration.
+    // [curr state][ch][next state][tok & buf act]
+    // const STATE_TRANSITION_TABLE: &[(State, Range<char>, &str, State, Act)] = &[
+    //     (BEG, "\0", END, IGN),
+    //     (BEG, "\n \t\r", BEG, IGN),
+    //     (BEG, '\u{0020}' .. '\u{10FFFF}', "", SYM, ACC),
+    //     // (BEG, valid_symbols, SYM, ACC),
+    //     (BEG, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ", SYM, ACC),
+    //     (BEG, "0123456789", SYM, ACC),
+    //     (BEG, "-_|/?*&%$#@!X+=;", SYM, ACC),
+    //     (SYM, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ", SYM, ACC),
+    //     (SYM, "\0", END, FIN),
+    // ];
 }
+
+#[derive(Debug, Clone)]
+enum Accept
+{
+    EachOf(&'static str),
+    FromTo(Range<char>),
+    Unused,
+}
+
+use Accept::*;
+
+// State transitions are locked to character iteration. Essentially, check that
+// char is in this range or set and also not in this range or set.
+// [curr state][accept ch range][except ch range][next state][tok & buf act]
+const STATE_TRANSITION_TABLE: &[(State, Accept, Accept, State, Act)] = &[
+    (BEG, EachOf("\0"), Unused, END, IGN),
+    (BEG, EachOf("\n \t\r"), Unused, BEG, IGN),
+    (SYM, FromTo('\u{0020}' .. '\u{10FFFF}'), EachOf("\"\\"), SYM, ACC),
+];
