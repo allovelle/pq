@@ -1,16 +1,17 @@
+use Accept::*;
+use crossterm::style::Stylize;
+use std::collections::{HashMap, HashSet};
+use std::ops::{Range, RangeBounds, Sub};
+use thiserror::Error;
+
 fn main() -> PqResult<()>
 {
-    let tokens = tokenize("source\u{1F600}")?;
-    println!("Tokens: {tokens:?}");
+    if let Err(err) = tokenize("source\u{1F600}")
+    {
+        println!("{}", format!("{err:?}").red());
+    }
     Ok(())
 }
-
-use std::{
-    collections::{HashMap, HashSet},
-    ops::Range,
-};
-
-use thiserror::Error;
 
 #[derive(Debug, Error)]
 #[error("Pique Error")]
@@ -62,7 +63,6 @@ pub fn tokenize(source: &str) -> PqResult<()>
     let mut buf = String::with_capacity(32);
     let mut toks: Vec<Tok> = Vec::with_capacity(source.len());
 
-    println!("\u{1F600}");
     println!(
         "{:w$} {:4} {:w$} {:w$} {:w$}",
         "From",
@@ -255,6 +255,36 @@ pub enum Tok
 //     (GAP_OP, "+-*/", OP, ACC),
 // ];
 
+#[derive(Debug, Clone)]
+pub enum Accept
+{
+    EachOf(&'static str),
+    FromTo(Range<char>),
+    Unused,
+}
+
+// State transitions are locked to character iteration. Essentially, check that
+// char is in this range or set and also not in this range or set.
+// [curr state][accept ch range][except ch range][next state][tok & buf act]
+const STATE_TRANSITION_TABLE: &[(State, Accept, Accept, State, Act)] = &[
+    (BEG, EachOf("\0"), Unused, END, IGN),
+    (BEG, EachOf("\n \t\r"), Unused, BEG, IGN),
+    (SYM, FromTo('\u{0020}' .. '\u{10FFFF}'), EachOf("\"\\"), SYM, ACC),
+];
+
+fn split_range<Udx: Copy + PartialOrd + Sub<Output = Udx>>(
+    range: Range<Udx>,
+    by: Udx,
+)
+{
+    // TODO: Use RangeBound because it makes the .. vs ..= explicit
+    if range.contains(&by)
+    {
+        let left = range.start .. range.end - by;
+        let right = range.end - by .. range.end;
+    }
+}
+
 fn state_transition_table() -> HashMap<(State, char), (State, Act)>
 {
     // TODO: Render the table from the disperate accept/except ranges
@@ -265,6 +295,19 @@ fn state_transition_table() -> HashMap<(State, char), (State, Act)>
     //         mat.chars().map(move |c| ((curr, c), (next, tok_buf_act)))
     //     })
     //     .collect();
+
+    // TODO: Create ranges from each of the chars involved:
+    let acc = EachOf("abcd"); // TODO: a .. a, c .. d
+    let exc = EachOf("b"); // TODO: For each exception, split range
+
+    let x = 0 .. 120;
+    let ch = 'a';
+
+    if let EachOf(chars) = acc
+    {
+        chars.contains(ch);
+    }
+
     Default::default()
 }
 
@@ -299,22 +342,3 @@ fn token_split_out_learn_them()
     //     (SYM, "\0", END, FIN),
     // ];
 }
-
-#[derive(Debug, Clone)]
-enum Accept
-{
-    EachOf(&'static str),
-    FromTo(Range<char>),
-    Unused,
-}
-
-use Accept::*;
-
-// State transitions are locked to character iteration. Essentially, check that
-// char is in this range or set and also not in this range or set.
-// [curr state][accept ch range][except ch range][next state][tok & buf act]
-const STATE_TRANSITION_TABLE: &[(State, Accept, Accept, State, Act)] = &[
-    (BEG, EachOf("\0"), Unused, END, IGN),
-    (BEG, EachOf("\n \t\r"), Unused, BEG, IGN),
-    (SYM, FromTo('\u{0020}' .. '\u{10FFFF}'), EachOf("\"\\"), SYM, ACC),
-];
