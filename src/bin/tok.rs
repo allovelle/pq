@@ -272,16 +272,23 @@ const STATE_TRANSITION_TABLE: &[(State, Accept, Accept, State, Act)] = &[
     (SYM, FromTo('\u{0020}' .. '\u{10FFFF}'), EachOf("\"\\"), SYM, ACC),
 ];
 
-fn split_range<Udx: Copy + PartialOrd + Sub<Output = Udx>>(
-    range: Range<Udx>,
-    by: Udx,
-)
+fn split_range<Udx>(range: Range<Udx>, by: Udx) -> (Range<Udx>, Range<Udx>)
+where
+    Udx: Copy + PartialOrd + Sub<Output = Udx>,
 {
     // TODO: Use RangeBound because it makes the .. vs ..= explicit
     if range.contains(&by)
     {
         let left = range.start .. range.end - by;
         let right = range.end - by .. range.end;
+        (left, right)
+    }
+    else
+    {
+        // Construct a zero value without further-restricting the generic type
+        #[allow(clippy::eq_op)]
+        let x: Udx = range.start - range.start;
+        (range, x .. x)
     }
 }
 
