@@ -283,8 +283,15 @@ pub enum Tok
 #[derive(Debug, Clone)]
 pub enum Accept
 {
+    /// Explicitly listed elements
     EachOf(&'static str),
+    /// Elements explicitly within this range
     FromTo(Range<char>),
+    /// Inverted from [EachOf], any listed element in relation to another range
+    AnyOf(&'static str),
+    /// Inverted from [FromTo], any element in this range in relation to another
+    OneOf(Range<char>),
+    /// Ignored accept/except bound
     Unused,
 }
 
@@ -296,26 +303,6 @@ const STATE_TRANSITION_TABLE: &[(State, Accept, Accept, State, Act)] = &[
     (BEG, EachOf("\n \t\r"), Unused, BEG, IGN),
     (SYM, FromTo('\u{0020}' .. '\u{10FFFF}'), EachOf("\"\\"), SYM, ACC),
 ];
-
-fn split_range<Udx>(range: Range<Udx>, by: Udx) -> (Range<Udx>, Range<Udx>)
-where
-    Udx: Copy + PartialOrd + Sub<Output = Udx>,
-{
-    // TODO: Use RangeBound because it makes the .. vs ..= explicit
-    if range.contains(&by)
-    {
-        let left = range.start .. range.end - by;
-        let right = range.end - by .. range.end;
-        (left, right)
-    }
-    else
-    {
-        // Construct a zero value without further-restricting the generic type
-        #[allow(clippy::eq_op)]
-        let x: Udx = range.start - range.start;
-        (range, x .. x)
-    }
-}
 
 fn state_transition_table() -> HashMap<(State, char), (State, Act)>
 {

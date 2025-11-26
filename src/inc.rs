@@ -1,6 +1,5 @@
 use std::char;
 use std::marker::Sized;
-use std::ops::{Range, RangeInclusive};
 
 pub trait Inc
 where
