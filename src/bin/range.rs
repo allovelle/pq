@@ -1,39 +1,47 @@
-use std::{
-    marker::Sized,
-    ops::{Add, Range, Sub},
-};
+use std::marker::Sized;
+use std::ops::{Range, RangeInclusive};
 
-fn split_range<Udx>(range: Range<Udx>, by: Udx) -> (Range<Udx>, Range<Udx>)
+/// Removes the element from the range by creating 2 ranges that exclude that
+/// element. If the elemnt is not in the range to begin with, the ranges overlap
+/// with each other by having the first range end on the second range start.
+/// Returns `None` if the element isn't in the range to begin with.
+fn split_range<I>(range: Range<I>, by: I) -> Option<(Range<I>, Range<I>)>
 where
-    Udx: Copy + PartialOrd + Sub<Output = Udx> + Inc,
+    I: Copy + PartialOrd + Inc,
 {
-    let left = range.start .. by;
-    let right = by.inc() .. range.end;
-
-    // TODO: Use RangeBound because it makes the .. vs ..= explicit
-    if range.contains(&by)
+    match range.contains(&by)
     {
-        // let left = range.start .. range.end - by;
-        // let right = range.end - by .. range.end;
-        let left = range.start .. by;
-        let right = (by .. range.end);
-        (left, right)
+        true => Some((range.start .. by, by.inc() .. range.end)),
+        false => None,
     }
-    else
+}
+
+fn split_range_inclusive<I>(
+    range: RangeInclusive<I>,
+    by: I,
+) -> Option<(Range<I>, Range<I>)>
+where
+    I: Copy + PartialOrd + Inc,
+{
+    match range.contains(&by)
     {
-        // Construct a zero value without further-restricting the generic type
-        #[allow(clippy::eq_op)]
-        let x: Udx = range.start - range.start;
-        (range, x .. x)
+        true => Some((*range.start() .. by, by.inc() .. range.end().inc())),
+        false => None,
     }
 }
 
 fn main()
 {
-    let (left, right) = split_range(0 .. 10, 11);
+    let (left, right) = split_range(0 .. 10, 8).unwrap();
     println!("{:?} {:?}", left, right);
 
-    let (left, right) = split_range(0 .. 10, 3);
+    let (left, right) = split_range(0 .. 10, 3).unwrap();
+    println!("{:?} {:?}", left, right);
+
+    let (left, right) = split_range_inclusive(0 ..= 10, 8).unwrap();
+    println!("{:?} {:?}", left, right);
+
+    let (left, right) = split_range_inclusive(0 ..= 10, 3).unwrap();
     println!("{:?} {:?}", left, right);
 }
 
