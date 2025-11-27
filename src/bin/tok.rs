@@ -121,9 +121,6 @@ struct Row
     action: Act,
 }
 
-const TABLE: &[Row] =
-    &[Row::new(Begin, '\0' ..= '\0', '\0' ..= '\0', Begin, Ign)];
-
 impl Row
 {
     const fn new(
@@ -362,6 +359,58 @@ const STATE_TRANSITION_TABLE: &[(State, Accept, Accept, State, Act)] = &[
     (Begin, AnyOf("\n \t\r"), Unused, Begin, Ign),
     (Symbol, Within('\u{0020}' .. '\u{10FFFF}'), AnyOf("\"\\"), Symbol, Acc),
 ];
+
+// TODO:  1. Compacted table (with text, ranges, etc.)
+// TODO:  2. Generated const table expanded with only ranges
+
+const TABLE: &[Row] =
+    &[Row::new(Begin, '\0' ..= '\0', '\0' ..= '\0', Begin, Ign)];
+
+const BLAH: &[Row] = {
+    let x = &[Row::new(Begin, '\0' ..= '\0', '\0' ..= '\0', Begin, Ign)];
+    x
+};
+
+const fn determine_compact_state_transition_table_allocation() -> usize
+{
+    0
+}
+
+const X: [u8; determine_compact_state_transition_table_allocation()] = [];
+
+const fn expand_state_transition_table()
+{
+    const N: usize = determine_compact_state_transition_table_allocation();
+    let rows: [Row; N];
+
+    let mut rows: &mut [usize] = &mut [];
+
+    for (from, accept, except, to, action) in STATE_TRANSITION_TABLE.into_iter()
+    {
+        match (accept, except)
+        {
+            (AnyOf(chars), Unused) =>
+            {
+                for ch in chars.chars()
+                {
+                    // tab.insert((*from, ch), (*to, *action));
+                }
+            }
+            (Within(r1), AnyOf(_)) =>
+            {
+                // TODO: Split the accept range such that there is one copy that
+                // TODO: excludes a ch for each ch in AnyOf.
+            }
+            (Within(r1), Within(r2)) =>
+            {
+                // TODO: Split the accept range such that there is one copy that
+                // TODO: excludes a ch for each ch in AnyOf.
+            }
+            (Within(r1), Unused) => todo!(),
+            _ => unreachable!("this is an invalid state transition combo"),
+        }
+    }
+}
 
 fn main() -> PqResult<()>
 {
