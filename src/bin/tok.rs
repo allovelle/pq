@@ -85,9 +85,16 @@ struct CharRangeInclusive
 
 impl CharRangeInclusive
 {
+    /// **Exists because [From] & [Into] are not `const`**
     pub const fn from(value: RangeInclusive<char>) -> Self
     {
         Self { from: *value.start(), onto: *value.end() }
+    }
+
+    /// **Exists because [From] & [Into] are not `const`**
+    pub const fn into(self) -> RangeInclusive<char>
+    {
+        self.from ..= self.onto
     }
 }
 
@@ -437,15 +444,44 @@ const fn state_transition_table() -> [Row; max_state_transitions()]
                     rows[udx_row] = row;
                 }
             }
-            (Within(..), AnyOf(_)) =>
+            (Within(..), AnyOf(chars)) =>
             {
                 // TODO: Split the accept range such that there is one copy that
                 // TODO: excludes a ch for each ch in AnyOf.
+
+                // If it's any of these characters, add a new 'except' range for
+                // each one since they are single element not a range
+                let mut udx_ch = 0;
+                while let Some(ch) = utf8_char_on(chars.as_bytes(), udx_ch)
+                    && udx_ch < chars.len()
+                {
+                    udx_ch += ch.len_utf8();
+
+                    let unused_range = '\0' ..= '\0';
+                    let except_range = ch ..= ch;
+                    let row =
+                        Row::new(from, unused_range, except_range, onto, act);
+
+                    rows[udx_row] = row;
+                }
             }
-            (Within(..), Within(..)) =>
+            (Within(from_in, upto_in), Within(from_ou, upto_ou)) =>
             {
                 // TODO: Split the accept range such that there is one copy that
                 // TODO: excludes a ch for each ch in AnyOf.
+                let accept_range =
+                    CharRangeInclusive::from(from_in ..= upto_in);
+                let except_range =
+                    CharRangeInclusive::from(from_ou ..= upto_ou);
+                // let row = Row::new(from, accept_range, except_range, onto, act);
+                let row = Row {
+                    from,
+                    accept: accept_range,
+                    except: except_range,
+                    onto,
+                    action: act,
+                };
+                rows[udx_row] = row;
             }
             (Within(..), Unused) => todo!(),
             _ => panic!("this is an invalid state transition combo"),
@@ -463,14 +499,6 @@ const fn state_transition_table() -> [Row; max_state_transitions()]
 
 // TODO:  1. Compacted table (with text, ranges, etc.)
 // TODO:  2. Generated const table expanded with only ranges
-
-const TABLE: &[Row] =
-    &[Row::new(Begin, '\0' ..= '\0', '\0' ..= '\0', Begin, Ign)];
-
-const BLAH: &[Row] = {
-    let x = &[Row::new(Begin, '\0' ..= '\0', '\0' ..= '\0', Begin, Ign)];
-    x
-};
 
 // const fn expand_state_transition_table()
 // {
