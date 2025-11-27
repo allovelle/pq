@@ -24,7 +24,9 @@
 // ! The goal is to not need serde_json for input or output
 
 use crossterm::style::Stylize;
+use pq::txt::utf8_char_on;
 use std::collections::{HashMap, HashSet};
+use std::default;
 use std::ops::{Range, RangeBounds, RangeInclusive, Sub};
 use thiserror::Error;
 use {Accept::*, Act::*, State::*};
@@ -123,6 +125,11 @@ struct Row
 
 impl Row
 {
+    const fn zero() -> Self
+    {
+        Self::new(Begin, '\0' ..= '\0', '\0' ..= '\0', Begin, Ign)
+    }
+
     const fn new(
         from: State,
         accept: RangeInclusive<char>,
@@ -136,11 +143,11 @@ impl Row
         Self { from, accept, except, onto, action }
     }
 
-    fn matches(&self, ch: char) -> bool
+    fn matches(&self, state: State, ch: char) -> bool
     {
         let acc: RangeInclusive<char> = self.accept.into();
         let exc: RangeInclusive<char> = self.except.into();
-        acc.contains(&ch) && !exc.contains(&ch)
+        state == self.from && acc.contains(&ch) && !exc.contains(&ch)
     }
 }
 
@@ -169,41 +176,41 @@ pub fn tokenize(source: &str) -> PqResult<()>
 
     for ch in source.chars().chain("\0".chars())
     {
-        let (next, tok_buf_act) = match transitions.get(&(curr, ch))
-        {
-            Some(act) => act,
-            None => return Err(LexErr::InvalidStateTransition(curr, ch).into()),
-        };
+        // !let (next, tok_buf_act) = match transitions.get(&(curr, ch))
+        // {
+        //     Some(act) => act,
+        //     None => return Err(LexErr::InvalidStateTransition(curr, ch).into()),
+        // };
 
-        println!(
-            "{:w$} {:4} {:w$} {:w$} {:w$}",
-            format!("{curr:?}"),
-            format!("{ch:?}"),
-            format!("{next:?}"),
-            format!("{tok_buf_act:?}"),
-            format!("{buf:?}"),
-            w = State::max_variant_name(),
-        );
+        // ! println!(
+        //     "{:w$} {:4} {:w$} {:w$} {:w$}",
+        //     format!("{curr:?}"),
+        //     format!("{ch:?}"),
+        //     format!("{next:?}"),
+        //     format!("{tok_buf_act:?}"),
+        //     format!("{buf:?}"),
+        //     w = State::max_variant_name(),
+        // );
 
-        if let Act::Tok | Act::Fin = tok_buf_act
-        {
-            // TODO: this is a call for having an action for Error since this is
-            // TODO: handling language specific transition stuff in the harness
-            // if let Begin | End | Gap | GapOperator | Sign | Dec0 = curr
-            // {
-            //     println!("Error: invalid token {curr:?}");
-            //     return Err(LexErr::InvalidStateTransition(curr, ch).into());
-            // }
+        // ! if let Act::Tok | Act::Fin = tok_buf_act
+        // {
+        //     // TODO: this is a call for having an action for Error since this is
+        //     // TODO: handling language specific transition stuff in the harness
+        //     // if let Begin | End | Gap | GapOperator | Sign | Dec0 = curr
+        //     // {
+        //     //     println!("Error: invalid token {curr:?}");
+        //     //     return Err(LexErr::InvalidStateTransition(curr, ch).into());
+        //     // }
 
-            buf.clear();
-        }
+        //     buf.clear();
+        // }
 
-        if let Act::Acc | Act::Fin = tok_buf_act
-        {
-            buf.push(ch);
-        }
+        // ! if let Act::Acc | Act::Fin = tok_buf_act
+        // {
+        //     buf.push(ch);
+        // }
 
-        curr = *next;
+        // ! curr = *next;
     }
 
     println!();
@@ -274,9 +281,11 @@ impl State
     fn max_variant_name() -> usize
     {
         let mut longest = 0;
-        for ((state, ..), ..) in state_transition_table().into_iter()
+        for (from, _, _, onto, _) in STATE_TRANSITION_TABLE.into_iter()
         {
-            longest = longest.max(format!("{state:?}").len());
+            let from_len = format!("{from:?}").len();
+            let onto_len = format!("{onto:?}").len();
+            longest = longest.max(from_len.max(onto_len));
         }
         longest
     }
@@ -360,6 +369,108 @@ const STATE_TRANSITION_TABLE: &[(State, Accept, Accept, State, Act)] = &[
     (Symbol, Within('\u{0020}' .. '\u{10FFFF}'), AnyOf("\"\\"), Symbol, Acc),
 ];
 
+/// Each row represents at least one tokenizer state transition. When examining
+/// a range of allowed characters that excludes a set of speciied characters
+/// (that are not a consecutive range), one new row is created for each of the
+/// specified exclusion characters. This also works the other way around for
+/// disallowed range & allowed specified character set.
+const fn max_state_transitions() -> usize
+{
+    let mut transitions = 0;
+    let mut udx = 0;
+    while udx < STATE_TRANSITION_TABLE.len()
+    {
+        let (_, accept, except, ..) = &STATE_TRANSITION_TABLE[udx];
+        udx += 1;
+
+        if let (AnyOf(chars), Unused) | (Within(_), AnyOf(chars)) =
+            (accept, except)
+        {
+            transitions += chars.len(); // Range * len(chars) = len(chars) rows
+        }
+        else if let (Within(_), Within(_)) | (Within(_), Unused) =
+            (accept, except)
+        {
+            transitions += 1; // Ranges pair counts as one row
+        }
+        else
+        {
+            panic!("this is an invalid state transition combo")
+        }
+    }
+    transitions
+}
+
+const fn array_test(buffer: &[u8])
+{
+    utf8_char_on("buffer".as_bytes(), 0);
+}
+
+const fn state_transition_table() -> [Row; max_state_transitions()]
+{
+    const EXPANDED_TABLE_LEN: usize = max_state_transitions();
+    let mut rows: [Row; EXPANDED_TABLE_LEN] = [Row::zero(); EXPANDED_TABLE_LEN];
+
+    let mut udx_row = 0;
+    while udx_row < EXPANDED_TABLE_LEN
+    {
+        let (from, accept, except, onto, act) =
+            &STATE_TRANSITION_TABLE[udx_row];
+
+        match (accept, except)
+        {
+            (AnyOf(chars), Unused) =>
+            {
+                // for ch in chars.chars()
+                // {
+                //     tab.insert((*from, ch), (*to, *action));
+                // }
+                // chars.contains("a");
+
+                // If it's any of these characters, add a new 'accept' range for
+                // each one since they are single element not a range
+                let mut udx_ch = 0;
+                while let Some(ch) = utf8_char_on(chars.as_bytes(), udx_ch)
+                    && udx_ch < chars.len()
+                {
+                    udx_ch += 1;
+                    let accept_range = ch ..= ch;
+                    rows[udx_row] = Row::new(from, accept, except, onto, act);
+                }
+
+                let mut udx_ch = 0;
+                while udx_ch < chars.len()
+                {
+                    let ch = utf8_char_on(chars.as_bytes(), udx_ch).unwrap();
+                    udx_ch += ch.len_utf8();
+                }
+
+                let exclude: RangeInclusive<char> = 'a' ..= 'a';
+            }
+            (Within(r1), AnyOf(_)) =>
+            {
+                // TODO: Split the accept range such that there is one copy that
+                // TODO: excludes a ch for each ch in AnyOf.
+            }
+            (Within(r1), Within(r2)) =>
+            {
+                // TODO: Split the accept range such that there is one copy that
+                // TODO: excludes a ch for each ch in AnyOf.
+            }
+            (Within(r1), Unused) => todo!(),
+            _ => panic!("this is an invalid state transition combo"),
+        }
+
+        udx_row += 1;
+    }
+
+    // TODO: Create ranges from each of the chars involved:
+    let accept = AnyOf("abcd"); // TODO: a .. a, c .. d
+    let except = AnyOf("b"); // TODO: For each exception, split range
+
+    rows
+}
+
 // TODO:  1. Compacted table (with text, ranges, etc.)
 // TODO:  2. Generated const table expanded with only ranges
 
@@ -371,46 +482,39 @@ const BLAH: &[Row] = {
     x
 };
 
-const fn determine_compact_state_transition_table_allocation() -> usize
-{
-    0
-}
+// const fn expand_state_transition_table()
+// {
+//     const N: usize = determine_compact_state_transition_table_allocation();
+//     let rows: [Row; N];
 
-const X: [u8; determine_compact_state_transition_table_allocation()] = [];
+//     let mut rows: &mut [usize] = &mut [];
 
-const fn expand_state_transition_table()
-{
-    const N: usize = determine_compact_state_transition_table_allocation();
-    let rows: [Row; N];
-
-    let mut rows: &mut [usize] = &mut [];
-
-    for (from, accept, except, to, action) in STATE_TRANSITION_TABLE.into_iter()
-    {
-        match (accept, except)
-        {
-            (AnyOf(chars), Unused) =>
-            {
-                for ch in chars.chars()
-                {
-                    // tab.insert((*from, ch), (*to, *action));
-                }
-            }
-            (Within(r1), AnyOf(_)) =>
-            {
-                // TODO: Split the accept range such that there is one copy that
-                // TODO: excludes a ch for each ch in AnyOf.
-            }
-            (Within(r1), Within(r2)) =>
-            {
-                // TODO: Split the accept range such that there is one copy that
-                // TODO: excludes a ch for each ch in AnyOf.
-            }
-            (Within(r1), Unused) => todo!(),
-            _ => unreachable!("this is an invalid state transition combo"),
-        }
-    }
-}
+//     for (from, accept, except, to, action) in STATE_TRANSITION_TABLE.into_iter()
+//     {
+//         match (accept, except)
+//         {
+//             (AnyOf(chars), Unused) =>
+//             {
+//                 for ch in chars.chars()
+//                 {
+//                     // tab.insert((*from, ch), (*to, *action));
+//                 }
+//             }
+//             (Within(r1), AnyOf(_)) =>
+//             {
+//                 // TODO: Split the accept range such that there is one copy that
+//                 // TODO: excludes a ch for each ch in AnyOf.
+//             }
+//             (Within(r1), Within(r2)) =>
+//             {
+//                 // TODO: Split the accept range such that there is one copy that
+//                 // TODO: excludes a ch for each ch in AnyOf.
+//             }
+//             (Within(r1), Unused) => todo!(),
+//             _ => unreachable!("this is an invalid state transition combo"),
+//         }
+//     }
+// }
 
 fn main() -> PqResult<()>
 {
@@ -419,62 +523,6 @@ fn main() -> PqResult<()>
         println!("{}", format!("{err}").red());
     }
     Ok(())
-}
-
-fn state_transition_table() -> HashMap<(State, char), (State, Act)>
-{
-    // TODO: Render the table from the disperate accept/except ranges
-    // STATE_TRANSITION_TABLE
-    //     .iter()
-    //     .cloned() // .copied()
-    //     .flat_map(|(curr, accept, except, next, tok_buf_act)| {
-    //         mat.chars().map(move |c| ((curr, c), (next, tok_buf_act)))
-    //     })
-    //     .collect();
-
-    let mut tab = HashMap::<(State, char), (State, Act)>::new();
-    for (from, accept, except, to, action) in STATE_TRANSITION_TABLE.into_iter()
-    {
-        match (accept, except)
-        {
-            (AnyOf(chars), Unused) =>
-            {
-                for ch in chars.chars()
-                {
-                    tab.insert((*from, ch), (*to, *action));
-                }
-            }
-            (Within(r1), AnyOf(_)) =>
-            {
-                // TODO: Split the accept range such that there is one copy that
-                // TODO: excludes a ch for each ch in AnyOf.
-                let tab = HashMap::new();
-                let ranges = &[r1.clone(), r1.clone()];
-                let x = 'a' .. 'c';
-            }
-            (Within(r1), Within(r2)) =>
-            {
-                // TODO: Split the accept range such that there is one copy that
-                // TODO: excludes a ch for each ch in AnyOf.
-            }
-            (Within(r1), Unused) => todo!(),
-            _ => unreachable!("this is an invalid state transition combo"),
-        }
-    }
-
-    // TODO: Create ranges from each of the chars involved:
-    let accept = AnyOf("abcd"); // TODO: a .. a, c .. d
-    let except = AnyOf("b"); // TODO: For each exception, split range
-
-    let x = 0 .. 120;
-    let ch = 'a';
-
-    if let AnyOf(chars) = acc
-    {
-        chars.contains(ch);
-    }
-
-    Default::default()
 }
 
 fn token_split_out_learn_them()
