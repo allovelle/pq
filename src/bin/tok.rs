@@ -23,26 +23,19 @@
 // ! The goal is to not need serde_json for input or output
 // ! The goal is to not need serde_json for input or output
 
-use Accept::*;
 use crossterm::style::Stylize;
 use std::collections::{HashMap, HashSet};
 use std::ops::{Range, RangeBounds, Sub};
 use thiserror::Error;
-
-fn main() -> PqResult<()>
-{
-    if let Err(err) = tokenize("source\u{1F600}")
-    {
-        println!("{}", format!("{err:?}").red());
-    }
-    Ok(())
-}
+use {Accept::*, Act::*, State::*};
 
 #[derive(Debug, Error)]
 #[error("Pique Error")]
 pub enum PqErr
 {
+    #[error(transparent)]
     Io(#[from] std::io::Error),
+    #[error(transparent)]
     LexErr(#[from] LexErr),
 }
 
@@ -84,18 +77,18 @@ pub fn tokenize(source: &str) -> PqResult<()>
     let code_buffer: Vec<_> = source.chars().collect();
 
     let transitions = state_transition_table();
-    let mut curr = BEG;
+    let mut curr = Begin;
     let mut buf = String::with_capacity(32);
     let mut toks: Vec<Tok> = Vec::with_capacity(source.len());
 
     println!(
-        "{:w$} {:4} {:w$} {:w$} {:w$}",
+        "{:width$} {:4} {:width$} {:width$} {:width$}",
         "From",
         "Curr Ch",
         "To",
         "Then",
         "Buf",
-        w = State::max_variant_name(),
+        width = State::max_variant_name(),
     );
 
     for ch in source.chars().chain("\0".chars())
@@ -118,15 +111,11 @@ pub fn tokenize(source: &str) -> PqResult<()>
 
         if let Act::Tok | Act::Fin = tok_buf_act
         {
-            match curr
-            {
-                BEG | END | GAP | GAP_OP | SNG | DEC0 =>
-                {
-                    eprintln!("Error: invalid token {curr:?}");
-                    return Err(LexErr::InvalidStateTransition(curr, ch).into());
-                }
-                _ => (),
-            }
+            // if let Begin | End | Gap | GapOperator | Sign | Dec0 = curr
+            // {
+            //     println!("Error: invalid token {curr:?}");
+            //     return Err(LexErr::InvalidStateTransition(curr, ch).into());
+            // }
 
             buf.clear();
         }
@@ -178,16 +167,17 @@ enum Act
 // TODO:     Err(&'static str), // Token: bubble up error message. Buffer: panic
 // TODO: }
 
-const FIN: Act = Act::Fin;
-const TOK: Act = Act::Tok;
-const ACC: Act = Act::Acc;
-const IGN: Act = Act::Ign;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]
-enum State
+pub enum State
 {
     Begin,
+    Obj0,
+    Arr0,
+    Txt0,
+    Nil,
+    Bit,
+    Num,
     Gap,
     GapOperator,
     Operator,
@@ -199,18 +189,6 @@ enum State
     Dec1,
     End,
 }
-
-const BEG: State = State::Begin;
-const GAP: State = State::Gap;
-const GAP_OP: State = State::GapOperator;
-const OP: State = State::Operator;
-const SNG: State = State::Sign;
-const SI: State = State::Signed;
-const UI: State = State::Unsigned;
-const DEC0: State = State::Dec0;
-const DEC1: State = State::Dec1;
-const SYM: State = State::Symbol;
-const END: State = State::End;
 
 impl State
 {
@@ -284,13 +262,9 @@ pub enum Tok
 pub enum Accept
 {
     /// Explicitly listed elements
-    EachOf(&'static str),
-    /// Elements explicitly within this range
-    FromTo(Range<char>),
-    /// Inverted from [EachOf], any listed element in relation to another range
     AnyOf(&'static str),
-    /// Inverted from [FromTo], any element in this range in relation to another
-    OneOf(Range<char>),
+    /// Elements explicitly within this range
+    Within(Range<char>),
     /// Ignored accept/except bound
     Unused,
 }
@@ -299,10 +273,22 @@ pub enum Accept
 // char is in this range or set and also not in this range or set.
 // [curr state][accept ch range][except ch range][next state][tok & buf act]
 const STATE_TRANSITION_TABLE: &[(State, Accept, Accept, State, Act)] = &[
-    (BEG, EachOf("\0"), Unused, END, IGN),
-    (BEG, EachOf("\n \t\r"), Unused, BEG, IGN),
-    (SYM, FromTo('\u{0020}' .. '\u{10FFFF}'), EachOf("\"\\"), SYM, ACC),
+    (Begin, AnyOf("\0"), Unused, End, Ign),
+    (Begin, AnyOf("{"), Unused, Obj0, Ign),
+    (Begin, AnyOf("["), Unused, Arr0, Ign),
+    (Begin, AnyOf("\""), Unused, Txt0, Ign),
+    (Begin, AnyOf("\n \t\r"), Unused, Begin, Ign),
+    (Symbol, Within('\u{0020}' .. '\u{10FFFF}'), AnyOf("\"\\"), Symbol, Acc),
 ];
+
+fn main() -> PqResult<()>
+{
+    if let Err(err) = tokenize("    \t\r\n")
+    {
+        println!("{}", format!("{err}").red());
+    }
+    Ok(())
+}
 
 fn state_transition_table() -> HashMap<(State, char), (State, Act)>
 {
@@ -316,13 +302,13 @@ fn state_transition_table() -> HashMap<(State, char), (State, Act)>
     //     .collect();
 
     // TODO: Create ranges from each of the chars involved:
-    let acc = EachOf("abcd"); // TODO: a .. a, c .. d
-    let exc = EachOf("b"); // TODO: For each exception, split range
+    let acc = AnyOf("abcd"); // TODO: a .. a, c .. d
+    let exc = AnyOf("b"); // TODO: For each exception, split range
 
     let x = 0 .. 120;
     let ch = 'a';
 
-    if let EachOf(chars) = acc
+    if let AnyOf(chars) = acc
     {
         chars.contains(ch);
     }
@@ -346,18 +332,4 @@ fn token_split_out_learn_them()
     impl TokChar for Range<char> {}
     impl TokChar for &str {}
     impl TokChar for HashSet<char> {}
-
-    // State transitions are locked to character iteration.
-    // [curr state][ch][next state][tok & buf act]
-    // const STATE_TRANSITION_TABLE: &[(State, Range<char>, &str, State, Act)] = &[
-    //     (BEG, "\0", END, IGN),
-    //     (BEG, "\n \t\r", BEG, IGN),
-    //     (BEG, '\u{0020}' .. '\u{10FFFF}', "", SYM, ACC),
-    //     // (BEG, valid_symbols, SYM, ACC),
-    //     (BEG, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ", SYM, ACC),
-    //     (BEG, "0123456789", SYM, ACC),
-    //     (BEG, "-_|/?*&%$#@!X+=;", SYM, ACC),
-    //     (SYM, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ", SYM, ACC),
-    //     (SYM, "\0", END, FIN),
-    // ];
 }
