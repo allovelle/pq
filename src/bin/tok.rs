@@ -25,7 +25,7 @@
 
 use crossterm::style::Stylize;
 use std::collections::{HashMap, HashSet};
-use std::ops::{Range, RangeBounds, Sub};
+use std::ops::{Range, RangeBounds, RangeInclusive, Sub};
 use thiserror::Error;
 use {Accept::*, Act::*, State::*};
 
@@ -35,6 +35,7 @@ pub enum PqErr
 {
     #[error(transparent)]
     Io(#[from] std::io::Error),
+
     #[error(transparent)]
     LexErr(#[from] LexErr),
 }
@@ -71,6 +72,84 @@ pub enum LexErr
     #[error("unexpected boolean `{0}`")]
     InvalidBoolean(String),
 }
+
+/// Exists because [RangeInclusive<char>] is not [Copy].
+#[derive(Debug, Clone, Copy)]
+struct CharRangeInclusive
+{
+    from: char,
+    onto: char,
+}
+
+impl CharRangeInclusive
+{
+    pub const fn from(value: RangeInclusive<char>) -> Self
+    {
+        Self { from: *value.start(), onto: *value.end() }
+    }
+}
+
+impl From<RangeInclusive<char>> for CharRangeInclusive
+{
+    fn from(value: RangeInclusive<char>) -> Self
+    {
+        Self { from: *value.start(), onto: *value.end() }
+    }
+}
+
+impl From<CharRangeInclusive> for RangeInclusive<char>
+{
+    fn from(value: CharRangeInclusive) -> Self
+    {
+        value.from ..= value.onto
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct Row
+{
+    /// The state performing an examination for transition determination
+    from: State,
+    /// Current character is within this range (matches first)
+    accept: CharRangeInclusive,
+    /// Current character is outside this range (matches second)
+    except: CharRangeInclusive,
+    /// The state to transition to if accept & except ranges match on char
+    onto: State,
+    /// Discard or accumulate current character, append to or clear buffer,
+    /// and record new token
+    action: Act,
+}
+
+const TABLE: &[Row] =
+    &[Row::new(Begin, '\0' ..= '\0', '\0' ..= '\0', Begin, Ign)];
+
+impl Row
+{
+    const fn new(
+        from: State,
+        accept: RangeInclusive<char>,
+        except: RangeInclusive<char>,
+        onto: State,
+        action: Act,
+    ) -> Self
+    {
+        let accept = CharRangeInclusive::from(accept);
+        let except = CharRangeInclusive::from(except);
+        Self { from, accept, except, onto, action }
+    }
+
+    fn matches(&self, ch: char) -> bool
+    {
+        let acc: RangeInclusive<char> = self.accept.into();
+        let exc: RangeInclusive<char> = self.except.into();
+        acc.contains(&ch) && !exc.contains(&ch)
+    }
+}
+
+// StateFrom, Accept, Except
+// HashMap<(State, RangeInclusive<char>, RangeInclusive<char>)>
+// If table.contains(&(curr_state, ))
 
 pub fn tokenize(source: &str) -> PqResult<()>
 {
@@ -111,6 +190,8 @@ pub fn tokenize(source: &str) -> PqResult<()>
 
         if let Act::Tok | Act::Fin = tok_buf_act
         {
+            // TODO: this is a call for having an action for Error since this is
+            // TODO: handling language specific transition stuff in the harness
             // if let Begin | End | Gap | GapOperator | Sign | Dec0 = curr
             // {
             //     println!("Error: invalid token {curr:?}");
@@ -147,6 +228,7 @@ enum Act
     Acc,
     /// Ignore the current character.
     Ign,
+    // TODO: can add a LexErr(&'static str) variant for manual state filtering
 }
 
 // TODO: #[derive(Debug, Clone, Copy, PartialEq)]
@@ -301,9 +383,39 @@ fn state_transition_table() -> HashMap<(State, char), (State, Act)>
     //     })
     //     .collect();
 
+    let mut tab = HashMap::<(State, char), (State, Act)>::new();
+    for (from, accept, except, to, action) in STATE_TRANSITION_TABLE.into_iter()
+    {
+        match (accept, except)
+        {
+            (AnyOf(chars), Unused) =>
+            {
+                for ch in chars.chars()
+                {
+                    tab.insert((*from, ch), (*to, *action));
+                }
+            }
+            (Within(r1), AnyOf(_)) =>
+            {
+                // TODO: Split the accept range such that there is one copy that
+                // TODO: excludes a ch for each ch in AnyOf.
+                let tab = HashMap::new();
+                let ranges = &[r1.clone(), r1.clone()];
+                let x = 'a' .. 'c';
+            }
+            (Within(r1), Within(r2)) =>
+            {
+                // TODO: Split the accept range such that there is one copy that
+                // TODO: excludes a ch for each ch in AnyOf.
+            }
+            (Within(r1), Unused) => todo!(),
+            _ => unreachable!("this is an invalid state transition combo"),
+        }
+    }
+
     // TODO: Create ranges from each of the chars involved:
-    let acc = AnyOf("abcd"); // TODO: a .. a, c .. d
-    let exc = AnyOf("b"); // TODO: For each exception, split range
+    let accept = AnyOf("abcd"); // TODO: a .. a, c .. d
+    let except = AnyOf("b"); // TODO: For each exception, split range
 
     let x = 0 .. 120;
     let ch = 'a';
