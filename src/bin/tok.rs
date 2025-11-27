@@ -158,15 +158,9 @@ impl Row
     }
 }
 
-// StateFrom, Accept, Except
-// HashMap<(State, RangeInclusive<char>, RangeInclusive<char>)>
-// If table.contains(&(curr_state, ))
-
 pub fn tokenize(source: &str) -> PqResult<()>
 {
-    let code_buffer: Vec<_> = source.chars().collect();
-
-    let transitions = state_transition_table();
+    let transitions: [Row; _] = state_transition_table();
     let mut curr = Begin;
     let mut buf = String::with_capacity(32);
     let mut toks: Vec<Tok> = Vec::with_capacity(source.len());
@@ -183,41 +177,59 @@ pub fn tokenize(source: &str) -> PqResult<()>
 
     for ch in source.chars().chain("\0".chars())
     {
-        // !let (next, tok_buf_act) = match transitions.get(&(curr, ch))
-        // {
-        //     Some(act) => act,
-        //     None => return Err(LexErr::InvalidStateTransition(curr, ch).into()),
-        // };
+        // Find the transition for the current state and character
+        let row = match transitions.iter().find(|row| row.matches(curr, ch))
+        {
+            Some(row) => row,
+            None => return Err(LexErr::InvalidStateTransition(curr, ch).into()),
+        };
 
-        // ! println!(
-        //     "{:w$} {:4} {:w$} {:w$} {:w$}",
-        //     format!("{curr:?}"),
-        //     format!("{ch:?}"),
-        //     format!("{next:?}"),
-        //     format!("{tok_buf_act:?}"),
-        //     format!("{buf:?}"),
-        //     w = State::max_variant_name(),
-        // );
+        println!(
+            "{:width$} {:4} {:width$} {:width$} {:width$}",
+            format!("{curr:?}"),
+            format!("{ch:?}"),
+            format!("{:?}", row.onto),
+            format!("{:?}", row.action),
+            format!("{buf:?}"),
+            width = State::max_variant_name(),
+        );
 
-        // ! if let Act::Tok | Act::Fin = tok_buf_act
-        // {
-        //     // TODO: this is a call for having an action for Error since this is
-        //     // TODO: handling language specific transition stuff in the harness
-        //     // if let Begin | End | Gap | GapOperator | Sign | Dec0 = curr
-        //     // {
-        //     //     println!("Error: invalid token {curr:?}");
-        //     //     return Err(LexErr::InvalidStateTransition(curr, ch).into());
-        //     // }
+        // The buffer may be able to be converted into a token
+        if let Act::Tok | Act::Fin = row.action
+        {
+            if let Some(tok) = row.from.finalize(&buf)
+            {
+                toks.push(tok);
+            }
 
-        //     buf.clear();
-        // }
+            // match curr
+            // {
+            //     // TODO: this is a call for having an action for Error since this is
+            //     // TODO: handling language specific transition stuff in the harness
+            //     Begin | End | Gap | GapOperator | Sign | Dec0 =>
+            //     {
+            //         // ! Should not be doing error recovery here
+            //         println!("Error: invalid token {curr:?}");
+            //         return Err(LexErr::InvalidStateTransition(curr, ch).into());
+            //     }
 
-        // ! if let Act::Acc | Act::Fin = tok_buf_act
-        // {
-        //     buf.push(ch);
-        // }
+            //     SI => toks.push(Tok::Sgn(match buf.parse()
+            //     {
+            //         Ok(num) => num,
+            //         Err(_) => return eprintln!("Invalid signed int {buf:?}"),
+            //     })),
+            // };
 
-        // ! curr = *next;
+            buf.clear();
+        }
+
+        // If no token can be constructed, continue accumulating the buffer
+        if let Act::Acc | Act::Fin = row.action
+        {
+            buf.push(ch);
+        }
+
+        curr = row.onto;
     }
 
     println!();
@@ -260,6 +272,7 @@ enum Act
 // TODO:     Err(&'static str), // Token: bubble up error message. Buffer: panic
 // TODO: }
 
+/// Some of these states produce tokens when finalized.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum State
@@ -285,10 +298,34 @@ pub enum State
 
 impl State
 {
+    fn finalize(self, buffer: &String) -> Option<Tok>
+    {
+        match self
+        {
+            Begin => todo!(),
+            Obj0 => todo!(),
+            Arr0 => todo!(),
+            Txt0 => todo!(),
+            Nil => todo!(),
+            Bit => todo!(),
+            Num => todo!(),
+            Gap => todo!(),
+            GapOperator => todo!(),
+            Operator => todo!(),
+            Sign => todo!(),
+            Signed => todo!(),
+            Unsigned => todo!(),
+            Symbol => todo!(),
+            Dec0 => todo!(),
+            Dec1 => todo!(),
+            End => todo!(),
+        }
+    }
+
     fn max_variant_name() -> usize
     {
         let mut longest = 0;
-        for (from, _, _, onto, _) in STATE_TRANSITION_TABLE.into_iter()
+        for (from, _, _, onto, _) in STATE_TRANSITION_TABLE.iter()
         {
             let from_len = format!("{from:?}").len();
             let onto_len = format!("{onto:?}").len();
@@ -370,10 +407,11 @@ pub enum Accept
 /// `[curr state][accept ch range][except ch range][next state][tok & buf act]`
 const STATE_TRANSITION_TABLE: &[(State, Accept, Accept, State, Act)] = &[
     (Begin, AnyOf("\0"), Unused, End, Ign),
+    (Begin, AnyOf("\n \t\r"), Unused, Begin, Ign),
     (Begin, AnyOf("{"), Unused, Obj0, Ign),
     (Begin, AnyOf("["), Unused, Arr0, Ign),
     (Begin, AnyOf("\""), Unused, Txt0, Ign),
-    (Begin, AnyOf("\n \t\r"), Unused, Begin, Ign),
+    (Begin, Within('0', '9'), Unused, Num, Acc),
     (Symbol, Within('\u{0020}', '\u{10FFFF}'), AnyOf("\"\\"), Symbol, Acc),
 ];
 
@@ -407,11 +445,6 @@ const fn max_state_transitions() -> usize
         }
     }
     transitions
-}
-
-const fn array_test(buffer: &[u8])
-{
-    utf8_char_on("buffer".as_bytes(), 0);
 }
 
 const fn state_transition_table() -> [Row; max_state_transitions()]
@@ -491,7 +524,14 @@ const fn state_transition_table() -> [Row; max_state_transitions()]
                 rows[fast] = row;
                 fast += 1;
             }
-            (Within(..), Unused) => todo!(),
+            (Within(from_in, upto_in), Unused) =>
+            {
+                let accept = CharRangeInclusive::from(from_in ..= upto_in);
+                let except = CharRangeInclusive::from('\0' ..= '\0');
+                let row = Row { from, accept, except, onto, action: act };
+                rows[fast] = row;
+                fast += 1;
+            }
             _ => panic!("this is an invalid state transition combo"),
         }
     }
@@ -540,7 +580,7 @@ const fn state_transition_table() -> [Row; max_state_transitions()]
 
 fn main() -> PqResult<()>
 {
-    if let Err(err) = tokenize("    \t\r\n")
+    if let Err(err) = tokenize("    \t\r\n1")
     {
         println!("{}", format!("{err}").red());
     }
