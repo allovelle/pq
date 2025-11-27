@@ -419,10 +419,15 @@ const fn state_transition_table() -> [Row; max_state_transitions()]
     const EXPANDED_TABLE_LEN: usize = max_state_transitions();
     let mut rows: [Row; EXPANDED_TABLE_LEN] = [Row::zero(); EXPANDED_TABLE_LEN];
 
-    let mut udx_row = 0;
-    while udx_row < EXPANDED_TABLE_LEN
+    // Slow index is input table, fast index is output table because it adds
+    // more rows than the input table. Destination index doesn't matter since
+    // lookup will be O(N) anyway.
+    let (mut slow, mut fast) = (0, 0);
+
+    while slow < STATE_TRANSITION_TABLE.len()
     {
-        let (from, accept, except, onto, act) = STATE_TRANSITION_TABLE[udx_row];
+        let (from, accept, except, onto, act) = STATE_TRANSITION_TABLE[slow];
+        slow += 1;
 
         match (accept, except)
         {
@@ -441,7 +446,8 @@ const fn state_transition_table() -> [Row; max_state_transitions()]
                     let row =
                         Row::new(from, accept_range, unused_range, onto, act);
 
-                    rows[udx_row] = row;
+                    rows[fast] = row;
+                    fast += 1; // Outpace input table index
                 }
             }
             (Within(..), AnyOf(chars)) =>
@@ -462,7 +468,8 @@ const fn state_transition_table() -> [Row; max_state_transitions()]
                     let row =
                         Row::new(from, unused_range, except_range, onto, act);
 
-                    rows[udx_row] = row;
+                    rows[fast] = row;
+                    fast += 1; // Outpace input table index
                 }
             }
             (Within(from_in, upto_in), Within(from_ou, upto_ou)) =>
@@ -481,18 +488,15 @@ const fn state_transition_table() -> [Row; max_state_transitions()]
                     onto,
                     action: act,
                 };
-                rows[udx_row] = row;
+                rows[fast] = row;
+                fast += 1;
             }
             (Within(..), Unused) => todo!(),
             _ => panic!("this is an invalid state transition combo"),
         }
-
-        udx_row += 1;
     }
 
-    // TODO: Create ranges from each of the chars involved:
-    let accept = AnyOf("abcd"); // TODO: a .. a, c .. d
-    let except = AnyOf("b"); // TODO: For each exception, split range
+    assert!(fast == rows.len(), "Sanity check: were offsets correct?");
 
     rows
 }

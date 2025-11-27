@@ -35,13 +35,55 @@ pub const fn utf8_char_on(buffer: &[u8], udx: usize) -> Option<char>
             return None;
         }
 
+        let len = buffer.len();
+        let offsets =
+            [len.checked_sub(1), len.checked_sub(2), len.checked_sub(3)];
+        let offsets2 = [0; 3];
+
+        let byte1 = match buffer.len().checked_sub(1)
+        {
+            Some(_) => 0,
+            Some(offset) if udx < offset => buffer[udx + 1],
+            None => 0,
+        };
+
         if byte0 & mask == valid_mask
         {
-            let byte1 = if udx < buffer.len() { buffer[udx + 1] } else { 0 };
-            let byte2 = if udx < buffer.len() { buffer[udx + 2] } else { 0 };
-            let byte3 = if udx < buffer.len() { buffer[udx + 3] } else { 0 };
+            // let byte1 =
+            //     if udx < buffer.len() - 1 { buffer[udx + 1] } else { 0 };
+            // let byte2 =
+            //     if udx < buffer.len() - 2 { buffer[udx + 2] } else { 0 };
+            // let byte3 =
+            //     if udx < buffer.len() - 3 { buffer[udx + 3] } else { 0 };
 
-            let bytes = [byte0, byte1, byte2, byte3];
+            // let mut bytes = [byte0, 0, 0, 0];
+            // let mut i = 1;
+            // while i < bytes.len()
+            // {
+            //     if let Some(boundary) = buffer.len().checked_sub(i)
+            //         && i < bytes.len()
+            //         && udx < boundary
+            //     {
+            //         bytes[i] = buffer[udx + i]
+            //     }
+            //     else
+            //     {
+            //         bytes[i] = 0;
+            //     }
+            //     i += 1;
+            // }
+
+            let mut bytes = [byte0, 0, 0, 0];
+            let mut i = 1;
+            while let Some(boundary) = buffer.len().checked_sub(i)
+                && i < bytes.len()
+                && udx < boundary
+            {
+                bytes[i] = buffer[udx + i];
+                i += 1;
+            }
+
+            // let bytes = [byte0, byte1, byte2, byte3];
             let strip_masks = [strip, 0b0011_1111, 0b0011_1111, 0b0011_1111];
             let mut codepoint: u32 = 0;
 
