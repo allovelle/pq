@@ -346,27 +346,28 @@ pub enum Tok
 //     (GAP_OP, "+-*/", OP, ACC),
 // ];
 
-#[derive(Debug, Clone)]
+/// **Allowed & disallowed patterns for state transitions.**
+#[derive(Debug, Clone, Copy)]
 pub enum Accept
 {
-    /// Explicitly listed elements
+    /// **Explicitly listed elements**
     AnyOf(&'static str),
-    /// Elements explicitly within this range
-    Within(Range<char>),
-    /// Ignored accept/except bound
+    /// **Elements explicitly within this range. Equivalent to `char ..= char`**
+    Within(char, char),
+    /// **Ignored accept/except bound**
     Unused,
 }
 
-// State transitions are locked to character iteration. Essentially, check that
-// char is in this range or set and also not in this range or set.
-// [curr state][accept ch range][except ch range][next state][tok & buf act]
+/// **State transitions are locked to character iteration. Essentially, check
+/// that char is in this range or set and also not in this range or set.**
+/// `[curr state][accept ch range][except ch range][next state][tok & buf act]`
 const STATE_TRANSITION_TABLE: &[(State, Accept, Accept, State, Act)] = &[
     (Begin, AnyOf("\0"), Unused, End, Ign),
     (Begin, AnyOf("{"), Unused, Obj0, Ign),
     (Begin, AnyOf("["), Unused, Arr0, Ign),
     (Begin, AnyOf("\""), Unused, Txt0, Ign),
     (Begin, AnyOf("\n \t\r"), Unused, Begin, Ign),
-    (Symbol, Within('\u{0020}' .. '\u{10FFFF}'), AnyOf("\"\\"), Symbol, Acc),
+    (Symbol, Within('\u{0020}', '\u{10FFFF}'), AnyOf("\"\\"), Symbol, Acc),
 ];
 
 /// Each row represents at least one tokenizer state transition. When examining
@@ -383,12 +384,12 @@ const fn max_state_transitions() -> usize
         let (_, accept, except, ..) = &STATE_TRANSITION_TABLE[udx];
         udx += 1;
 
-        if let (AnyOf(chars), Unused) | (Within(_), AnyOf(chars)) =
+        if let (AnyOf(chars), Unused) | (Within(..), AnyOf(chars)) =
             (accept, except)
         {
             transitions += chars.len(); // Range * len(chars) = len(chars) rows
         }
-        else if let (Within(_), Within(_)) | (Within(_), Unused) =
+        else if let (Within(..), Within(..)) | (Within(..), Unused) =
             (accept, except)
         {
             transitions += 1; // Ranges pair counts as one row
@@ -414,50 +415,39 @@ const fn state_transition_table() -> [Row; max_state_transitions()]
     let mut udx_row = 0;
     while udx_row < EXPANDED_TABLE_LEN
     {
-        let (from, accept, except, onto, act) =
-            &STATE_TRANSITION_TABLE[udx_row];
+        let (from, accept, except, onto, act) = STATE_TRANSITION_TABLE[udx_row];
 
         match (accept, except)
         {
             (AnyOf(chars), Unused) =>
             {
-                // for ch in chars.chars()
-                // {
-                //     tab.insert((*from, ch), (*to, *action));
-                // }
-                // chars.contains("a");
-
                 // If it's any of these characters, add a new 'accept' range for
                 // each one since they are single element not a range
                 let mut udx_ch = 0;
                 while let Some(ch) = utf8_char_on(chars.as_bytes(), udx_ch)
                     && udx_ch < chars.len()
                 {
-                    udx_ch += 1;
-                    let accept_range = ch ..= ch;
-                    rows[udx_row] = Row::new(from, accept, except, onto, act);
-                }
-
-                let mut udx_ch = 0;
-                while udx_ch < chars.len()
-                {
-                    let ch = utf8_char_on(chars.as_bytes(), udx_ch).unwrap();
                     udx_ch += ch.len_utf8();
-                }
 
-                let exclude: RangeInclusive<char> = 'a' ..= 'a';
+                    let accept_range = ch ..= ch;
+                    let unused_range = '\0' ..= '\0';
+                    let row =
+                        Row::new(from, accept_range, unused_range, onto, act);
+
+                    rows[udx_row] = row;
+                }
             }
-            (Within(r1), AnyOf(_)) =>
+            (Within(..), AnyOf(_)) =>
             {
                 // TODO: Split the accept range such that there is one copy that
                 // TODO: excludes a ch for each ch in AnyOf.
             }
-            (Within(r1), Within(r2)) =>
+            (Within(..), Within(..)) =>
             {
                 // TODO: Split the accept range such that there is one copy that
                 // TODO: excludes a ch for each ch in AnyOf.
             }
-            (Within(r1), Unused) => todo!(),
+            (Within(..), Unused) => todo!(),
             _ => panic!("this is an invalid state transition combo"),
         }
 
