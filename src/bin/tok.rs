@@ -152,9 +152,13 @@ impl Row
 
     fn matches(&self, state: State, ch: char) -> bool
     {
+        // TODO: These are not catching from:
+        // TODO: curr(Num), char('\0')
         let acc: RangeInclusive<char> = self.accept.into();
         let exc: RangeInclusive<char> = self.except.into();
-        state == self.from && acc.contains(&ch) && !exc.contains(&ch)
+        let found =
+            state == self.from && acc.contains(&ch) && !exc.contains(&ch);
+        found
     }
 }
 
@@ -412,6 +416,8 @@ const STATE_TRANSITION_TABLE: &[(State, Accept, Accept, State, Act)] = &[
     (Begin, AnyOf("["), Unused, Arr0, Ign),
     (Begin, AnyOf("\""), Unused, Txt0, Ign),
     (Begin, Within('0', '9'), Unused, Num, Acc),
+    (Num, Within('0', '9'), Unused, Num, Acc),
+    (Num, AnyOf("\0"), Unused, End, Tok),
     (Symbol, Within('\u{0020}', '\u{10FFFF}'), AnyOf("\"\\"), Symbol, Acc),
 ];
 
@@ -580,7 +586,7 @@ const fn state_transition_table() -> [Row; max_state_transitions()]
 
 fn main() -> PqResult<()>
 {
-    if let Err(err) = tokenize("    \t\r\n1")
+    if let Err(err) = tokenize("    \t\r\n11")
     {
         println!("{}", format!("{err}").red());
     }
