@@ -26,8 +26,8 @@
 use crossterm::style::Stylize;
 use pq::txt::utf8_char_on;
 use std::collections::{HashMap, HashSet};
-use std::default;
 use std::ops::{Range, RangeBounds, RangeInclusive, Sub};
+use std::{default, fmt};
 use thiserror::Error;
 use {Accept::*, Act::*, State::*};
 
@@ -76,11 +76,35 @@ pub enum LexErr
 }
 
 /// Exists because [RangeInclusive<char>] is not [Copy].
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
 struct CharRangeInclusive
 {
     from: char,
     onto: char,
+}
+
+impl fmt::Debug for CharRangeInclusive
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
+    {
+        if f.alternate()
+        {
+            f.debug_struct("CharRangeInclusive")
+                .field("from", &self.from)
+                .field("onto", &self.onto)
+                .finish()
+        }
+        else
+        {
+            let from = format!("{:?}", self.from);
+            let onto = format!("{:?}", self.onto);
+            f.write_fmt(format_args!(
+                "{} .. {}",
+                from.trim_matches('\''),
+                onto.trim_matches('\'')
+            ))
+        }
+    }
 }
 
 impl CharRangeInclusive
@@ -134,7 +158,7 @@ impl Row
 {
     const fn zero() -> Self
     {
-        Self::new(Begin, '\0' ..= '\0', '\0' ..= '\0', Begin, Ign)
+        Self::new(BEG, '\0' ..= '\0', '\0' ..= '\0', BEG, IGN)
     }
 
     const fn new(
@@ -165,18 +189,20 @@ impl Row
 pub fn tokenize(source: &str) -> PqResult<()>
 {
     let transitions: [Row; _] = state_transition_table();
-    let mut curr = Begin;
+    let mut curr = BEG;
     let mut buf = String::with_capacity(32);
     let mut toks: Vec<Tok> = Vec::with_capacity(source.len());
 
+    // TODO: Fix the widths :D
+    let width = State::max_variant_name();
     println!(
-        "{:width$} {:4} {:width$} {:width$} {:width$}",
+        "{:state_width$}{:width$}{:width$}{:width$}{:width$}",
         "From",
-        "Curr Ch",
+        "Char",
         "To",
         "Then",
         "Buf",
-        width = State::max_variant_name(),
+        state_width = width,
     );
 
     for ch in source.chars().chain("\0".chars())
@@ -189,17 +215,17 @@ pub fn tokenize(source: &str) -> PqResult<()>
         };
 
         println!(
-            "{:width$} {:4} {:width$} {:width$} {:width$}",
+            "{:width$}{:5}{:width$}{:width$}{:width$}",
             format!("{curr:?}"),
             format!("{ch:?}"),
             format!("{:?}", row.onto),
             format!("{:?}", row.action),
             format!("{buf:?}"),
-            width = State::max_variant_name(),
+            width = State::max_variant_name() + 4,
         );
 
         // The buffer may be able to be converted into a token
-        if let Act::Tok | Act::Fin = row.action
+        if let Act::TOK | Act::FIN = row.action
         {
             if let Some(tok) = row.from.finalize(&buf)
             {
@@ -228,7 +254,7 @@ pub fn tokenize(source: &str) -> PqResult<()>
         }
 
         // If no token can be constructed, continue accumulating the buffer
-        if let Act::Acc | Act::Fin = row.action
+        if let Act::ACC | Act::FIN = row.action
         {
             buf.push(ch);
         }
@@ -245,16 +271,16 @@ pub fn tokenize(source: &str) -> PqResult<()>
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]
-enum Act
+pub enum Act
 {
     /// Finalize buffer as token *first*, then accumulate current character.
-    Fin,
+    FIN,
     /// Finalize buffer as token, then ignore current character
-    Tok, // ? Can this be removed if prev state is tracked?
+    TOK, // ? Can this be removed if prev state is tracked?
     /// Accumulate current character.
-    Acc,
+    ACC,
     /// Ignore the current character.
-    Ign,
+    IGN,
     // TODO: can add a LexErr(&'static str) variant for manual state filtering
 }
 
@@ -281,23 +307,21 @@ enum Act
 #[repr(u8)]
 pub enum State
 {
-    Begin,
-    Obj0,
-    Arr0,
-    Txt0,
-    Nil,
-    Bit,
-    Num,
-    Gap,
-    GapOperator,
-    Operator,
-    Sign,
-    Signed,
-    Unsigned,
-    Symbol,
-    Dec0,
-    Dec1,
-    End,
+    BEG,
+    OBJ0,
+    ARR0,
+    TXT0,
+    NIL,
+    BIT,
+    NUM,
+    GAP,
+    GAPOPER,
+    OPER,
+    SNG,
+    SYM,
+    DEC0,
+    DEC1,
+    END,
 }
 
 impl State
@@ -306,23 +330,21 @@ impl State
     {
         match self
         {
-            Begin => todo!(),
-            Obj0 => todo!(),
-            Arr0 => todo!(),
-            Txt0 => todo!(),
-            Nil => todo!(),
-            Bit => todo!(),
-            Num => todo!(),
-            Gap => todo!(),
-            GapOperator => todo!(),
-            Operator => todo!(),
-            Sign => todo!(),
-            Signed => todo!(),
-            Unsigned => todo!(),
-            Symbol => todo!(),
-            Dec0 => todo!(),
-            Dec1 => todo!(),
-            End => todo!(),
+            Self::BEG => todo!(),
+            Self::OBJ0 => todo!(),
+            Self::ARR0 => todo!(),
+            Self::TXT0 => todo!(),
+            Self::NIL => todo!(),
+            Self::BIT => todo!(),
+            Self::NUM => todo!(),
+            Self::GAP => todo!(),
+            Self::GAPOPER => todo!(),
+            Self::OPER => todo!(),
+            Self::SNG => todo!(),
+            Self::SYM => todo!(),
+            Self::DEC0 => todo!(),
+            Self::DEC1 => todo!(),
+            Self::END => todo!(),
         }
     }
 
@@ -410,15 +432,11 @@ pub enum Accept
 /// that char is in this range or set and also not in this range or set.**
 /// `[curr state][accept ch range][except ch range][next state][tok & buf act]`
 const STATE_TRANSITION_TABLE: &[(State, Accept, Accept, State, Act)] = &[
-    (Begin, AnyOf("\0"), Unused, End, Ign),
-    (Begin, AnyOf("\n \t\r"), Unused, Begin, Ign),
-    (Begin, AnyOf("{"), Unused, Obj0, Ign),
-    (Begin, AnyOf("["), Unused, Arr0, Ign),
-    (Begin, AnyOf("\""), Unused, Txt0, Ign),
-    (Begin, Within('0', '9'), Unused, Num, Acc),
-    (Num, Within('0', '9'), Unused, Num, Acc),
-    (Num, AnyOf("\0"), Unused, End, Tok),
-    (Symbol, Within('\u{0020}', '\u{10FFFF}'), AnyOf("\"\\"), Symbol, Acc),
+    (BEG, AnyOf("\0"), Unused, END, IGN),
+    (BEG, AnyOf("\n \t\r"), Unused, BEG, IGN),
+    (BEG, Within('0', '9'), Unused, NUM, ACC),
+    (NUM, Within('0', '9'), Unused, NUM, ACC),
+    (NUM, AnyOf("\0"), Unused, END, TOK),
 ];
 
 /// Each row represents at least one tokenizer state transition. When examining
@@ -547,46 +565,41 @@ const fn state_transition_table() -> [Row; max_state_transitions()]
     rows
 }
 
-// TODO:  1. Compacted table (with text, ranges, etc.)
-// TODO:  2. Generated const table expanded with only ranges
+fn emit_table(table: &[Row])
+{
+    const WIDTH: usize = 10;
 
-// const fn expand_state_transition_table()
-// {
-//     const N: usize = determine_compact_state_transition_table_allocation();
-//     let rows: [Row; N];
+    println!(
+        "|{:width$}|{:width$}|{:width$}|{:width$}|{:width$}|",
+        "From",
+        "Accept",
+        "Except",
+        "Onto",
+        "Action",
+        width = WIDTH
+    );
 
-//     let mut rows: &mut [usize] = &mut [];
+    for row in table
+    {
+        println!(
+            "|{:width$}|{:width$}|{:width$}|{:width$}|{:width$}|",
+            format!("{:?}", row.from),
+            format!("{:?}", row.accept),
+            format!("{:?}", row.except),
+            format!("{:?}", row.onto),
+            format!("{:?}", row.action),
+            width = WIDTH
+        );
+    }
+    println!();
+}
 
-//     for (from, accept, except, to, action) in STATE_TRANSITION_TABLE.into_iter()
-//     {
-//         match (accept, except)
-//         {
-//             (AnyOf(chars), Unused) =>
-//             {
-//                 for ch in chars.chars()
-//                 {
-//                     // tab.insert((*from, ch), (*to, *action));
-//                 }
-//             }
-//             (Within(r1), AnyOf(_)) =>
-//             {
-//                 // TODO: Split the accept range such that there is one copy that
-//                 // TODO: excludes a ch for each ch in AnyOf.
-//             }
-//             (Within(r1), Within(r2)) =>
-//             {
-//                 // TODO: Split the accept range such that there is one copy that
-//                 // TODO: excludes a ch for each ch in AnyOf.
-//             }
-//             (Within(r1), Unused) => todo!(),
-//             _ => unreachable!("this is an invalid state transition combo"),
-//         }
-//     }
-// }
-
+// TODO: #[doc(alias = "asdfasdfasdf")]
 fn main() -> PqResult<()>
 {
-    if let Err(err) = tokenize("    \t\r\n11")
+    emit_table(&state_transition_table()[..]);
+
+    if let Err(err) = tokenize("\t \r\n11")
     {
         println!("{}", format!("{err}").red());
     }
