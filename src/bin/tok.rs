@@ -270,10 +270,11 @@ pub fn tokenize(source: &str) -> PqResult<()>
     // TODO: Fix the widths :D
     const W1: usize = 6;
     const W2: usize = 5;
+    const W3: usize = 9;
 
     println!(
-        "{:W1$}{:W2$}{:W1$}{:W2$}{:W2$}",
-        "From", "Char", "To", "Then", "Buf",
+        "{:W1$}{:W1$}{:W1$}{:W1$}{:W3$}{:W2$}",
+        "From", "Char", "To", "Then", "Pre Buf", "End Buf"
     );
 
     for ch in source.chars().chain("\0".chars())
@@ -286,12 +287,19 @@ pub fn tokenize(source: &str) -> PqResult<()>
         };
 
         println!(
-            "{:W1$}{:W2$}{:W1$}{:W2$}{:W2$}",
+            "{:W1$}{:W1$}{:W1$}{:W1$}{:W3$}{:W2$}",
             format!("{curr:?}"),
             format!("{ch:?}"),
             format!("{:?}", row.onto),
             format!("{:?}", row.action),
-            format!("{buf:?}"),
+            format!("{:?}", &buf),
+            format!("{:?}", match row.action
+            {
+                FIN => ch.to_string(),
+                TOK => String::new(),
+                ACC => format!("{buf}{ch}"),
+                IGN => buf.clone(),
+            }),
         );
 
         // The buffer may be able to be converted into a token
@@ -490,6 +498,7 @@ const STATE_TRANSITION_TABLE: &[(State, Accept, Accept, State, Act)] = &[
     (BEG, Within('0', '9'), Unused, NUM, ACC),
     (NUM, Within('0', '9'), Unused, NUM, ACC),
     (NUM, AnyOf("\0"), Unused, END, TOK),
+    (NUM, Within('.', '.'), AnyOf("e-+"), DEC0, ACC),
 ];
 
 /// Each row represents at least one tokenizer state transition. When examining
@@ -539,6 +548,12 @@ const fn state_transition_table() -> [Row; max_state_transitions()]
         let (from, accept, except, onto, act) = STATE_TRANSITION_TABLE[slow];
         slow += 1;
 
+        // match (accept, except)
+        // {
+        //     (AnyOf(chars), Unused) | (Within(..), AnyOf(chars)) => (),
+        //     _ => todo!(),
+        // }
+
         match (accept, except)
         {
             (AnyOf(chars), Unused) =>
@@ -560,10 +575,12 @@ const fn state_transition_table() -> [Row; max_state_transitions()]
                     fast += 1; // Outpace input table index
                 }
             }
-            (Within(..), AnyOf(chars)) =>
+            (Within(begin, close), AnyOf(chars)) =>
             {
                 // TODO: Split the accept range such that there is one copy that
                 // TODO: excludes a ch for each ch in AnyOf.
+
+                // panic!("i dont think this is working: unused range skips ..");
 
                 // If it's any of these characters, add a new 'except' range for
                 // each one since they are single element not a range
@@ -573,10 +590,10 @@ const fn state_transition_table() -> [Row; max_state_transitions()]
                 {
                     udx_ch += ch.len_utf8();
 
-                    let unused_range = '\0' ..= '\0';
+                    let accept_range = begin ..= close;
                     let except_range = ch ..= ch;
                     let row =
-                        Row::new(from, unused_range, except_range, onto, act);
+                        Row::new(from, accept_range, except_range, onto, act);
 
                     rows[fast] = row;
                     fast += 1; // Outpace input table index
@@ -646,7 +663,7 @@ fn main() -> PqResult<()>
 {
     emit_table(&state_transition_table()[..]);
 
-    if let Err(err) = tokenize("\t \r\n12")
+    if let Err(err) = tokenize("\t \r\n12.3")
     {
         println!("{}", format!("{err}").red());
     }
