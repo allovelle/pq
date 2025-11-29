@@ -174,6 +174,11 @@ mod impl_char_range_inclusive
             }
             else
             {
+                ret_if!(
+                    *self == ('\0' ..= '\0'),
+                    f.write_fmt(format_args!("{:^8}", "--"))
+                );
+
                 let from = format!("{:?}", self.from);
                 let onto = format!("{:?}", self.onto);
                 f.write_fmt(format_args!(
