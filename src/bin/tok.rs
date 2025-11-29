@@ -31,6 +31,32 @@ use std::{default, fmt};
 use thiserror::Error;
 use {Accept::*, Act::*, State::*};
 
+/// A macro for early returns based on a condition.
+///
+/// # Examples
+///
+/// ```rust
+/// use pq::ret_if;
+///
+/// fn demo(x: i32) -> i32 {
+///     ret_if!(x < 0, 0);      // return 0 if x is negative
+///     ret_if!(x == 42, 99);   // return 99 if x is 42
+///     x + 1
+/// }
+///
+/// assert_eq!(demo(-5), 0);
+/// assert_eq!(demo(42), 99);
+/// assert_eq!(demo(7), 8);
+/// ```
+macro_rules! ret_if {
+    ($cond:expr, $val:expr) => {
+        if $cond
+        {
+            return $val;
+        }
+    };
+}
+
 #[derive(Debug, Error)]
 #[error("Pique Error")]
 pub enum PqErr
@@ -83,58 +109,96 @@ struct CharRangeInclusive
     onto: char,
 }
 
-impl fmt::Debug for CharRangeInclusive
+mod impl_char_range_inclusive
 {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
+    use super::*;
+
+    impl CharRangeInclusive
     {
-        if f.alternate()
+        /// **Exists because [From] & [Into] are not `const`**
+        pub const fn from(value: RangeInclusive<char>) -> Self
         {
-            f.debug_struct("CharRangeInclusive")
-                .field("from", &self.from)
-                .field("onto", &self.onto)
-                .finish()
+            Self { from: *value.start(), onto: *value.end() }
         }
-        else
+
+        /// **Exists because [From] & [Into] are not `const`**
+        pub const fn into(self) -> RangeInclusive<char>
         {
-            let from = format!("{:?}", self.from);
-            let onto = format!("{:?}", self.onto);
-            f.write_fmt(format_args!(
-                "{:>2} .. {:>2}",
-                from.trim_matches('\''),
-                onto.trim_matches('\'')
-            ))
+            self.from ..= self.onto
+        }
+
+        #[inline]
+        pub const fn contains(&self, ch: char) -> bool
+        {
+            self.from <= ch && ch <= self.onto
         }
     }
-}
 
-impl CharRangeInclusive
-{
-    /// **Exists because [From] & [Into] are not `const`**
-    pub const fn from(value: RangeInclusive<char>) -> Self
+    /// Compare [CharRangeInclusive] == [RangeInclusive<char>]
+    impl PartialEq<RangeInclusive<char>> for CharRangeInclusive
     {
-        Self { from: *value.start(), onto: *value.end() }
+        fn eq(&self, other: &RangeInclusive<char>) -> bool
+        {
+            self.from == *other.start() && self.onto == *other.end()
+        }
     }
 
-    /// **Exists because [From] & [Into] are not `const`**
-    pub const fn into(self) -> RangeInclusive<char>
+    /// Compare [RangeInclusive<char>] == [CharRangeInclusive]
+    impl PartialEq<CharRangeInclusive> for RangeInclusive<char>
     {
-        self.from ..= self.onto
+        fn eq(&self, other: &CharRangeInclusive) -> bool
+        {
+            *self.start() == other.from && *self.end() == other.onto
+        }
     }
-}
 
-impl From<RangeInclusive<char>> for CharRangeInclusive
-{
-    fn from(value: RangeInclusive<char>) -> Self
+    /// Compare [CharRangeInclusive] == [CharRangeInclusive]
+    impl PartialEq for CharRangeInclusive
     {
-        Self { from: *value.start(), onto: *value.end() }
+        fn eq(&self, other: &Self) -> bool
+        {
+            self.from == other.from && self.onto == other.onto
+        }
     }
-}
 
-impl From<CharRangeInclusive> for RangeInclusive<char>
-{
-    fn from(value: CharRangeInclusive) -> Self
+    impl fmt::Debug for CharRangeInclusive
     {
-        value.from ..= value.onto
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
+        {
+            if f.alternate()
+            {
+                f.debug_struct("CharRangeInclusive")
+                    .field("from", &self.from)
+                    .field("onto", &self.onto)
+                    .finish()
+            }
+            else
+            {
+                let from = format!("{:?}", self.from);
+                let onto = format!("{:?}", self.onto);
+                f.write_fmt(format_args!(
+                    "{:>2} .. {:>2}",
+                    from.trim_matches('\''),
+                    onto.trim_matches('\'')
+                ))
+            }
+        }
+    }
+
+    impl From<RangeInclusive<char>> for CharRangeInclusive
+    {
+        fn from(value: RangeInclusive<char>) -> Self
+        {
+            Self { from: *value.start(), onto: *value.end() }
+        }
+    }
+
+    impl From<CharRangeInclusive> for RangeInclusive<char>
+    {
+        fn from(value: CharRangeInclusive) -> Self
+        {
+            value.from ..= value.onto
+        }
     }
 }
 
@@ -174,15 +238,17 @@ impl Row
         Self { from, accept, except, onto, action }
     }
 
+    /// Checks that this row's state matches the current state of the tokenizer.
+    /// Checks that the
     fn matches(&self, state: State, ch: char) -> bool
     {
-        // TODO: These are not catching from:
-        // TODO: curr(Num), char('\0')
-        let acc: RangeInclusive<char> = self.accept.into();
-        let exc: RangeInclusive<char> = self.except.into();
-        let found =
-            state == self.from && acc.contains(&ch) && !exc.contains(&ch);
-        found
+        ret_if!(state != self.from, false);
+
+        let allow = self.accept.contains(ch);
+        let enable_except = self.except != ('\0' ..= '\0');
+        let deny = self.except.contains(ch) && enable_except;
+
+        allow && !deny
     }
 }
 
@@ -278,25 +344,8 @@ pub enum Act
     /// Ignore the current character.
     IGN,
     // TODO: can add a LexErr(&'static str) variant for manual state filtering
+    // TODO: Err(&'static str),
 }
-
-// TODO: #[derive(Debug, Clone, Copy, PartialEq)]
-// TODO: enum Act
-// TODO: {
-// TODO:     /// Record that a state transition took place. Add a character to the buffer
-// TODO:     /// used to produce a final token.
-// TODO:     Acc, // Token: record state transition. Buffer: record current character
-// TODO:     /// Ignore state transitions when the to and from states are the same: no
-// TODO:     /// reason to lose history for nothing. Ignore characters like spaces or
-// TODO:     /// comment characters
-// TODO:     Ign, // Token: ignore state transition. Buffer: ignore current character
-// TODO:     /// Finalize a token and record the state transition. Clear the buffer.
-// TODO:     Fin, // Token: record state transition & generate token. Buffer: clear
-// TODO:     /// For token state actions, this bubbles up an error but tries to transfer
-// TODO:     /// to a new state to recover and therefore generate more error messages.
-// TODO:     /// For buffer actions, panic immediately with a critical error message.
-// TODO:     Err(&'static str), // Token: bubble up error message. Buffer: panic
-// TODO: }
 
 /// Some of these states produce tokens when finalized.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -593,5 +642,6 @@ fn main() -> PqResult<()>
     {
         println!("{}", format!("{err}").red());
     }
+
     Ok(())
 }
