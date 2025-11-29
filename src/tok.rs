@@ -105,3 +105,9 @@ ws
     '000D' ws
     '0009' ws
 */
+
+// TODO: Make it so that the tokenization machinery is generic:
+// TODO: Bring-Your-Own TokErr enum
+// TODO: Bring-Your-Own const State Transition Table
+// TODO: Bring-Your-Own States enum
+// TODO: Bring-Your-Own State Buffer-To-Token Converter
