@@ -66,6 +66,9 @@ pub enum PqErr
 
     #[error(transparent)]
     LexErr(#[from] LexErr),
+
+    #[error(transparent)]
+    ParseIntErr(#[from] std::num::ParseIntError),
 }
 
 pub type PqResult<T> = Result<T, PqErr>;
@@ -294,10 +297,7 @@ pub fn tokenize(source: &str) -> PqResult<()>
         // The buffer may be able to be converted into a token
         if let Act::TOK | Act::FIN = row.action
         {
-            if let Some(tok) = row.from.finalize(&buf)
-            {
-                toks.push(tok);
-            }
+            toks.push(row.from.finalize(&buf)?);
 
             // match curr
             // {
@@ -376,7 +376,7 @@ pub enum State
 
 impl State
 {
-    fn finalize(self, buffer: &String) -> Option<Tok>
+    fn finalize(self, buffer: &String) -> PqResult<Tok>
     {
         match self
         {
@@ -386,7 +386,10 @@ impl State
             Self::TXT0 => todo!(),
             Self::NIL => todo!(),
             Self::BIT => todo!(),
-            Self::NUM => todo!(),
+            Self::NUM =>
+            {
+                buffer.parse().map_err(Into::into).map(|num| Tok::Signed(num))
+            }
             Self::GAP => todo!(),
             Self::GAPOPER => todo!(),
             Self::OPER => todo!(),
