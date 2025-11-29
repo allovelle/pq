@@ -194,15 +194,12 @@ pub fn tokenize(source: &str) -> PqResult<()>
     let mut toks: Vec<Tok> = Vec::with_capacity(source.len());
 
     // TODO: Fix the widths :D
-    let width = State::max_variant_name();
+    const W1: usize = 6;
+    const W2: usize = 5;
+
     println!(
-        "{:state_width$}{:width$}{:width$}{:width$}{:width$}",
-        "From",
-        "Char",
-        "To",
-        "Then",
-        "Buf",
-        state_width = width,
+        "{:W1$}{:W2$}{:W1$}{:W2$}{:W2$}",
+        "From", "Char", "To", "Then", "Buf",
     );
 
     for ch in source.chars().chain("\0".chars())
@@ -215,13 +212,12 @@ pub fn tokenize(source: &str) -> PqResult<()>
         };
 
         println!(
-            "{:width$}{:5}{:width$}{:width$}{:width$}",
+            "{:W1$}{:W2$}{:W1$}{:W2$}{:W2$}",
             format!("{curr:?}"),
             format!("{ch:?}"),
             format!("{:?}", row.onto),
             format!("{:?}", row.action),
             format!("{buf:?}"),
-            width = State::max_variant_name() + 4,
         );
 
         // The buffer may be able to be converted into a token
@@ -567,59 +563,35 @@ const fn state_transition_table() -> [Row; max_state_transitions()]
 
 fn emit_table(table: &[Row])
 {
-    const WIDTH: usize = 10;
+    const W1: usize = 10;
+    const W2: usize = 6;
 
     println!(
-        "|{:width$}|{:width$}|{:width$}|{:width$}|{:width$}|",
-        "From",
-        "Accept",
-        "Except",
-        "Onto",
-        "Action",
-        width = WIDTH
+        "| {:W2$} | {:W1$} | {:W1$} | {:W2$} | {:W2$} |",
+        "From", "Accept", "Except", "Onto", "Action",
     );
 
     for row in table
     {
         println!(
-            "|{:width$}|{:width$}|{:width$}|{:width$}|{:width$}|",
+            "| {:W2$} | {:W1$} | {:W1$} | {:W2$} | {:W2$} |",
             format!("{:?}", row.from),
             format!("{:?}", row.accept),
             format!("{:?}", row.except),
             format!("{:?}", row.onto),
             format!("{:?}", row.action),
-            width = WIDTH
         );
     }
     println!();
 }
 
-// TODO: #[doc(alias = "asdfasdfasdf")]
 fn main() -> PqResult<()>
 {
     emit_table(&state_transition_table()[..]);
 
-    if let Err(err) = tokenize("\t \r\n11")
+    if let Err(err) = tokenize("\t \r\n12")
     {
         println!("{}", format!("{err}").red());
     }
     Ok(())
-}
-
-fn token_split_out_learn_them()
-{
-    let full_unicode_range = '\u{0020}' .. '\u{10FFFF}';
-
-    // character
-    //     '0020' . '10FFFF' - '"' - '\'
-    let json_character =
-        &HashSet::from_iter(full_unicode_range) - &HashSet::from(['"', '\\']);
-
-    let json_string = ('"', json_character, '"');
-
-    trait TokChar {}
-    impl TokChar for char {}
-    impl TokChar for Range<char> {}
-    impl TokChar for &str {}
-    impl TokChar for HashSet<char> {}
 }
