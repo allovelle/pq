@@ -99,7 +99,7 @@ impl fmt::Debug for CharRangeInclusive
             let from = format!("{:?}", self.from);
             let onto = format!("{:?}", self.onto);
             f.write_fmt(format_args!(
-                "{} .. {}",
+                "{:>2} .. {:>2}",
                 from.trim_matches('\''),
                 onto.trim_matches('\'')
             ))
