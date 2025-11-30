@@ -223,7 +223,7 @@ struct Row
     onto: State,
     /// Discard or accumulate current character, append to or clear buffer,
     /// and record new token
-    action: Act,
+    act: Act,
 }
 
 impl Row
@@ -243,7 +243,7 @@ impl Row
     {
         let accept = CharRangeInclusive::from(accept);
         let except = CharRangeInclusive::from(except);
-        Self { from, accept, except, onto, action }
+        Self { from, accept, except, onto, act: action }
     }
 
     /// Checks that this row's state matches the current state of the tokenizer.
@@ -292,9 +292,9 @@ pub fn tokenize(source: &str) -> PqResult<()>
             format!("{curr:?}"),
             format!("{ch:?}"),
             format!("{:?}", row.onto),
-            format!("{:?}", row.action),
+            format!("{:?}", row.act),
             format!("{:?}", &buf),
-            format!("{:?}   ", match row.action
+            format!("{:?}   ", match row.act
             {
                 FIN => ch.to_string(),
                 TOK => String::new(),
@@ -304,14 +304,14 @@ pub fn tokenize(source: &str) -> PqResult<()>
         );
 
         // The buffer may be able to be converted into a token
-        if let Act::TOK | Act::FIN = row.action
+        if let Act::TOK | Act::FIN = row.act
         {
             toks.push(row.from.finalize(&buf)?);
             buf.clear();
         }
 
         // If no token can be constructed, continue accumulating the buffer
-        if let Act::ACC | Act::FIN = row.action
+        if let Act::ACC | Act::FIN = row.act
         {
             buf.push(ch);
         }
@@ -553,14 +553,6 @@ const fn state_transition_table() -> [Row; max_state_transitions()]
         let (from, accept, except, onto, act) = STATE_TRANSITION_TABLE[slow];
         slow += 1;
 
-        // match (accept, except)
-        // {
-        //     (AnyOf(chars), Unused) | (Within(..), AnyOf(chars)) => (),
-        //     _ => todo!(),
-        // }
-
-        // ! There are three main places that this matching syntax is presented
-
         match (accept, except)
         {
             (AnyOf(chars), Unused) =>
@@ -573,15 +565,14 @@ const fn state_transition_table() -> [Row; max_state_transitions()]
                 {
                     udx_ch += ch.len_utf8();
 
-                    let accept_range = ch ..= ch;
-                    let unused_range = '\0' ..= '\0';
-                    let row =
-                        Row::new(from, accept_range, unused_range, onto, act);
+                    let empty = '\0' ..= '\0';
+                    let row = Row::new(from, ch ..= ch, empty, onto, act);
 
                     rows[fast] = row;
                     fast += 1; // Outpace input table index
                 }
             }
+
             (Within(begin, close), AnyOf(chars)) =>
             {
                 // TODO: Split the accept range such that there is one copy that
@@ -597,42 +588,14 @@ const fn state_transition_table() -> [Row; max_state_transitions()]
                 {
                     udx_ch += ch.len_utf8();
 
-                    let accept_range = begin ..= close;
-                    let except_range = ch ..= ch;
                     let row =
-                        Row::new(from, accept_range, except_range, onto, act);
+                        Row::new(from, begin ..= close, ch ..= ch, onto, act);
 
                     rows[fast] = row;
                     fast += 1; // Outpace input table index
                 }
             }
-            (Within(from_in, upto_in), Within(from_ou, upto_ou)) =>
-            {
-                // TODO: Split the accept range such that there is one copy that
-                // TODO: excludes a ch for each ch in AnyOf.
-                let accept_range =
-                    CharRangeInclusive::from(from_in ..= upto_in);
-                let except_range =
-                    CharRangeInclusive::from(from_ou ..= upto_ou);
-                // let row = Row::new(from, accept_range, except_range, onto, act);
-                let row = Row {
-                    from,
-                    accept: accept_range,
-                    except: except_range,
-                    onto,
-                    action: act,
-                };
-                rows[fast] = row;
-                fast += 1;
-            }
-            (Within(from_in, upto_in), Unused) =>
-            {
-                let accept = CharRangeInclusive::from(from_in ..= upto_in);
-                let except = CharRangeInclusive::from('\0' ..= '\0');
-                let row = Row { from, accept, except, onto, action: act };
-                rows[fast] = row;
-                fast += 1;
-            }
+
             (Unused, AnyOf(chars)) =>
             {
                 // If it's any of these characters, add a new 'accept' range for
@@ -643,23 +606,43 @@ const fn state_transition_table() -> [Row; max_state_transitions()]
                 {
                     udx_ch += ch.len_utf8();
 
-                    let unused_range = '\0' ..= '\0';
-                    let except_range = ch ..= ch;
-                    let row =
-                        Row::new(from, unused_range, except_range, onto, act);
+                    let empty = '\0' ..= '\0';
+                    let row = Row::new(from, empty, ch ..= ch, onto, act);
 
                     rows[fast] = row;
                     fast += 1; // Outpace input table index
                 }
             }
-            (Unused, Within(from_in, upto_in)) =>
+
+            (Within(from_in, upto_in), Within(from_ou, upto_ou)) =>
             {
-                let accept = CharRangeInclusive::from('\0' ..= '\0');
-                let except = CharRangeInclusive::from(from_in ..= upto_in);
-                let row = Row { from, accept, except, onto, action: act };
+                let row = Row::new(
+                    from,
+                    from_in ..= upto_in,
+                    from_ou ..= upto_ou,
+                    onto,
+                    act,
+                );
                 rows[fast] = row;
                 fast += 1;
             }
+
+            (Within(from_in, upto_in), Unused) =>
+            {
+                let empty = '\0' ..= '\0';
+                let row = Row::new(from, from_in ..= upto_in, empty, onto, act);
+                rows[fast] = row;
+                fast += 1;
+            }
+
+            (Unused, Within(from_in, upto_in)) =>
+            {
+                let empty = '\0' ..= '\0';
+                let row = Row::new(from, empty, from_in ..= upto_in, onto, act);
+                rows[fast] = row;
+                fast += 1;
+            }
+
             _ => panic!("this is an invalid state transition combo"),
         }
     }
@@ -687,7 +670,7 @@ fn emit_table(table: &[Row])
             format!("{:?}", row.accept),
             format!("{:?}", row.except),
             format!("{:?}", row.onto),
-            format!("{:?}", row.action),
+            format!("{:?}", row.act),
         );
     }
     println!();
