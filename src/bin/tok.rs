@@ -293,7 +293,7 @@ pub fn tokenize(source: &str) -> PqResult<()>
             format!("{:?}", row.onto),
             format!("{:?}", row.action),
             format!("{:?}", &buf),
-            format!("{:?}", match row.action
+            format!("{:?}   ", match row.action
             {
                 FIN => ch.to_string(),
                 TOK => String::new(),
@@ -366,20 +366,22 @@ pub enum Act
 pub enum State
 {
     BEG,
+    NUM,
+    COM,
+    COM_OR_CLOSE,
+    END,
     OBJ0,
     ARR0,
     TXT0,
     NIL,
     BIT,
-    NUM,
-    GAP,
-    GAPOPER,
-    OPER,
+    OP0,
+    OP1,
+    OP2,
     SNG,
     SYM,
     DEC0,
     DEC1,
-    END,
 }
 
 impl State
@@ -394,13 +396,15 @@ impl State
             Self::TXT0 => todo!(),
             Self::NIL => todo!(),
             Self::BIT => todo!(),
+            Self::COM => Ok(Tok::Comma),
+            Self::COM_OR_CLOSE => todo!(),
             Self::NUM =>
             {
                 buffer.parse().map_err(Into::into).map(|num| Tok::Signed(num))
             }
-            Self::GAP => todo!(),
-            Self::GAPOPER => todo!(),
-            Self::OPER => todo!(),
+            Self::OP0 => todo!(),
+            Self::OP1 => todo!(),
+            Self::OP2 => todo!(),
             Self::SNG => todo!(),
             Self::SYM => todo!(),
             Self::DEC0 => todo!(),
@@ -425,25 +429,16 @@ impl State
 #[derive(Debug, Clone, PartialEq)]
 pub enum Tok
 {
-    Symbol(String),
-    Text(String),
-    Colon,            // :
-    Dot,              // .
-    Throw,            // ^^a
-    Bind,             // a:: b
-    NamespaceSlashes, // \\a
-    PathSlash,        // \a
-    AngleOpen,        // <
-    AngleClose,       // >
-    ParenOpen,        // (
-    ParenClose,       // )
-    SquareOpen,       // [
-    SquareClose,      // ]
-    BlockOpen,        // {
-    BlockClose,       // }
-    Signed(i32),      // +0 -0
-    Unsigned(u32),    // ~0
-    Decimal(f64),     // +0.0 -0.0
+    Text(String), // "a"
+    Colon,        // :
+    Dot,          // .
+    Comma,        // ,
+    SquareOpen,   // [
+    SquareClose,  // ]
+    BlockOpen,    // {
+    BlockClose,   // }
+    Signed(i32),  // +0 -0
+    Decimal(f64), // +0.0 -0.0
 }
 
 // /// State transitions are locked to character iteration.
@@ -489,16 +484,34 @@ pub enum Accept
     Unused,
 }
 
+const EOS: Accept = AnyOf("\0");
+const WHITESPACE: Accept = AnyOf("\n \t\r");
+
+const fn ignore_spaces_after(
+    status: State,
+) -> (State, Accept, Accept, State, Act)
+{
+    (status, WHITESPACE, Unused, status, IGN)
+}
+
 /// **State transitions are locked to character iteration. Essentially, check
 /// that char is in this range or set and also not in this range or set.**
 /// `[curr state][accept ch range][except ch range][next state][tok & buf act]`
 const STATE_TRANSITION_TABLE: &[(State, Accept, Accept, State, Act)] = &[
-    (BEG, AnyOf("\0"), Unused, END, IGN),
-    (BEG, AnyOf("\n \t\r"), Unused, BEG, IGN),
+    (BEG, EOS, Unused, END, IGN),
+    (COM, EOS, Unused, END, TOK),
+    (NUM, EOS, Unused, END, TOK),
+    ignore_spaces_after(BEG),
+    ignore_spaces_after(COM),
+    ignore_spaces_after(COM_OR_CLOSE),
     (BEG, Within('0', '9'), Unused, NUM, ACC),
     (NUM, Within('0', '9'), Unused, NUM, ACC),
-    (NUM, AnyOf("\0"), Unused, END, TOK),
-    (NUM, Within('.', '.'), AnyOf("e-+"), DEC0, ACC),
+    (NUM, WHITESPACE, Unused, COM_OR_CLOSE, IGN),
+    (COM_OR_CLOSE, AnyOf(","), Unused, COM, IGN),
+    (COM_OR_CLOSE, AnyOf("]"), Unused, END, IGN),
+    (COM_OR_CLOSE, AnyOf("}"), Unused, END, IGN),
+    (NUM, AnyOf(","), Unused, COM, TOK),
+    (COM, Within('0', '9'), Unused, NUM, ACC),
 ];
 
 /// Each row represents at least one tokenizer state transition. When examining
@@ -663,7 +676,7 @@ fn main() -> PqResult<()>
 {
     emit_table(&state_transition_table()[..]);
 
-    if let Err(err) = tokenize("\t \r\n12.3")
+    if let Err(err) = tokenize("\t \r\n123,456, 789")
     {
         println!("{}", format!("{err}").red());
     }

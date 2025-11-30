@@ -1,3 +1,6 @@
+TODO: Make sure to handle the array of objects json format (from docker)
+
+
 pq 'key1.-key2.{name,phone}'
     {key1: {key2: {}, name: "", addr: "", phone: +1}}
     {name: "", addr: "", phone: +1}
