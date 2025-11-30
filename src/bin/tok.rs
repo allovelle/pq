@@ -272,10 +272,11 @@ pub fn tokenize(source: &str) -> PqResult<()>
     const W2: usize = 5;
     const W3: usize = 9;
 
-    println!(
+    let header = format!(
         "{:W1$}{:W1$}{:W1$}{:W1$}{:W3$}{:W2$}",
         "From", "Char", "To", "Then", "Pre Buf", "End Buf"
     );
+    println!("{}", header.underlined());
 
     for ch in source.chars().chain("\0".chars())
     {
@@ -306,25 +307,6 @@ pub fn tokenize(source: &str) -> PqResult<()>
         if let Act::TOK | Act::FIN = row.action
         {
             toks.push(row.from.finalize(&buf)?);
-
-            // match curr
-            // {
-            //     // TODO: this is a call for having an action for Error since this is
-            //     // TODO: handling language specific transition stuff in the harness
-            //     Begin | End | Gap | GapOperator | Sign | Dec0 =>
-            //     {
-            //         // ! Should not be doing error recovery here
-            //         println!("Error: invalid token {curr:?}");
-            //         return Err(LexErr::InvalidStateTransition(curr, ch).into());
-            //     }
-
-            //     SI => toks.push(Tok::Sgn(match buf.parse()
-            //     {
-            //         Ok(num) => num,
-            //         Err(_) => return eprintln!("Invalid signed int {buf:?}"),
-            //     })),
-            // };
-
             buf.clear();
         }
 
@@ -334,11 +316,16 @@ pub fn tokenize(source: &str) -> PqResult<()>
             buf.push(ch);
         }
 
+        if row.onto == State::end_state()
+        {
+            println!("Hit explicit {} state", "END".underlined());
+            break;
+        }
+
         curr = row.onto;
     }
 
     println!();
-    println!("Code: `{source}`");
     println!("Tokens: {toks:?}");
 
     Ok(())
@@ -384,6 +371,13 @@ pub enum State
 
 impl State
 {
+    /// Callback to be used by the tokenizer machinery as a sentinel on when to stop
+    /// lexing, even with a non-empty buffer.
+    const fn end_state() -> Self
+    {
+        Self::END
+    }
+
     fn finalize(self, buffer: &String) -> PqResult<Tok>
     {
         match self
@@ -508,6 +502,7 @@ const STATE_TRANSITION_TABLE: &[(State, Accept, Accept, State, Act)] = &[
     (ComOrClose, AnyOf(","), Unused, COM, IGN),
     (ComOrClose, AnyOf("]"), Unused, END, IGN),
     (ComOrClose, AnyOf("}"), Unused, END, IGN),
+    (COM, Within('0', '9'), Unused, NUM, FIN),
     (NUM, AnyOf(","), Unused, COM, TOK),
 ];
 
@@ -525,33 +520,19 @@ const fn max_state_transitions() -> usize
         let (_, accept, except, ..) = &STATE_TRANSITION_TABLE[udx];
         udx += 1;
 
-        // ! There are three main places that this matching syntax is presented
-        // ! There are three main places that this matching syntax is presented
-        // ! There are three main places that this matching syntax is presented
-        // ! There are three main places that this matching syntax is presented
-        // ! There are three main places that this matching syntax is presented
+        match (accept, except)
+        {
+            // Range * len(chars) = len(chars) rows
+            (AnyOf(chars), Unused)
+            | (Within(..), AnyOf(chars))
+            | (Unused, AnyOf(chars)) => transitions += chars.len(),
 
-        if let (AnyOf(chars), Unused) | (Within(..), AnyOf(chars)) =
-            (accept, except)
-        {
-            transitions += chars.len(); // Range * len(chars) = len(chars) rows
-        }
-        else if let (Within(..), Within(..)) | (Within(..), Unused) =
-            (accept, except)
-        {
-            transitions += 1; // Ranges pair counts as one row
-        }
-        else if let (Unused, AnyOf(chars)) = (accept, except)
-        {
-            transitions += chars.len();
-        }
-        else if let (Unused, Within(..)) = (accept, except)
-        {
-            transitions += 1;
-        }
-        else
-        {
-            panic!("this is an invalid state transition combo")
+            // CharRangeInclusives count as one row
+            (Within(..), Within(..))
+            | (Within(..), Unused)
+            | (Unused, Within(..)) => transitions += 1,
+
+            _ => panic!("this is an invalid state transition combo"),
         }
     }
     transitions
@@ -716,7 +697,7 @@ fn main() -> PqResult<()>
 {
     emit_table(&state_transition_table()[..]);
 
-    if let Err(err) = tokenize("\t \r\n123,456, 7!89")
+    if let Err(err) = tokenize("\t \r\n123,456, 789")
     {
         println!("{}", format!("{err}").red());
     }
