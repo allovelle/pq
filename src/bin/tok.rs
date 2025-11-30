@@ -356,8 +356,6 @@ pub enum Act
     ACC,
     /// Ignore the current character.
     IGN,
-    // TODO: can add a LexErr(&'static str) variant for manual state filtering
-    // TODO: Err(&'static str),
 }
 
 /// Some of these states produce tokens when finalized.
@@ -368,7 +366,7 @@ pub enum State
     BEG,
     NUM,
     COM,
-    COM_OR_CLOSE,
+    ComOrClose,
     END,
     OBJ0,
     ARR0,
@@ -397,7 +395,7 @@ impl State
             Self::NIL => todo!(),
             Self::BIT => todo!(),
             Self::COM => Ok(Tok::Comma),
-            Self::COM_OR_CLOSE => todo!(),
+            Self::ComOrClose => todo!(),
             Self::NUM =>
             {
                 buffer.parse().map_err(Into::into).map(|num| Tok::Signed(num))
@@ -503,15 +501,14 @@ const STATE_TRANSITION_TABLE: &[(State, Accept, Accept, State, Act)] = &[
     (NUM, EOS, Unused, END, TOK),
     ignore_spaces_after(BEG),
     ignore_spaces_after(COM),
-    ignore_spaces_after(COM_OR_CLOSE),
+    ignore_spaces_after(ComOrClose),
     (BEG, Within('0', '9'), Unused, NUM, ACC),
     (NUM, Within('0', '9'), Unused, NUM, ACC),
-    (NUM, WHITESPACE, Unused, COM_OR_CLOSE, IGN),
-    (COM_OR_CLOSE, AnyOf(","), Unused, COM, IGN),
-    (COM_OR_CLOSE, AnyOf("]"), Unused, END, IGN),
-    (COM_OR_CLOSE, AnyOf("}"), Unused, END, IGN),
+    (NUM, WHITESPACE, Unused, ComOrClose, IGN),
+    (ComOrClose, AnyOf(","), Unused, COM, IGN),
+    (ComOrClose, AnyOf("]"), Unused, END, IGN),
+    (ComOrClose, AnyOf("}"), Unused, END, IGN),
     (NUM, AnyOf(","), Unused, COM, TOK),
-    (COM, Within('0', '9'), Unused, NUM, ACC),
 ];
 
 /// Each row represents at least one tokenizer state transition. When examining
@@ -528,6 +525,12 @@ const fn max_state_transitions() -> usize
         let (_, accept, except, ..) = &STATE_TRANSITION_TABLE[udx];
         udx += 1;
 
+        // ! There are three main places that this matching syntax is presented
+        // ! There are three main places that this matching syntax is presented
+        // ! There are three main places that this matching syntax is presented
+        // ! There are three main places that this matching syntax is presented
+        // ! There are three main places that this matching syntax is presented
+
         if let (AnyOf(chars), Unused) | (Within(..), AnyOf(chars)) =
             (accept, except)
         {
@@ -537,6 +540,14 @@ const fn max_state_transitions() -> usize
             (accept, except)
         {
             transitions += 1; // Ranges pair counts as one row
+        }
+        else if let (Unused, AnyOf(chars)) = (accept, except)
+        {
+            transitions += chars.len();
+        }
+        else if let (Unused, Within(..)) = (accept, except)
+        {
+            transitions += 1;
         }
         else
         {
@@ -566,6 +577,8 @@ const fn state_transition_table() -> [Row; max_state_transitions()]
         //     (AnyOf(chars), Unused) | (Within(..), AnyOf(chars)) => (),
         //     _ => todo!(),
         // }
+
+        // ! There are three main places that this matching syntax is presented
 
         match (accept, except)
         {
@@ -639,6 +652,33 @@ const fn state_transition_table() -> [Row; max_state_transitions()]
                 rows[fast] = row;
                 fast += 1;
             }
+            (Unused, AnyOf(chars)) =>
+            {
+                // If it's any of these characters, add a new 'accept' range for
+                // each one since they are single element not a range
+                let mut udx_ch = 0;
+                while let Some(ch) = utf8_char_on(chars.as_bytes(), udx_ch)
+                    && udx_ch < chars.len()
+                {
+                    udx_ch += ch.len_utf8();
+
+                    let unused_range = '\0' ..= '\0';
+                    let except_range = ch ..= ch;
+                    let row =
+                        Row::new(from, unused_range, except_range, onto, act);
+
+                    rows[fast] = row;
+                    fast += 1; // Outpace input table index
+                }
+            }
+            (Unused, Within(from_in, upto_in)) =>
+            {
+                let accept = CharRangeInclusive::from('\0' ..= '\0');
+                let except = CharRangeInclusive::from(from_in ..= upto_in);
+                let row = Row { from, accept, except, onto, action: act };
+                rows[fast] = row;
+                fast += 1;
+            }
             _ => panic!("this is an invalid state transition combo"),
         }
     }
@@ -676,7 +716,7 @@ fn main() -> PqResult<()>
 {
     emit_table(&state_transition_table()[..]);
 
-    if let Err(err) = tokenize("\t \r\n123,456, 789")
+    if let Err(err) = tokenize("\t \r\n123,456, 7!89")
     {
         println!("{}", format!("{err}").red());
     }
