@@ -276,7 +276,7 @@ pub fn tokenize(source: &str) -> PqResult<()>
         "{:W1$}{:W1$}{:W1$}{:W1$}{:W3$}{:W2$}",
         "From", "Char", "To", "Then", "Pre Buf", "End Buf"
     );
-    println!("{}", header.underlined());
+    println!("\n\n\n{}", header.underlined());
 
     for ch in source.chars().chain("\0".chars())
     {
@@ -287,33 +287,54 @@ pub fn tokenize(source: &str) -> PqResult<()>
             None => return Err(LexErr::InvalidStateTransition(curr, ch).into()),
         };
 
-        println!(
-            "{:W1$}{:W1$}{:W1$}{:W1$}{:W3$}{:W2$}",
-            format!("{curr:?}"),
-            format!("{ch:?}"),
-            format!("{:?}", row.onto),
-            format!("{:?}", row.act),
-            format!("{:?}", &buf),
-            format!("{:?}   ", match row.act
-            {
-                FIN => ch.to_string(),
-                TOK => String::new(),
-                ACC => format!("{buf}{ch}"),
-                IGN => buf.clone(),
-            }),
-        );
-
-        // The buffer may be able to be converted into a token
-        if let Act::TOK | Act::FIN = row.act
+        if !(row.from == row.onto && row.act == IGN)
         {
-            toks.push(row.from.finalize(&buf)?);
-            buf.clear();
+            println!(
+                "{:W1$}{:W1$}{:W1$}{:W1$}{:W3$}{:W2$}",
+                format!("{curr:?}"),
+                format!("{ch:?}"),
+                format!("{:?}", row.onto),
+                format!("{:?}", row.act),
+                format!("{:?}", &buf),
+                format!("{:?}   ", match row.act
+                {
+                    FIN => ch.to_string(),
+                    TOK | FTK => String::new(),
+                    ACC => format!("{buf}{ch}"),
+                    IGN => buf.clone(),
+                }),
+            );
         }
 
-        // If no token can be constructed, continue accumulating the buffer
-        if let Act::ACC | Act::FIN = row.act
+        match row.act
         {
-            buf.push(ch);
+            // Token can be created using the currect character and the buffer
+            Act::FTK =>
+            {
+                buf.push(ch);
+                toks.push(row.from.finalize(&buf)?);
+                buf.clear();
+            }
+            // Token can be created from the buffer, do not accumulate character
+            Act::TOK =>
+            {
+                toks.push(row.from.finalize(&buf)?);
+                buf.clear();
+            }
+            // If no token can be constructed, continue accumulating the buffer
+            Act::ACC =>
+            {
+                buf.push(ch);
+            }
+            // Token an be created while preserving the current character
+            Act::FIN =>
+            {
+                toks.push(row.from.finalize(&buf)?);
+                buf.clear();
+                buf.push(ch);
+            }
+            // Discard the current character and leave the buffer intact
+            Act::IGN => (),
         }
 
         if row.onto == State::end_state()
@@ -326,7 +347,8 @@ pub fn tokenize(source: &str) -> PqResult<()>
     }
 
     println!();
-    println!("Tokens: {toks:?}");
+    println!("{}", format!("Tokens: {toks:?}").green());
+    println!();
 
     Ok(())
 }
@@ -335,38 +357,30 @@ pub fn tokenize(source: &str) -> PqResult<()>
 #[repr(u8)]
 pub enum Act
 {
-    /// Finalize buffer as token *first*, then accumulate current character.
+    /// Consume buffer as token, accumulate current character into empty buffer
     FIN,
-    /// Finalize buffer as token, then ignore current character
-    TOK, // ? Can this be removed if prev state is tracked?
-    /// Accumulate current character.
+    /// Consume buffer as token, ignore current character
+    TOK,
+    /// Accumulate current character, consume buffer as token
+    FTK,
+    /// Accumulate current character, append to buffer
     ACC,
-    /// Ignore the current character.
+    /// Ignore current character, leave buffer untouched
     IGN,
-}
+    // /// Collect current character into buffer *first*, then Finalize buffer as token *second*
+    // COL,
 
-/// Some of these states produce tokens when finalized.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[repr(u8)]
-pub enum State
-{
-    BEG,
-    NUM,
-    COM,
-    ComOrClose,
-    END,
-    OBJ0,
-    ARR0,
-    TXT0,
-    NIL,
-    BIT,
-    OP0,
-    OP1,
-    OP2,
-    SNG,
-    SYM,
-    DEC0,
-    DEC1,
+    // /// Finalize buffer as token *first*, then accumulate current character.
+    // FIN,
+
+    // /// Finalize buffer as token, then ignore current character
+    // TOK, // ? Can this be removed if prev state is tracked?
+
+    // /// Accumulate current character. Append to buffer.
+    // ACC,
+
+    // /// Ignore the current character. Do not append to buffer.
+    // IGN,
 }
 
 impl State
@@ -382,26 +396,24 @@ impl State
     {
         match self
         {
-            Self::BEG => todo!(),
-            Self::OBJ0 => todo!(),
-            Self::ARR0 => todo!(),
-            Self::TXT0 => todo!(),
-            Self::NIL => todo!(),
-            Self::BIT => todo!(),
+            Self::BEG if buffer == "," => Ok(Tok::Comma),
+            Self::BEG => unreachable!("BEG tokenizer state unutilized"),
+            Self::NUM => buffer.parse().map_err(Into::into).map(Tok::Signed),
             Self::COM => Ok(Tok::Comma),
+            Self::BIT0S => Ok(Tok::False),
+            Self::BIT0F => todo!(),
+            Self::BIT0A => todo!(),
+            Self::BIT0L => todo!(),
+            Self::BIT1E => todo!(),
             Self::ComOrClose => todo!(),
-            Self::NUM =>
-            {
-                buffer.parse().map_err(Into::into).map(|num| Tok::Signed(num))
-            }
-            Self::OP0 => todo!(),
-            Self::OP1 => todo!(),
-            Self::OP2 => todo!(),
-            Self::SNG => todo!(),
-            Self::SYM => todo!(),
-            Self::DEC0 => todo!(),
-            Self::DEC1 => todo!(),
+            Self::BIT1T => todo!(),
+            Self::BIT1R => todo!(),
+            Self::BIT1U => Ok(Tok::True),
+            Self::TXT => Ok(Tok::Text(buffer.clone())),
+            Self::ESC => Ok(Tok::Escape(buffer.clone())),
+            Self::ESCHEX3 => Ok(Tok::EscapeHex(buffer.clone())),
             Self::END => todo!(),
+            Self::ESCHEX0 | Self::ESCHEX1 | Self::ESCHEX2 => unreachable!(),
         }
     }
 
@@ -421,10 +433,16 @@ impl State
 #[derive(Debug, Clone, PartialEq)]
 pub enum Tok
 {
-    Text(String), // "a"
+    True,              // true
+    False,             // false
+    Null,              // null
+    Text(String),      // "a"
+    Escape(String),    // "\n"
+    EscapeHex(String), // "\uAb34"
+    Comma,             // ,
+    //
     Colon,        // :
     Dot,          // .
-    Comma,        // ,
     SquareOpen,   // [
     SquareClose,  // ]
     BlockOpen,    // {
@@ -486,6 +504,44 @@ const fn ignore_spaces_after(
     (status, WHITESPACE, Unused, status, IGN)
 }
 
+/// Some of these states produce tokens when finalized.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(u8)]
+pub enum State
+{
+    BEG,
+    NUM,
+    COM,
+    ComOrClose,
+    BIT0F,
+    BIT0A,
+    BIT0L,
+    BIT0S,
+    BIT1T,
+    BIT1R,
+    BIT1U,
+    BIT1E,
+    TXT,
+    ESC,
+    ESCHEX0,
+    ESCHEX1,
+    ESCHEX2,
+    ESCHEX3,
+    END,
+    // -------------------------------------------------------------------------
+    // OBJ0,
+    // ARR0,
+    // TXT0,
+    // NIL,
+    // OP0,
+    // OP1,
+    // OP2,
+    // SNG,
+    // SYM,
+    // DEC0,
+    // DEC1,
+}
+
 /// **State transitions are locked to character iteration. Essentially, check
 /// that char is in this range or set and also not in this range or set.**
 /// `[curr state][accept ch range][except ch range][next state][tok & buf act]`
@@ -493,7 +549,6 @@ const STATE_TRANSITION_TABLE: &[(State, Accept, Accept, State, Act)] = &[
     (BEG, EOS, Unused, END, IGN),
     (COM, EOS, Unused, END, TOK),
     (NUM, EOS, Unused, END, TOK),
-    ignore_spaces_after(BEG),
     ignore_spaces_after(COM),
     ignore_spaces_after(ComOrClose),
     (BEG, Within('0', '9'), Unused, NUM, ACC),
@@ -504,6 +559,35 @@ const STATE_TRANSITION_TABLE: &[(State, Accept, Accept, State, Act)] = &[
     (ComOrClose, AnyOf("}"), Unused, END, IGN),
     (COM, Within('0', '9'), Unused, NUM, FIN),
     (NUM, AnyOf(","), Unused, COM, TOK),
+    // Beginning ---------------------------------------------------------------
+    (BEG, EOS, Unused, END, IGN),
+    ignore_spaces_after(BEG),
+    // Boolean -----------------------------------------------------------------
+    (BEG, AnyOf("f"), Unused, BIT0F, IGN),
+    (BIT0F, AnyOf("a"), Unused, BIT0A, IGN),
+    (BIT0A, AnyOf("l"), Unused, BIT0L, IGN),
+    (BIT0L, AnyOf("s"), Unused, BIT0S, IGN),
+    (BIT0S, AnyOf("e"), Unused, BEG, TOK),
+    (BEG, AnyOf("t"), Unused, BIT1T, IGN),
+    (BIT1T, AnyOf("r"), Unused, BIT1R, IGN),
+    (BIT1R, AnyOf("u"), Unused, BIT1U, IGN),
+    (BIT1U, AnyOf("e"), Unused, BEG, TOK),
+    // Comma -------------------------------------------------------------------
+    (BEG, AnyOf(","), Unused, COM, FIN),
+    (COM, AnyOf("f"), Unused, BIT0F, IGN),
+    (COM, AnyOf("t"), Unused, BIT1T, IGN),
+    (COM, Within('0', '9'), Unused, NUM, ACC),
+    // Key or Value ------------------------------------------------------------
+    (BEG, AnyOf("\""), Unused, TXT, IGN),
+    (TXT, AnyOf("\""), Unused, BEG, TOK),
+    (TXT, Within('\u{0020}', '\u{10FFFF}'), AnyOf("\"\\"), TXT, ACC),
+    (TXT, AnyOf("\\"), Unused, ESC, FIN),
+    (ESC, AnyOf("\"\\/bfnrt"), Unused, TXT, FTK),
+    (ESC, AnyOf("u"), Unused, ESCHEX0, ACC),
+    (ESCHEX0, AnyOf("0123456789abcdefABCDEF"), Unused, ESCHEX1, ACC),
+    (ESCHEX1, AnyOf("0123456789abcdefABCDEF"), Unused, ESCHEX2, ACC),
+    (ESCHEX2, AnyOf("0123456789abcdefABCDEF"), Unused, ESCHEX3, ACC),
+    (ESCHEX3, AnyOf("0123456789abcdefABCDEF"), Unused, TXT, FTK),
 ];
 
 /// Each row represents at least one tokenizer state transition. When examining
@@ -680,9 +764,22 @@ fn main() -> PqResult<()>
 {
     emit_table(&state_transition_table()[..]);
 
-    if let Err(err) = tokenize("\t \r\n123,456, 789")
+    let json = r#"
+        "init"
+        818
+        true, false
+        null
+        0.22
+        []
+        {}
+    "#;
+
+    for line in json.lines().filter(|line| !line.trim().is_empty())
     {
-        println!("{}", format!("{err}").red());
+        if let Err(err) = tokenize(line)
+        {
+            println!("{}", format!("{err}").red());
+        }
     }
 
     Ok(())
