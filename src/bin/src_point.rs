@@ -179,6 +179,11 @@ pub struct SourcePoint
 
 impl SourcePoint
 {
+    // ! Invariant: SourcePoint::new() will not be called with a value that has
+    // ! a bit-width larger than the provided Sentinel. As such, the Sentinel
+    // ! should probably call a crate private constructor to make it impossible
+    // ! for sentinel-less SrcPoints to be instantiated.
+
     /// Pack `line` (low bits) and `ch` (high bits) using the sentinel's current splitter.
     ///
     /// Returns `Err(PackError)` if either value does not fit in the allocated bits.
