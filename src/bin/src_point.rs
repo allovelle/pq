@@ -4,57 +4,108 @@ use std::fmt;
 
 fn main()
 {
-    let sent = Sentinel::new();
+    let source = "0\n1\n2\n3\n4\n";
+    let source = [
+        "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12",
+        "13",
+    ]
+    .join("\n");
+    let source = "0\
+        1
+        2\
+        3\
+        4\
+        5\
+        6\
+        7\
+        8\
+        9\
+        10\
+        11\
+        12\
+        13\
+    ";
+
+    fn fmt_src_point(sent: Sentinel, point: SrcPoint) -> String
+    {
+        use crossterm::style::*;
+
+        let line_bits = sent.right_bits_for_line();
+        let char_bits = if point.line(sent) == 0
+        {
+            usize::BITS as usize - 1
+        }
+        else
+        {
+            sent.left_bits_for_line()
+        };
+
+        let middle = bits_required(char_bits);
+        let char_bits = char_bits - middle;
+
+        let line =
+            format!("{:0line_bits$b}", point.line(sent), line_bits = line_bits);
+        let ch =
+            format!("{:0char_bits$b}", point.ch(sent), char_bits = char_bits);
+
+        format!(
+            "{bar} {:<3} {}{} {:>3} {bar}",
+            point.line(sent),
+            line.blue(),
+            ch.yellow(),
+            point.ch(sent),
+            bar = "||".dark_red(),
+        )
+    }
+
+    let mut sent = Sentinel::new();
+
+    for (i, ch) in pq::txt::utf8_iter_chars(source).enumerate()
+    {
+        let point =
+            SrcPoint::create(sent.max_line(), sent.max_char(), sent).unwrap();
+        if ch.is_ascii_whitespace() && ch != ' ' && ch != '\t'
+        {
+            sent.inc_line();
+        }
+        sent.inc_char();
+
+        println!(
+            "{}  udx:{:<4} ch:{}",
+            fmt_src_point(sent, point),
+            i,
+            format!("{:?}", ch).trim_matches('\'')
+        );
+    }
 }
 
 /// Number of bits required to represent `n`.
 /// Returns 0 for n == 0, otherwise returns 1..=usize::BITS.
-fn bits_required(n: usize) -> u32
+fn bits_required(n: usize) -> usize
 {
-    if n == 0
-    {
-        0
-    }
-    else
-    {
-        // ilog2 panics on 0, so we guarded above.
-        n.ilog2() + 1
-    }
+    // ilog2 panics on 0 so return 0 if zero
+    (if n == 0 { 0 } else { n.ilog2() + 1 }) as usize
 }
+
+use thiserror::Error;
 
 /// Errors that can occur when packing.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum PackError
+#[derive(Error, Debug, Clone, PartialEq, Eq)]
+pub enum PackErr
 {
-    /// The `line` value does not fit in the current right-side bit budget.
+    /// The `line` count does not fit in the current right-side bit budget.
+    #[error("the line count of {line} overflows max bit-width of {bits}")]
     LineOverflow
     {
-        line: usize, allowed_bits: u32
+        line: usize, bits: usize
     },
 
-    /// The `ch` (char/column) value does not fit in the left-side bit budget.
+    /// The `ch` (char/column) count does not fit in the left-side bit budget.
+    #[error("the char/col counter of {ch} overflows max bit-width of {bits}")]
     CharOverflow
     {
-        ch: usize, allowed_bits: u32
+        ch: usize, bits: usize
     },
-}
-
-impl fmt::Display for PackError
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
-    {
-        match self
-        {
-            PackError::LineOverflow { line, allowed_bits } =>
-            {
-                write!(f, "line {} does not fit in {} bits", line, allowed_bits)
-            }
-            PackError::CharOverflow { ch, allowed_bits } =>
-            {
-                write!(f, "char {} does not fit in {} bits", ch, allowed_bits)
-            }
-        }
-    }
 }
 
 /// Sentinel tracks the increment-only counters and exposes the current splitter.
@@ -78,6 +129,18 @@ impl Sentinel
         Self { max_line: 0, max_char: 0 }
     }
 
+    pub fn new_point(&self) -> SrcPoint
+    {
+        // Safety: the sentinel maintains the bit width invariant
+        SrcPoint::create(self.max_line(), self.max_char(), *self).unwrap()
+    }
+
+    pub fn point_at(&self, line: usize, ch: usize)
+    -> Result<SrcPoint, PackErr>
+    {
+        SrcPoint::create(line, ch, *self)
+    }
+
     /// Create a sentinel with an initial line value.
     pub fn with_line(line: usize) -> Self
     {
@@ -95,6 +158,7 @@ impl Sentinel
     /// Set the line counter explicitly (useful for initialization).
     pub fn set_line(&mut self, line: usize)
     {
+        debug_assert!(line >= self.max_line, "strictly non-decreasing");
         self.max_line = line;
     }
 
@@ -125,38 +189,38 @@ impl Sentinel
 
     /// Number of low bits reserved for the line counter.
     /// This is computed from `max_line` (bits_required(max_line)).
-    pub fn right_bits_for_line(&self) -> u32
+    pub fn right_bits_for_line(&self) -> usize
     {
         bits_required(self.max_line)
     }
 
     /// Number of low bits reserved for the char counter (if you wanted to split by char).
-    pub fn right_bits_for_char(&self) -> u32
+    pub fn right_bits_for_char(&self) -> usize
     {
         bits_required(self.max_char)
     }
 
     /// Number of bits available for the left-side value given `right_bits`.
-    fn left_bits_from_right_bits(right_bits: u32) -> u32
+    fn left_bits_from_right_bits(right_bits: usize) -> usize
     {
-        usize::BITS - right_bits
+        usize::BITS as usize - right_bits
     }
 
     /// Convenience: number of left bits available when splitting by line.
-    pub fn left_bits_for_line(&self) -> u32
+    pub fn left_bits_for_line(&self) -> usize
     {
         Self::left_bits_from_right_bits(self.right_bits_for_line())
     }
 
     /// Build the mask for the low `right_bits` bits.
     /// Handles the special case `right_bits == usize::BITS`.
-    fn low_mask(right_bits: u32) -> usize
+    fn low_mask(right_bits: usize) -> usize
     {
         if right_bits == 0
         {
             0usize
         }
-        else if right_bits >= usize::BITS
+        else if right_bits >= usize::BITS as usize
         {
             usize::MAX
         }
@@ -169,15 +233,15 @@ impl Sentinel
 }
 
 /// A packed source point: low bits = line, high bits = char (or column).
-/// Use `pack`/`unpack` with a `&Sentinel` so the same packed value can be interpreted
+/// Use `pack`/`unpack` with a `Sentinel` so the same packed value can be interpreted
 /// correctly as the sentinel's splitter evolves.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct SourcePoint
+pub struct SrcPoint
 {
     packed: usize,
 }
 
-impl SourcePoint
+impl SrcPoint
 {
     // ! Invariant: SourcePoint::new() will not be called with a value that has
     // ! a bit-width larger than the provided Sentinel. As such, the Sentinel
@@ -187,26 +251,20 @@ impl SourcePoint
     /// Pack `line` (low bits) and `ch` (high bits) using the sentinel's current splitter.
     ///
     /// Returns `Err(PackError)` if either value does not fit in the allocated bits.
-    pub fn pack_by_line(
-        line: usize,
-        ch: usize,
-        s: &Sentinel,
-    ) -> Result<Self, PackError>
+    pub fn create(line: usize, ch: usize, s: Sentinel)
+    -> Result<Self, PackErr>
     {
         let right_bits = s.right_bits_for_line();
         let left_bits = Sentinel::left_bits_from_right_bits(right_bits);
 
         // Check fits for line
-        if right_bits < usize::BITS
+        if right_bits < usize::BITS as usize
         {
             let max_line =
                 if right_bits == 0 { 0 } else { (1usize << right_bits) - 1 };
             if line > max_line
             {
-                return Err(PackError::LineOverflow {
-                    line,
-                    allowed_bits: right_bits,
-                });
+                return Err(PackErr::LineOverflow { line, bits: right_bits });
             }
         }
         else
@@ -219,23 +277,17 @@ impl SourcePoint
         {
             if ch != 0
             {
-                return Err(PackError::CharOverflow {
-                    ch,
-                    allowed_bits: left_bits,
-                });
+                return Err(PackErr::CharOverflow { ch, bits: left_bits });
             }
         }
-        else if left_bits < usize::BITS
+        else if left_bits < usize::BITS as usize
         {
             let max_ch = (1usize << left_bits) - 1;
             if ch > max_ch
             {
-                return Err(PackError::CharOverflow {
-                    ch,
-                    allowed_bits: left_bits,
-                });
+                return Err(PackErr::CharOverflow { ch, bits: left_bits });
             }
-        } // else left_bits == usize::BITS -> ch fits
+        } // else left_bits == usize::BITS as usize -> ch fits
 
         // Compose packed: (ch << right_bits) | line
         let packed = if right_bits == 0
@@ -247,18 +299,18 @@ impl SourcePoint
             (ch << right_bits) | (line & Sentinel::low_mask(right_bits))
         };
 
-        Ok(SourcePoint { packed })
+        Ok(SrcPoint { packed })
     }
 
     /// Unpack the line (low bits) using the sentinel's current splitter.
-    pub fn line(&self, s: &Sentinel) -> usize
+    pub fn line(&self, s: Sentinel) -> usize
     {
         let rb = s.right_bits_for_line();
         if rb == 0
         {
             0
         }
-        else if rb >= usize::BITS
+        else if rb >= usize::BITS as usize
         {
             self.packed
         }
@@ -269,10 +321,10 @@ impl SourcePoint
     }
 
     /// Unpack the char (high bits) using the sentinel's current splitter.
-    pub fn ch(&self, s: &Sentinel) -> usize
+    pub fn ch(&self, s: Sentinel) -> usize
     {
         let rb = s.right_bits_for_line();
-        if rb >= usize::BITS { 0 } else { self.packed >> rb }
+        if rb >= usize::BITS as usize { 0 } else { self.packed >> rb }
     }
 
     /// Access the raw packed usize (for storage).
@@ -284,7 +336,7 @@ impl SourcePoint
     /// Reconstruct a SourcePoint from a raw packed usize.
     pub fn from_raw(raw: usize) -> Self
     {
-        SourcePoint { packed: raw }
+        SrcPoint { packed: raw }
     }
 }
 
@@ -310,31 +362,31 @@ mod tests
         let mut s = Sentinel::new();
         // start with line 0 -> right_bits = 0 -> all bits for char
         assert_eq!(s.right_bits_for_line(), 0);
-        let sp = SourcePoint::pack_by_line(0, 0x1234_5678, &s).unwrap();
-        assert_eq!(sp.line(&s), 0);
-        assert_eq!(sp.ch(&s), 0x1234_5678);
+        let sp = SrcPoint::create(0, 0x1234_5678, s).unwrap();
+        assert_eq!(sp.line(s), 0);
+        assert_eq!(sp.ch(s), 0x1234_5678);
 
         // increment line to 1 -> right_bits = 1
         s.inc_line(); // max_line = 1
         assert_eq!(s.right_bits_for_line(), 1);
 
         // pack a small line and small char
-        let sp2 = SourcePoint::pack_by_line(1, 3, &s).unwrap();
-        assert_eq!(sp2.line(&s), 1);
-        assert_eq!(sp2.ch(&s), 3);
+        let sp2 = SrcPoint::create(1, 3, s).unwrap();
+        assert_eq!(sp2.line(s), 1);
+        assert_eq!(sp2.ch(s), 3);
 
         // if line grows, right_bits increases and left capacity shrinks
         s.set_line(1023); // needs 10 bits
         assert_eq!(s.right_bits_for_line(), 10);
         let left_bits = s.left_bits_for_line();
-        assert!(left_bits <= usize::BITS);
+        assert!(left_bits <= usize::BITS as usize);
 
         // char must fit in left_bits
         let max_ch = if left_bits == 0
         {
             0
         }
-        else if left_bits >= usize::BITS
+        else if left_bits >= usize::BITS as usize
         {
             usize::MAX
         }
@@ -344,15 +396,15 @@ mod tests
         };
 
         // packing a char that fits should succeed
-        let sp3 = SourcePoint::pack_by_line(512, max_ch, &s).unwrap();
-        assert_eq!(sp3.line(&s), 512);
-        assert_eq!(sp3.ch(&s), max_ch);
+        let sp3 = SrcPoint::create(512, max_ch, s).unwrap();
+        assert_eq!(sp3.line(s), 512);
+        assert_eq!(sp3.ch(s), max_ch);
 
         // packing a char that doesn't fit should error
-        if left_bits > 0 && left_bits < usize::BITS
+        if left_bits > 0 && left_bits < usize::BITS as usize
         {
             let too_big = max_ch.wrapping_add(1);
-            assert!(SourcePoint::pack_by_line(1, too_big, &s).is_err());
+            assert!(SrcPoint::create(1, too_big, s).is_err());
         }
     }
 }

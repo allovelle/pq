@@ -102,3 +102,36 @@ pub const fn utf8_char_on(buffer: &[u8], udx: usize) -> Option<char>
 
     None
 }
+
+/// Iterator for allowing looping over a string by char.
+#[derive(Debug)]
+pub struct Utf8Iter<'a>
+{
+    bytes: &'a [u8],
+    pos: usize,
+}
+
+impl<'a> Utf8Iter<'a>
+{
+    pub fn new(bytes: &'a [u8]) -> Self
+    {
+        Self { bytes, pos: 0 }
+    }
+}
+
+impl<'a> Iterator for Utf8Iter<'a>
+{
+    type Item = char;
+
+    fn next(&mut self) -> Option<Self::Item>
+    {
+        let codepoint = utf8_char_on(self.bytes, self.pos)?;
+        self.pos += codepoint.len_utf8();
+        Some(codepoint)
+    }
+}
+
+pub fn utf8_iter_chars<'buf>(txt: &'buf str) -> Utf8Iter<'buf>
+{
+    Utf8Iter::new(txt.as_bytes())
+}
