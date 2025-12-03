@@ -97,6 +97,7 @@ Referent Commands & Relative Commands:
     or data mapping operations. relative commands perform tree-traversals over
     the selected/filtered/computed resulting tree. referent commands are like
     actual commands and relative commands are like meta commands.
+    Ref queries do not support
 
 Referent Queries:
     a a.b                                   ref sel
@@ -107,8 +108,8 @@ Referent Queries:
         Expr map
     [0] [0:] [0::]                          ref sel
         Expr select index
-    [0, 8]                                  ref sel
-        Expr build array
+    [3, 1, 2:4, 6::8]                       ref sel
+        Index build array: does not support key lookup
     [len(temperatures) // 2 + 1:]           ref cmp
         Expr build array. This is both a compute and select query.
         The built elements came from the parent, even if computed.
