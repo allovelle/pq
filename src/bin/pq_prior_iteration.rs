@@ -15,11 +15,11 @@ fn main()
 #[cfg(all(feature = "query-engine-pyo3", feature = "query-parser-rustpython"))]
 mod prior_pq
 {
-
     use pyo3::prelude::*;
     use pyo3::types::IntoPyDict;
     use regex::Regex;
     use rustpython_parser::{Parse, ast};
+    use thiserror::Error;
 
     type ConsumedChars = usize;
 
@@ -35,25 +35,20 @@ Example: echo '{"name":"allovelle"}' | pq 'name.(_.upper())'
     const YELLOW: &str = "\x1b[33m";
     const RESET: &str = "\x1b[0m";
 
-    #[derive(Debug)]
+    #[derive(Debug, Error)]
+    #[error("Pique Error")]
     pub enum PqError
     {
-        Json(serde_json::Error),
+        #[error(transparent)]
+        Io(#[from] std::io::Error),
+        #[error(transparent)]
+        Json(#[from] serde_json::Error),
         Query,
-        Python(pyo3::PyErr),
+        #[error(transparent)]
+        Python(#[from] pyo3::PyErr),
+        #[error(transparent)]
+        ParseIntErr(#[from] std::num::ParseIntError),
     }
-
-    #[rustfmt::skip]
-impl From<serde_json::Error> for PqError
-{
-    fn from(value: serde_json::Error) -> Self { Self::Json(value) }
-}
-
-    #[rustfmt::skip]
-impl From<PyErr> for PqError
-{
-    fn from(value: PyErr) -> Self { Self::Python(value) }
-}
 
     pub fn feature_main() -> Result<(), PqError>
     {
@@ -69,7 +64,11 @@ impl From<PyErr> for PqError
             {
                 let queries = parse_queries(&query).or(Err(PqError::Query))?;
                 println!("{GREEN} Queries: {queries:?}{RESET}");
-                process_queries(json, queries)?;
+
+                if let Err(err) = process_queries(json, queries)
+                {
+                    println!("ERROR: {err:?}");
+                }
             }
             _ => println!("{}", USAGE.trim()),
         }
@@ -580,7 +579,7 @@ enum BuildObjectQuery
                                             _ => return Err(PqError::Query),
                                         }
                                     }
-                                    Query::Expression { query: _key } =>
+                                    Query::Expression { query } =>
                                     {
                                         // TODO(alvl): Run both the key & value Python queries
                                         {
@@ -644,6 +643,7 @@ enum BuildObjectQuery
         }
 
         println!("{} <-- FINAL UPDATE", json_state);
+        println!("\n\n{}", serde_json::to_string_pretty(&json_state)?);
 
         Ok(())
     }
