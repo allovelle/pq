@@ -628,10 +628,68 @@ enum BuildObjectQuery
                                 Some(&locals),
                             ));
 
-                        let result = result?;
-                        let str_expr: String = result.extract()?;
+                        match result
+                        {
+                            Ok(json) =>
+                            {
+                                let str_expr: String = json.extract()?;
+                                json_state = serde_json::from_str(&str_expr)?;
+                            }
+                            Err(err) =>
+                            {
+                                use ariadne::*;
 
-                        json_state = serde_json::from_str(&str_expr)?;
+                                let mut colors = ColorGenerator::new();
+                                let a = colors.next();
+                                let b = colors.next();
+                                let out = Color::Fixed(81);
+
+                                let mut report = Report::build(
+                                    ReportKind::Error,
+                                    ("_._", 0 .. 0),
+                                );
+
+                                report = report.with_code(200123);
+                                report = report.with_message(format!(
+                                    "What are you {}?",
+                                    "doing".fg(b)
+                                ));
+                                report = report.with_config(
+                                    Config::default().with_compact(false),
+                                );
+                                report = report.with_label(
+                                    Label::new(("_._", 0 .. 3))
+                                        .with_message(format!(
+                                            "This is of type {}",
+                                            "Nat".fg(a)
+                                        ))
+                                        .with_color(a),
+                                );
+                                report = report.with_label(
+                                    Label::new(("_._", 8 .. 10))
+                                        .with_color(Color::Green)
+                                        .with_message("A"),
+                                );
+                                report = report.with_label(
+                                    Label::new(("_._", 13 .. 15))
+                                        .with_color(Color::Green)
+                                        .with_message("B"),
+                                );
+                                report = report.with_label(
+                                    Label::new(("_._", 19 .. 21))
+                                        .with_color(Color::Green)
+                                        .with_message("C"),
+                                );
+                                report = report
+                                    .with_note("There is probably something");
+
+                                let err_report = report.finish();
+                                let source = Source::from(
+                                    "add: op.u8(a.u8, b.u8) { a + b }",
+                                );
+                                err_report.print(("_._", source))?;
+                            }
+                        }
 
                         Ok(())
                     })?
