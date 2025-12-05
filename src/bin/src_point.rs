@@ -1,6 +1,20 @@
+//! Txt
+//!     ByteUdx
+//!     CharUdx
+//! Src
+//!     PathUdx
+//! SrcPoint
+//!     Line | Char union
+//! SrcLoc - relative to
+//!     PointFrom
+//!     PointTo
+//!
+//! Logical Line, Logical Char
+//! Byte Offset Line, Byte Offset Char
+
 #![allow(dead_code)]
 
-use std::fmt;
+use thiserror::Error;
 
 fn main()
 {
@@ -79,6 +93,13 @@ fn main()
     }
 }
 
+// TODO: A type that stores logical line/char offset info supporting to & from
+struct SourceLocation
+{
+    from: SrcPoint,
+    to: SrcPoint,
+}
+
 /// Number of bits required to represent `n`.
 /// Returns 0 for n == 0, otherwise returns 1..=usize::BITS.
 fn bits_required(n: usize) -> usize
@@ -86,8 +107,6 @@ fn bits_required(n: usize) -> usize
     // ilog2 panics on 0 so return 0 if zero
     (if n == 0 { 0 } else { n.ilog2() + 1 }) as usize
 }
-
-use thiserror::Error;
 
 /// Errors that can occur when packing.
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
@@ -110,6 +129,12 @@ pub enum PackErr
 
 /// Sentinel tracks the increment-only counters and exposes the current splitter.
 /// By default the splitter is derived from `max_line` (the external increment-only counter).
+/// The intuition is: if there are usize::MAX lines in a file, it will have
+/// filled up all available VRAM, leaving no room for characters. If there are
+/// usize::MAX characters in a file, it will have filled all available VRAM and
+/// would leave no room for lines. Therefore, these are proportionate to each
+/// other and that's why shifting the midpoint in a strictly non-decreasing way
+/// will result in readable line & char values from the same backing store.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Sentinel
 {
@@ -338,6 +363,17 @@ impl SrcPoint
     {
         SrcPoint { packed: raw }
     }
+}
+
+/// Creates a mask to shift off all bits after the provided value's bit width.
+/// For 255usize, there are 8 bits required, so the mask would be:
+/// 11111111_11111111_11111111_00000000
+#[inline]
+fn _mask_for(value: usize) -> usize
+{
+    // let bits = bits_required(value);
+    // if bits == 0 { 0 } else { (1usize << bits) - 1 }
+    (1usize << bits_required(value)) - 1
 }
 
 #[cfg(test)]

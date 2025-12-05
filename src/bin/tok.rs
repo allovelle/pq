@@ -31,233 +31,6 @@ use std::{default, fmt};
 use thiserror::Error;
 use {Accept::*, Act::*, State::*};
 
-// !
-// !
-// !
-/*
-Am I right in assuming that as the line_bits is incremented (where is it
-happening?) that it modifies the meaning of all prior srcpoints but that is ok
-since it is append only and moving the midpoint only changes the meaning for
-the next character offsets. If there really are more lines than chars, the char
-space will be smaller.
-*/
-mod v1
-{
-    // TODO: this approach is incorrect
-
-    #[derive(Debug, Clone, Copy)]
-    struct Sentinel
-    {
-        /// Number of bits used for the line offset (0..64)
-        line_bits: u8,
-    }
-
-    impl Sentinel
-    {
-        #[inline]
-        fn line_bits(&self) -> u8
-        {
-            self.line_bits
-        }
-
-        #[inline]
-        fn char_bits(&self) -> u8
-        {
-            usize::BITS as u8 - self.line_bits
-        }
-
-        #[inline]
-        fn line_mask(&self) -> usize
-        {
-            ((1 << self.line_bits()) - 1) << self.char_bits()
-        }
-
-        #[inline]
-        fn char_mask(&self) -> usize
-        {
-            (1 << self.char_bits()) - 1
-        }
-    }
-
-    /// Packed line + char offset
-    #[derive(Debug, Clone, Copy)]
-    struct SrcPoint
-    {
-        bits: usize,
-    }
-
-    impl SrcPoint
-    {
-        /// Construct from separate line and char
-        #[inline]
-        pub fn new(line: usize, char: usize, sentinel: Sentinel) -> Self
-        {
-            let line_part = (line & ((1 << sentinel.line_bits()) - 1))
-                << sentinel.char_bits();
-            let char_part = char & sentinel.char_mask();
-            Self { bits: line_part | char_part }
-        }
-
-        #[inline]
-        pub fn line(&self, sentinel: Sentinel) -> usize
-        {
-            (self.bits & sentinel.line_mask()) >> sentinel.char_bits()
-        }
-
-        #[inline]
-        pub fn char(&self, sentinel: Sentinel) -> usize
-        {
-            self.bits & sentinel.char_mask()
-        }
-    }
-}
-
-/*
-Keep an auto-inc line count.
-This moves the needle on how many bits the line/char union can use
-
-
-Logical Line, Logical Char
-Physical Line, Offset Char
-
-64
-1024
-*/
-mod v2
-{}
-
-// !
-// !
-// !
-
-struct SrcPoint
-{
-    // ! Either one of these can be usize (all of RAM), but not both:
-    // ! Whole file can be all one line (char) or all lines (line)
-    line: usize,
-    char: usize,
-}
-
-struct SourceLocation
-{
-    from: SrcPoint,
-    to: SrcPoint,
-}
-
-struct _Sentinel
-{
-    /// Counts the source offset up to 64 bits
-    /// Offset = 3 means 3 bits for line offset and 61 bits for character offset
-    lines: usize,
-    chars: usize,
-}
-
-impl _Sentinel
-{
-    fn offset(&self) -> usize
-    {
-        0
-    }
-}
-
-union SrcPointUnion
-{
-    line: usize,
-    char: usize,
-}
-
-impl SrcPointUnion
-{
-    #[inline]
-    #[must_use]
-    pub fn line(self, sentinel: _Sentinel) -> usize
-    {
-        unsafe { self.line & sentinel.offset() as usize }
-    }
-
-    #[inline]
-    #[must_use]
-    pub fn char(self, sentinel: _Sentinel) -> usize
-    {
-        unsafe { self.line & sentinel.offset() as usize }
-    }
-}
-
-#[inline]
-#[must_use]
-/// How many bits the given value can reside within without losing data.
-/// ```rust
-/// bits_required(0)      // 0
-/// bits_required(1)      // 1
-/// bits_required(2)      // 2
-/// bits_required(3)      // 2
-/// bits_required(255)    // 8
-/// bits_required(256)    // 9
-/// ```
-fn bits_required(value: usize) -> usize
-{
-    // TODO: Could also use value.ilog2() + 1 (except for 0 perhaps?)
-    (usize::BITS - value.leading_zeros()) as usize
-}
-
-/// Creates a mask to shift off all bits after the provided value's bit width.
-/// For 255usize, there are 8 bits required, so the mask would be:
-/// 11111111_11111111_11111111_00000000
-fn mask_for(value: usize) -> usize
-{
-    // let bits = bits_required(value);
-    // if bits == 0 { 0 } else { (1usize << bits) - 1 }
-    (1usize << bits_required(value)) - 1
-}
-
-// TODO: Store lines as little endian and chars as big endian
-/*
-WOWOWOW TYSM
-
-So I'm thinking of using this as the base for a source logical line & logical
-char counter to be stored in many places in my project so tokens, CSTs, ASTs,
-and IR will use these tokens (there will be many of them). So I wonder, when
-parsing the file, the file/line number increases and should be used to compute
-the split between these 2 numbers. Can you make a data structure in which a
-.inc_line() or .inc_char() can be called on a Sentinel type that tracks the
-divider/splitter and allows `SourcePoint`'s to be looked up using the splitter
-value, OR the source points can accept a Sentinel type in the .line() or .char()
-methods they implement?
-*/
-#[derive(Debug, Default, Clone, Copy)]
-pub struct SourcePoint(pub usize);
-pub struct Sentinel(pub usize);
-impl SourcePoint
-{
-    pub fn new() -> Self
-    {
-        Self::default()
-    }
-
-    pub fn line(Sentinel(sentinel): Sentinel) -> usize
-    {
-        sentinel.to_le();
-        // TODO: Read Little Endian
-        0
-    }
-
-    pub fn char(Sentinel(sentinel): Sentinel) -> usize
-    {
-        // TODO: Read Big Endian
-        sentinel.to_be();
-        0
-    }
-}
-
-// !
-// !
-// !
-// !
-// !
-// !
-// !
-// !
-
 /// A macro for early returns based on a condition.
 ///
 /// # Examples
@@ -329,6 +102,27 @@ pub enum LexErr
 
     #[error("unexpected boolean `{0}`")]
     InvalidBoolean(String),
+}
+
+/// **Format ASCII & multi-byte codepoints as either their escape-code format
+/// `\u{AB12}` or their Unicode codepoint `U+AB12`.**
+trait CodepointView
+{
+    fn fmt_escape(self) -> String;
+    fn fmt_unicode(self) -> String;
+}
+
+impl CodepointView for char
+{
+    fn fmt_escape(self) -> String
+    {
+        format!("\\u{:04X}", self as u32)
+    }
+
+    fn fmt_unicode(self) -> String
+    {
+        format!("U+{:04X}", self as u32)
+    }
 }
 
 /// Exists because [RangeInclusive<char>] is not [Copy].
@@ -409,13 +203,44 @@ mod impl_char_range_inclusive
                     f.write_fmt(format_args!("{:^8}", "--"))
                 );
 
-                let from = format!("{:?}", self.from);
-                let onto = format!("{:?}", self.onto);
-                f.write_fmt(format_args!(
-                    "{:>2} .. {:>2}",
-                    from.trim_matches('\''),
-                    onto.trim_matches('\'')
-                ))
+                let spaces_lookup_table = HashMap::from([
+                    ('\n', "\\n"),
+                    ('\t', "\\t"),
+                    ('\r', "\\r"),
+                    (' ', "\\_"),
+                ]);
+
+                let from = if spaces_lookup_table.contains_key(&self.from)
+                {
+                    String::from(spaces_lookup_table[&self.from])
+                }
+                else if self.from.is_whitespace() || !self.from.is_ascii()
+                {
+                    format!("{:?}", self.from.fmt_unicode())
+                }
+                else
+                {
+                    format!("{:?}", self.from.to_string())
+                };
+
+                let from = from.trim_matches('"').trim_matches('\'');
+
+                let onto = if spaces_lookup_table.contains_key(&self.onto)
+                {
+                    String::from(spaces_lookup_table[&self.onto])
+                }
+                else if self.onto.is_whitespace() || !self.onto.is_ascii()
+                {
+                    format!("{:?}", self.onto.fmt_unicode())
+                }
+                else
+                {
+                    format!("{:?}", self.onto.to_string())
+                };
+
+                let onto = onto.trim_matches('"').trim_matches('\'');
+
+                f.write_fmt(format_args!("{:>2} .. {:>2}", from, onto))
             }
         }
     }

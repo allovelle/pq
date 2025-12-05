@@ -208,3 +208,9 @@ Json Outputing Rules
         rule: space before `{` and `}`
         rule: fit [...] on one line if sum is less than terminal width
         rule: fit {...} on one line if sum is less than terminal width
+
+pq-python:
+    solve the json.keys() error by making a custom serializer for types that should work but don't: DictKeys(), Set(), etc.
+
+Run all pique queries at the same time:
+    Because the filter is row based, you can just increment the ID and then only re-compute the stuff that comes after for incremental querying
