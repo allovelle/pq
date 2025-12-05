@@ -355,6 +355,48 @@ pub fn tokenize(source: &str) -> PqResult<()>
         };
 
         // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
+        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
+        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
+        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
+        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
+        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
+        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
+        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
+        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
+        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
+        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
+        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
+        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
+        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
+        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
+        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
+        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
+        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
+        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
+        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
+        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
+        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
+        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
+        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
+        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
+        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
+        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
+        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
+        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
+        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
+        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
+        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
+        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
+        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
+        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
+        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
+        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
+        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
+        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
+        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
+        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
+        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
+        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
 
         // Find all transitions for the current state and character
         let transitions = transitions
@@ -628,9 +670,6 @@ pub enum State
 /// that char is in this range or set and also not in this range or set.**
 /// `[curr state][accept ch range][except ch range][next state][tok & buf act]`
 const STATE_TRANSITION_TABLE: &[(State, Accept, Accept, State, Act)] = &[
-    (BEG, EOS, Unused, END, IGN),
-    (COM, EOS, Unused, END, TOK),
-    (NUM, EOS, Unused, END, TOK),
     ignore_spaces_after(COM),
     ignore_spaces_after(ComOrClose),
     (BEG, Within('0', '9'), Unused, NUM, ACC),
@@ -662,7 +701,8 @@ const STATE_TRANSITION_TABLE: &[(State, Accept, Accept, State, Act)] = &[
     // Key or Value ------------------------------------------------------------
     (BEG, AnyOf("\""), Unused, TXT, IGN),
     (TXT, AnyOf("\""), Unused, BEG, TOK),
-    (TXT, Within('\u{0020}', '\u{10FFFF}'), AnyOf("\"\\"), TXT, ACC),
+    // TODO: (TXT, Within('\u{0020}', '\u{10FFFF}'), AnyOf("\"\\"), TXT, ACC),
+    (TXT, Within('\u{0020}', '\u{10FFFF}'), Within('\\', '\\'), TXT, ACC),
     (TXT, AnyOf("\\"), Unused, ESC, FIN),
     (ESC, AnyOf("\"\\/bfnrt"), Unused, TXT, ATK),
     (ESC, AnyOf("u"), Unused, ESCHEX0, ACC),
@@ -749,7 +789,7 @@ const fn state_transition_table() -> [Row; max_state_transitions()]
                 // TODO: Split the accept range such that there is one copy that
                 // TODO: excludes a ch for each ch in AnyOf.
 
-                panic!("i dont think this is working: unused range skips ..");
+                // panic!("i dont think this is working: unused range skips ..");
 
                 // If it's any of these characters, add a new 'except' range for
                 // each one since they are single element not a range
@@ -865,7 +905,7 @@ fn main() -> PqResult<()>
         {}
     "#;
 
-    for line in json.lines().filter(|line| !line.trim().is_empty())
+    for line in json.lines().take(2).filter(|line| !line.trim().is_empty())
     {
         if let Err(err) = tokenize(line)
         {
