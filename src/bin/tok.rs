@@ -208,8 +208,10 @@ mod impl_char_range_inclusive
                     ('\t', "\\t"),
                     ('\r', "\\r"),
                     (' ', "\\_"),
+                    ('\'', "\\'"),
                 ]);
 
+                // ! {{
                 let from = if spaces_lookup_table.contains_key(&self.from)
                 {
                     String::from(spaces_lookup_table[&self.from])
@@ -224,7 +226,9 @@ mod impl_char_range_inclusive
                 };
 
                 let from = from.trim_matches('"').trim_matches('\'');
+                // ! }}
 
+                // ! {{
                 let onto = if spaces_lookup_table.contains_key(&self.onto)
                 {
                     String::from(spaces_lookup_table[&self.onto])
@@ -239,6 +243,17 @@ mod impl_char_range_inclusive
                 };
 
                 let onto = onto.trim_matches('"').trim_matches('\'');
+                // ! }}
+
+                match self.onto
+                {
+                    ch if spaces_lookup_table.contains_key(&ch) =>
+                    {}
+                    ch if !self.onto.is_ascii_whitespace()
+                        || !self.onto.is_ascii() =>
+                    {}
+                    _ => (),
+                }
 
                 f.write_fmt(format_args!("{:>2} .. {:>2}", from, onto))
             }
@@ -734,7 +749,7 @@ const fn state_transition_table() -> [Row; max_state_transitions()]
                 // TODO: Split the accept range such that there is one copy that
                 // TODO: excludes a ch for each ch in AnyOf.
 
-                // panic!("i dont think this is working: unused range skips ..");
+                panic!("i dont think this is working: unused range skips ..");
 
                 // If it's any of these characters, add a new 'except' range for
                 // each one since they are single element not a range
