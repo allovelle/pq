@@ -23,7 +23,7 @@
 // ! The goal is to not need serde_json for input or output
 // ! The goal is to not need serde_json for input or output
 
-use crossterm::style::Stylize;
+use crossterm::style::{PrintStyledContent, Stylize};
 use pq::txt::utf8_char_on;
 use std::collections::HashMap;
 use std::fmt;
@@ -35,6 +35,52 @@ use {Accept::*, Act::*, State::*};
 fn longest_variant_name<E: VariantNames>() -> usize
 {
     E::VARIANTS.iter().map(Deref::deref).map(str::len).max().unwrap_or_default()
+}
+
+trait EmitTable {}
+trait EmitColumn
+{
+    fn as_column() -> String;
+}
+
+impl<T: fmt::Debug> ToDebug for T {}
+trait ToDebug: fmt::Debug
+{
+    /// Equivalent to `format!("{:?}", thing);`
+    fn to_debug(&self) -> String
+    {
+        format!("{self:?}")
+    }
+
+    /// Equivalent to `format!("{:#?}", thing);`
+    fn to_long_debug(&self) -> String
+    {
+        format!("{self:#?}")
+    }
+
+    /// A debug view of a debug view (includes the outer quotes)
+    fn to_debug_literal(&self) -> String
+    {
+        format!("{}", self.to_debug())
+    }
+
+    /// Standard format does not allow for width & alignment formatting.
+    fn to_debug_left(&self, space: usize) -> String
+    {
+        format!("{:<space$}", format!("{self:?}"))
+    }
+
+    /// Standard format does not allow for width & alignment formatting.
+    fn to_debug_right(&self, space: usize) -> String
+    {
+        format!("{:>space$}", format!("{self:?}"))
+    }
+
+    /// Standard format does not allow for width & alignment formatting.
+    fn to_debug_center(&self, space: usize) -> String
+    {
+        format!("{:^space$}", format!("{self:?}"))
+    }
 }
 
 /// A macro for early returns based on a condition.
@@ -340,14 +386,26 @@ pub fn tokenize(source: &str) -> PqResult<()>
     let mut buf = String::with_capacity(32);
     let mut toks: Vec<Tok> = Vec::with_capacity(source.len());
 
-    // TODO: Fix the widths :D
-    const W1: usize = 8;
-    const W2: usize = 5;
-    const W3: usize = 9;
+    let generated_table = state_transition_table();
+    let w_state = longest_variant_name::<State>();
+    let w_tok_act = longest_variant_name::<Act>();
+    let w_ch = format!("{:?}", '\u{10FFFF}').len();
+    let w_accept = {
+        transitions
+            .iter()
+            .map(|s| {
+                let len_acc = format!("{:?}", s.accept).len();
+                let len_exc = format!("{:?}", s.except).len();
+                len_acc.max(len_exc)
+            })
+            .max()
+            .unwrap_or_default()
+    };
+    let w_buf = 8;
 
     let header = format!(
-        "{:W1$}{:W1$}{:W1$}{:W1$}{:W3$}{:W2$}",
-        "From", "Char", "To", "Then", "Pre Buf", "End Buf"
+        "{:<w_state$} {:<w_ch$} {:<w_state$} {:<w_tok_act$} {:<w_buf$} {:<w_buf$}",
+        "State", "Char", "Next", "Act", "PreBuf", "EndBuf"
     );
     println!("\n\n\n{}", header.underlined());
 
@@ -365,44 +423,23 @@ pub fn tokenize(source: &str) -> PqResult<()>
         // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
         // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
         // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
-        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
-        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
-        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
-        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
-        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
-        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
-        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
-        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
-        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
-        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
-        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
-        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
-        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
-        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
-        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
-        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
-        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
-        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
-        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
-        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
-        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
-        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
-        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
-        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
-        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
-        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
-        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
-        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
-        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
-        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
-        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
-        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
-        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
-        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
-        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
-        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
-        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
-        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
+
+        // ! THIS WONT WORK UNTIL I GO X * Y ON THE ACCEPT & EXCEPT FOR ANYOF()
+        // ! THIS WONT WORK UNTIL I GO X * Y ON THE ACCEPT & EXCEPT FOR ANYOF()
+        // ! THIS WONT WORK UNTIL I GO X * Y ON THE ACCEPT & EXCEPT FOR ANYOF()
+        // ! THIS WONT WORK UNTIL I GO X * Y ON THE ACCEPT & EXCEPT FOR ANYOF()
+        // ! THIS WONT WORK UNTIL I GO X * Y ON THE ACCEPT & EXCEPT FOR ANYOF()
+        // ! THIS WONT WORK UNTIL I GO X * Y ON THE ACCEPT & EXCEPT FOR ANYOF()
+        // ! THIS WONT WORK UNTIL I GO X * Y ON THE ACCEPT & EXCEPT FOR ANYOF()
+        // ! THIS WONT WORK UNTIL I GO X * Y ON THE ACCEPT & EXCEPT FOR ANYOF()
+        // ! THIS WONT WORK UNTIL I GO X * Y ON THE ACCEPT & EXCEPT FOR ANYOF()
+        // ! THIS WONT WORK UNTIL I GO X * Y ON THE ACCEPT & EXCEPT FOR ANYOF()
+        // ! THIS WONT WORK UNTIL I GO X * Y ON THE ACCEPT & EXCEPT FOR ANYOF()
+        // ! THIS WONT WORK UNTIL I GO X * Y ON THE ACCEPT & EXCEPT FOR ANYOF()
+        // ! THIS WONT WORK UNTIL I GO X * Y ON THE ACCEPT & EXCEPT FOR ANYOF()
+        // ! THIS WONT WORK UNTIL I GO X * Y ON THE ACCEPT & EXCEPT FOR ANYOF()
+        // ! THIS WONT WORK UNTIL I GO X * Y ON THE ACCEPT & EXCEPT FOR ANYOF()
+        // ! THIS WONT WORK UNTIL I GO X * Y ON THE ACCEPT & EXCEPT FOR ANYOF()
 
         // Find all transitions for the current state and character
         let transitions = transitions
@@ -413,6 +450,7 @@ pub fn tokenize(source: &str) -> PqResult<()>
         {
             if t.except.contains(ch)
             {
+                println!("{}", "WHATWHATWHAT".dark_red());
                 return Err(LexErr::InvalidStateTransition(curr, ch).into());
             }
         }
@@ -420,19 +458,19 @@ pub fn tokenize(source: &str) -> PqResult<()>
         if !(row.from == row.onto && row.act == IGN)
         {
             println!(
-                "{:W1$}{:W1$}{:W1$}{:W1$}{:W3$}{:W2$}",
-                format!("{curr:?}"),
-                format!("{ch:?}"),
-                format!("{:?}", row.onto),
-                format!("{:?}", row.act),
-                format!("{:?}", &buf),
-                format!("{:?}   ", match row.act
+                "{from:<w_state$} {char:<w_ch$} {next:<w_state$} {act:<w_tok_act$} {prebuf:<w_buf$}{postbuf:w_buf$}",
+                from = format!("{:?}", curr),
+                char = format!("{:?}", ch),
+                next = format!("{:?}", row.onto),
+                act = format!("{:?}", row.act),
+                prebuf = format!("{:?}", buf),
+                postbuf = format!("{:?}   ", match row.act
                 {
                     FIN => ch.to_string(),
                     TOK | ATK => String::new(),
                     ACC => format!("{buf}{ch}"),
                     IGN => buf.clone(),
-                }),
+                })
             );
         }
 
@@ -871,18 +909,8 @@ const fn state_transition_table() -> [Row; max_state_transitions()]
 
 fn emit_table(table: &[Row])
 {
-    const W0: usize = 15;
-    const W1: usize = 15;
-    const W2: usize = 10;
-
-    // \u{10ffff} .. \u{10ffff}
-
     let state = longest_variant_name::<State>();
     let tok_act = longest_variant_name::<Act>();
-
-    // let accept = longest_variant_name::<Accept>();
-    let longest_accept_possible =
-        format!("{:?}", Within('\u{10FFFF}', '\u{10FFFF}')).len();
     let accept = {
         table
             .iter()
@@ -895,9 +923,6 @@ fn emit_table(table: &[Row])
             .max()
             .unwrap_or_default()
     };
-    let within = "U+10FFFF .. U+10FFFF".len();
-
-    // "| {:W2$} | {:W0$} | {:W1$} | {:W2$} | {:W2$} |",
     println!(
         "| {:<state$} | {:^accept$} | {:^accept$} | {:<state$} | {:<tok_act$} |",
         "From", "Accept", "Except", "Onto", "Action",
