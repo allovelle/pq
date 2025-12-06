@@ -879,21 +879,34 @@ fn emit_table(table: &[Row])
 
     let state = longest_variant_name::<State>();
     let tok_act = longest_variant_name::<Act>();
-    let accept = longest_variant_name::<Accept>();
 
-    let within = "\\u{{10FFFF}} .. \\u{{10FFFF}}".len();
+    // let accept = longest_variant_name::<Accept>();
+    let longest_accept_possible =
+        format!("{:?}", Within('\u{10FFFF}', '\u{10FFFF}')).len();
+    let accept = {
+        table
+            .iter()
+            .map(|s| {
+                // Within('\u{10FFFF}', '\u{10FFFF}');
+                let len_acc = format!("{:?}", s.accept).len();
+                let len_exc = format!("{:?}", s.except).len();
+                len_acc.max(len_exc)
+            })
+            .max()
+            .unwrap_or_default()
+    };
     let within = "U+10FFFF .. U+10FFFF".len();
 
     // "| {:W2$} | {:W0$} | {:W1$} | {:W2$} | {:W2$} |",
     println!(
-        "| {:<state$} | {:^within$} | {:^within$} | {:<state$} | {:<tok_act$} |",
+        "| {:<state$} | {:^accept$} | {:^accept$} | {:<state$} | {:<tok_act$} |",
         "From", "Accept", "Except", "Onto", "Action",
     );
 
     for row in table
     {
         println!(
-            "| {fro:<state$} | {acc:^within$} | {exc:^within$} | {to:<state$} | {act:<tok_act$} |",
+            "| {fro:<state$} | {acc:^accept$} | {exc:^accept$} | {to:<state$} | {act:<tok_act$} |",
             fro = format!("{:?}", row.from),
             acc = format!("{:?}", row.accept),
             exc = format!("{:?}", row.except),
