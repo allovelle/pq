@@ -24,10 +24,10 @@
 // ! The goal is to not need serde_json for input or output
 
 use crossterm::style::{PrintStyledContent, Stylize};
-use pq::txt::utf8_char_on;
-use std::collections::HashMap;
-use std::fmt;
+use pq::txt::{self, utf8_char_on};
+use std::collections::{HashMap, HashSet};
 use std::ops::{Deref, RangeInclusive};
+use std::{fmt, hash};
 use strum::*;
 use thiserror::Error;
 use {Accept::*, Act::*, State::*};
@@ -61,7 +61,7 @@ trait ToDebug: fmt::Debug
     /// A debug view of a debug view (includes the outer quotes)
     fn to_debug_literal(&self) -> String
     {
-        format!("{}", self.to_debug())
+        format!("{:?}", format!("{}", self.to_debug()))
     }
 
     /// Standard format does not allow for width & alignment formatting.
@@ -178,7 +178,7 @@ impl CodepointView for char
 }
 
 /// Exists because [RangeInclusive<char>] is not [Copy].
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialOrd, Eq)]
 struct CharRangeInclusive
 {
     from: char,
@@ -237,6 +237,15 @@ mod impl_char_range_inclusive
         }
     }
 
+    impl hash::Hash for CharRangeInclusive
+    {
+        fn hash<H: hash::Hasher>(&self, state: &mut H)
+        {
+            self.from.hash(state);
+            self.onto.hash(state);
+        }
+    }
+
     impl fmt::Debug for CharRangeInclusive
     {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
@@ -252,7 +261,8 @@ mod impl_char_range_inclusive
             {
                 ret_if!(
                     *self == ('\0' ..= '\0'),
-                    f.write_fmt(format_args!("{:^8}", "--"))
+                    // f.write_fmt(format_args!("{:^8}", "--"))
+                    f.write_fmt(format_args!("{0:>2} .. {0:>2}", "\\0"))
                 );
 
                 let spaces_lookup_table = HashMap::from([
@@ -260,7 +270,9 @@ mod impl_char_range_inclusive
                     ('\t', "\\t"),
                     ('\r', "\\r"),
                     (' ', "\\_"),
-                    ('\'', "\\'"),
+                    ('\'', "`\\'`"),
+                    ('\"', "`\"`"),
+                    ('\0', "\\0"),
                 ]);
 
                 // ! {{
@@ -329,7 +341,7 @@ mod impl_char_range_inclusive
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Hash)]
 struct Row
 {
     /// The state performing an examination for transition determination
@@ -371,7 +383,13 @@ impl Row
     {
         ret_if!(state != self.from, false);
 
-        let allow = self.accept.contains(ch);
+        // TODO: Row state matches and
+        // TODO: Row accept allows OR is unused and
+        // TODO: Row except lacks OR is unused
+
+        let enable_accept = self.accept != ('\0' ..= '\0');
+        let allow = self.accept.contains(ch) && enable_accept;
+
         let enable_except = self.except != ('\0' ..= '\0');
         let deny = self.except.contains(ch) && enable_except;
 
@@ -386,21 +404,9 @@ pub fn tokenize(source: &str) -> PqResult<()>
     let mut buf = String::with_capacity(32);
     let mut toks: Vec<Tok> = Vec::with_capacity(source.len());
 
-    let generated_table = state_transition_table();
     let w_state = longest_variant_name::<State>();
     let w_tok_act = longest_variant_name::<Act>();
     let w_ch = format!("{:?}", '\u{10FFFF}').len();
-    let w_accept = {
-        transitions
-            .iter()
-            .map(|s| {
-                let len_acc = format!("{:?}", s.accept).len();
-                let len_exc = format!("{:?}", s.except).len();
-                len_acc.max(len_exc)
-            })
-            .max()
-            .unwrap_or_default()
-    };
     let w_buf = 8;
 
     let header = format!(
@@ -409,14 +415,19 @@ pub fn tokenize(source: &str) -> PqResult<()>
     );
     println!("\n\n\n{}", header.underlined());
 
+    let mut dbg_used_transitions: HashSet<Row> =
+        HashSet::with_capacity(max_state_transitions());
+    let dbg_expect_transitions: HashSet<Row> =
+        HashSet::from_iter(state_transition_table());
+
     for ch in source.chars().chain("\0".chars())
     {
-        // Find the transition for the current state and character
-        let row = match transitions.iter().find(|row| row.matches(curr, ch))
-        {
-            Some(row) => row,
-            None => return Err(LexErr::InvalidStateTransition(curr, ch).into()),
-        };
+        // ? Find the transition for the current state and character
+        // let row = match transitions.iter().find(|row| row.matches(curr, ch))
+        // {
+        //     Some(row) => row,
+        //     None => return Err(LexErr::InvalidStateTransition(curr, ch).into()),
+        // };
 
         // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
         // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
@@ -442,29 +453,37 @@ pub fn tokenize(source: &str) -> PqResult<()>
         // ! THIS WONT WORK UNTIL I GO X * Y ON THE ACCEPT & EXCEPT FOR ANYOF()
 
         // Find all transitions for the current state and character
-        let transitions = transitions
-            .iter()
-            .filter(|row| row.from == curr && row.accept.contains(ch));
+        // let transitions = transitions
+        //     .iter()
+        //     .filter(|row| row.from == curr && row.accept.contains(ch));
+        let matches =
+            transitions.iter().filter(|row| Row::matches(row, curr, ch));
 
-        for t in transitions
+        let mut row_match = Row::zero();
+        for transition in matches
         {
-            if t.except.contains(ch)
+            // println!("Checking: {transition:?}");
+
+            if transition.except.contains(ch)
             {
                 println!("{}", "WHATWHATWHAT".dark_red());
+                println!("Found this success: {transition:?}");
+
                 return Err(LexErr::InvalidStateTransition(curr, ch).into());
             }
+            row_match = *transition;
         }
 
-        if !(row.from == row.onto && row.act == IGN)
+        if !(row_match.from == row_match.onto && row_match.act == IGN)
         {
             println!(
                 "{from:<w_state$} {char:<w_ch$} {next:<w_state$} {act:<w_tok_act$} {prebuf:<w_buf$}{postbuf:w_buf$}",
                 from = format!("{:?}", curr),
                 char = format!("{:?}", ch),
-                next = format!("{:?}", row.onto),
-                act = format!("{:?}", row.act),
+                next = format!("{:?}", row_match.onto),
+                act = format!("{:?}", row_match.act),
                 prebuf = format!("{:?}", buf),
-                postbuf = format!("{:?}   ", match row.act
+                postbuf = format!("{:?}   ", match row_match.act
                 {
                     FIN => ch.to_string(),
                     TOK | ATK => String::new(),
@@ -474,19 +493,19 @@ pub fn tokenize(source: &str) -> PqResult<()>
             );
         }
 
-        match row.act
+        match row_match.act
         {
             // Token can be created using the currect character and the buffer
             Act::ATK =>
             {
                 buf.push(ch);
-                toks.push(row.from.finalize(&buf)?);
+                toks.push(row_match.from.finalize(&buf)?);
                 buf.clear();
             }
             // Token can be created from the buffer, do not accumulate character
             Act::TOK =>
             {
-                toks.push(row.from.finalize(&buf)?);
+                toks.push(row_match.from.finalize(&buf)?);
                 buf.clear();
             }
             // If no token can be constructed, continue accumulating the buffer
@@ -497,7 +516,7 @@ pub fn tokenize(source: &str) -> PqResult<()>
             // Token an be created while preserving the current character
             Act::FIN =>
             {
-                toks.push(row.from.finalize(&buf)?);
+                toks.push(row_match.from.finalize(&buf)?);
                 buf.clear();
                 buf.push(ch);
             }
@@ -505,23 +524,53 @@ pub fn tokenize(source: &str) -> PqResult<()>
             Act::IGN => (),
         }
 
-        if row.onto == State::end_state()
+        dbg_used_transitions.insert(row_match);
+
+        if row_match.onto == State::end_state()
         {
             println!("Hit explicit {} state", "END".underlined());
             break;
         }
 
-        curr = row.onto;
+        curr = row_match.onto;
     }
 
     println!();
     println!("{}", format!("Tokens: {toks:?}").green());
     println!();
 
+    let dbg_msg = format!(
+        "Only hit {} out of {} state transitions, missed:",
+        dbg_used_transitions.len(),
+        dbg_expect_transitions.len(),
+    );
+
+    let style = if dbg_used_transitions.len() < dbg_expect_transitions.len()
+    {
+        <String as Stylize>::yellow
+    }
+    else
+    {
+        <String as Stylize>::reset
+    };
+
+    println!("{}", style(dbg_msg));
+
+    if dbg_used_transitions.len() < dbg_expect_transitions.len()
+    {
+        for unused in
+            dbg_expect_transitions.difference(&dbg_used_transitions).take(4)
+        {
+            println!("{}", style(unused.to_debug()))
+        }
+        println!("{}", style("...".to_string()));
+        println!("{}", style("...".to_string()));
+    }
+
     Ok(())
 }
 
-#[derive(VariantNames, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(VariantNames, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Hash)]
 #[repr(u8)]
 pub enum Act
 {
@@ -673,7 +722,9 @@ const fn ignore_spaces_after(
 }
 
 /// Some of these states produce tokens when finalized.
-#[derive(VariantNames, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(
+    VariantNames, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash,
+)]
 #[repr(u8)]
 pub enum State
 {
@@ -745,8 +796,8 @@ const STATE_TRANSITION_TABLE: &[(State, Accept, Accept, State, Act)] = &[
     // Key or Value ------------------------------------------------------------
     (BEG, AnyOf("\""), Unused, TXT, IGN),
     (TXT, AnyOf("\""), Unused, BEG, TOK),
-    // TODO: (TXT, Within('\u{0020}', '\u{10FFFF}'), AnyOf("\"\\"), TXT, ACC),
-    (TXT, Within('\u{0020}', '\u{10FFFF}'), Within('\\', '\\'), TXT, ACC),
+    (TXT, Within('\u{0020}', '\u{10FFFF}'), AnyOf("\"\\"), TXT, ACC),
+    // (TXT, Within('\u{0020}', '\u{10FFFF}'), Within('\\', '\\'), TXT, ACC),
     (TXT, AnyOf("\\"), Unused, ESC, FIN),
     (ESC, AnyOf("\"\\/bfnrt"), Unused, TXT, ATK),
     (ESC, AnyOf("u"), Unused, ESCHEX0, ACC),
@@ -835,6 +886,17 @@ const fn state_transition_table() -> [Row; max_state_transitions()]
 
                 // panic!("i dont think this is working: unused range skips ..");
 
+                let mut iter = txt::utf8_iter_chars_const(chars);
+                while let Some(ch) = iter.next()
+                {
+                    let row =
+                        Row::new(from, begin ..= close, ch ..= ch, onto, act);
+
+                    rows[fast] = row;
+                    fast += 1; // Outpace input table index
+                }
+
+                /*
                 // If it's any of these characters, add a new 'except' range for
                 // each one since they are single element not a range
                 let mut udx_ch = 0;
@@ -849,6 +911,7 @@ const fn state_transition_table() -> [Row; max_state_transitions()]
                     rows[fast] = row;
                     fast += 1; // Outpace input table index
                 }
+                */
             }
 
             (Unused, AnyOf(chars)) =>

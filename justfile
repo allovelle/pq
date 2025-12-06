@@ -34,3 +34,14 @@ ranges:
     #   \u{0023} .. '?'
     #   '?' .. '"'
     # '"' .. '\u{10FFFF}'
+
+globe:
+    #!/usr/bin/env python3
+    import itertools, time, sys
+    for c in itertools.cycle("🌍🌎🌏"):
+        sys.stdout.write("\r"+c)
+        sys.stdout.flush()
+        try:
+            time.sleep(0.2)
+        except KeyboardInterrupt:
+            break

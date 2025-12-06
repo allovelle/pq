@@ -135,3 +135,37 @@ pub fn utf8_iter_chars<'buf>(txt: &'buf str) -> Utf8Iter<'buf>
 {
     Utf8Iter::new(txt.as_bytes())
 }
+
+#[derive(Debug)]
+pub struct ConstUtf8Iter<'a>
+{
+    bytes: &'a [u8],
+    pos: usize,
+}
+
+impl<'a> ConstUtf8Iter<'a>
+{
+    pub const fn new(bytes: &'a [u8]) -> Self
+    {
+        Self { bytes, pos: 0 }
+    }
+
+    pub const fn next(&mut self) -> Option<char>
+    {
+        if let Some(codepoint) = utf8_char_on(self.bytes, self.pos)
+        {
+            self.pos += codepoint.len_utf8();
+            Some(codepoint)
+        }
+        else
+        {
+            None
+        }
+    }
+}
+
+pub const fn utf8_iter_chars_const<'buf>(txt: &'buf str)
+-> ConstUtf8Iter<'buf>
+{
+    ConstUtf8Iter::new(txt.as_bytes())
+}
