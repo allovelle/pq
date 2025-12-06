@@ -18,6 +18,8 @@ clap = { version = "4.5.51", features = ["derive"] }
 # starlark = "0.13.0"
 crossterm = "0.29.0"
 serde_json = { version = "1.0.145", features = ["preserve_order"] }
+strum = { version = "0.27.2", features = ["derive", "strum_macros"] }
+strum_macros = { version = "0.27.2" }
 
 thiserror = "2.0.17"
 ariadne = "0.6.0"

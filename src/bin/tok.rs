@@ -25,11 +25,17 @@
 
 use crossterm::style::Stylize;
 use pq::txt::utf8_char_on;
-use std::collections::{HashMap, HashSet};
-use std::ops::{Range, RangeBounds, RangeInclusive, Sub};
-use std::{default, fmt};
+use std::collections::HashMap;
+use std::fmt;
+use std::ops::{Deref, RangeInclusive};
+use strum::*;
 use thiserror::Error;
 use {Accept::*, Act::*, State::*};
+
+fn longest_variant_name<E: VariantNames>() -> usize
+{
+    E::VARIANTS.iter().map(Deref::deref).map(str::len).max().unwrap_or_default()
+}
 
 /// A macro for early returns based on a condition.
 ///
@@ -335,7 +341,7 @@ pub fn tokenize(source: &str) -> PqResult<()>
     let mut toks: Vec<Tok> = Vec::with_capacity(source.len());
 
     // TODO: Fix the widths :D
-    const W1: usize = 6;
+    const W1: usize = 8;
     const W2: usize = 5;
     const W3: usize = 9;
 
@@ -477,7 +483,7 @@ pub fn tokenize(source: &str) -> PqResult<()>
     Ok(())
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(VariantNames, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum Act
 {
@@ -554,7 +560,7 @@ impl State
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(VariantNames, Debug, Clone, PartialEq)]
 pub enum Tok
 {
     True,              // true
@@ -607,7 +613,7 @@ pub enum Tok
 // ];
 
 /// **Allowed & disallowed patterns for state transitions.**
-#[derive(Debug, Clone, Copy)]
+#[derive(VariantNames, Debug, Clone, Copy)]
 pub enum Accept
 {
     /// **Explicitly listed elements**
@@ -629,7 +635,7 @@ const fn ignore_spaces_after(
 }
 
 /// Some of these states produce tokens when finalized.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(VariantNames, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum State
 {
@@ -865,26 +871,34 @@ const fn state_transition_table() -> [Row; max_state_transitions()]
 
 fn emit_table(table: &[Row])
 {
-    const W0: usize = 10;
-    const W1: usize = 10;
-    const W2: usize = 6;
+    const W0: usize = 15;
+    const W1: usize = 15;
+    const W2: usize = 10;
 
     // \u{10ffff} .. \u{10ffff}
 
+    let state = longest_variant_name::<State>();
+    let tok_act = longest_variant_name::<Act>();
+    let accept = longest_variant_name::<Accept>();
+
+    let within = "\\u{{10FFFF}} .. \\u{{10FFFF}}".len();
+    let within = "U+10FFFF .. U+10FFFF".len();
+
+    // "| {:W2$} | {:W0$} | {:W1$} | {:W2$} | {:W2$} |",
     println!(
-        "| {:W2$} | {:W0$} | {:W1$} | {:W2$} | {:W2$} |",
+        "| {:<state$} | {:^within$} | {:^within$} | {:<state$} | {:<tok_act$} |",
         "From", "Accept", "Except", "Onto", "Action",
     );
 
     for row in table
     {
         println!(
-            "| {:W2$} | {:W0$} | {:W1$} | {:W2$} | {:W2$} |",
-            format!("{:?}", row.from),
-            format!("{:?}", row.accept),
-            format!("{:?}", row.except),
-            format!("{:?}", row.onto),
-            format!("{:?}", row.act),
+            "| {fro:<state$} | {acc:^within$} | {exc:^within$} | {to:<state$} | {act:<tok_act$} |",
+            fro = format!("{:?}", row.from),
+            acc = format!("{:?}", row.accept),
+            exc = format!("{:?}", row.except),
+            to = format!("{:?}", row.onto),
+            act = format!("{:?}", row.act),
         );
     }
     println!();
