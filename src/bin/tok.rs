@@ -191,6 +191,11 @@ mod impl_char_range_inclusive
 
     impl CharRangeInclusive
     {
+        pub const fn zero() -> Self
+        {
+            Self::from('\0' ..= '\0')
+        }
+
         /// **Exists because [From] & [Into] are not `const`**
         pub const fn from(value: RangeInclusive<char>) -> Self
         {
@@ -202,6 +207,24 @@ mod impl_char_range_inclusive
         {
             self.from ..= self.onto
         }
+
+        // #[inline]
+        // pub const fn split(self, at: char) -> (Self, Self)
+        // {
+        //     if at < self.from || at > self.onto
+        //     {
+        //         return (self, self);
+        //     }
+        //     if at == self.from && at == self.onto
+        //     {
+        //         return (Self::zero(), Self::zero());
+        //     }
+        //     if at == self.from
+        //     {
+        //         return (self.from, self.to);
+        //     }
+        //     (self, self)
+        // }
 
         #[inline]
         pub const fn contains(&self, ch: char) -> bool
@@ -273,6 +296,7 @@ mod impl_char_range_inclusive
                     ('\'', "`\\'`"),
                     ('\"', "`\"`"),
                     ('\0', "\\0"),
+                    ('\\', "`\\`"),
                 ]);
 
                 // ! {{
@@ -378,7 +402,6 @@ impl Row
     }
 
     /// Checks that this row's state matches the current state of the tokenizer.
-    /// Checks that the
     fn matches(&self, state: State, ch: char) -> bool
     {
         ret_if!(state != self.from, false);
@@ -405,13 +428,13 @@ pub fn tokenize(source: &str) -> PqResult<()>
     let mut toks: Vec<Tok> = Vec::with_capacity(source.len());
 
     let w_state = longest_variant_name::<State>();
-    let w_tok_act = longest_variant_name::<Act>();
+    let w_tok_act = longest_variant_name::<Act>() + 2;
     let w_ch = format!("{:?}", '\u{10FFFF}').len();
     let w_buf = 8;
 
     let header = format!(
-        "{:<w_state$} {:<w_ch$} {:<w_state$} {:<w_tok_act$} {:<w_buf$} {:<w_buf$}",
-        "State", "Char", "Next", "Act", "PreBuf", "EndBuf"
+        "{:<w_state$} {:<w_ch$} {:<w_state$} {:<w_tok_act$} {:<16} {:<16} {:<w_buf$} {:<w_buf$}",
+        "State", "Char", "Next", "Act", "Accept", "Except", "PreBuf", "EndBuf"
     );
     println!("\n\n\n{}", header.underlined());
 
@@ -477,11 +500,13 @@ pub fn tokenize(source: &str) -> PqResult<()>
         if !(row_match.from == row_match.onto && row_match.act == IGN)
         {
             println!(
-                "{from:<w_state$} {char:<w_ch$} {next:<w_state$} {act:<w_tok_act$} {prebuf:<w_buf$}{postbuf:w_buf$}",
+                "{from:<w_state$} {char:<w_ch$} {next:<w_state$} {act:<w_tok_act$} {acc:<16} {exc:<16} {prebuf:<w_buf$} {postbuf:w_buf$}",
                 from = format!("{:?}", curr),
                 char = format!("{:?}", ch),
                 next = format!("{:?}", row_match.onto),
                 act = format!("{:?}", row_match.act),
+                acc = format!("{:?}", row_match.accept),
+                exc = format!("{:?}", row_match.except),
                 prebuf = format!("{:?}", buf),
                 postbuf = format!("{:?}   ", match row_match.act
                 {
@@ -796,7 +821,7 @@ const STATE_TRANSITION_TABLE: &[(State, Accept, Accept, State, Act)] = &[
     // Key or Value ------------------------------------------------------------
     (BEG, AnyOf("\""), Unused, TXT, IGN),
     (TXT, AnyOf("\""), Unused, BEG, TOK),
-    (TXT, Within('\u{0020}', '\u{10FFFF}'), AnyOf("\"\\"), TXT, ACC),
+    (TXT, Within('\u{0020}', '\u{10FFFF}'), AnyOf("\\\""), TXT, ACC),
     // (TXT, Within('\u{0020}', '\u{10FFFF}'), Within('\\', '\\'), TXT, ACC),
     (TXT, AnyOf("\\"), Unused, ESC, FIN),
     (ESC, AnyOf("\"\\/bfnrt"), Unused, TXT, ATK),
@@ -886,11 +911,26 @@ const fn state_transition_table() -> [Row; max_state_transitions()]
 
                 // panic!("i dont think this is working: unused range skips ..");
 
+                // -----------------
+
+                // -----------------
+
                 let mut iter = txt::utf8_iter_chars_const(chars);
                 while let Some(ch) = iter.next()
                 {
+                    // let accept = CharRangeInclusive::from(begin ..= close);
+                    // let except = CharRangeInclusive::from(ch ..= ch);
+                    // debug_assert!(
+                    //     !accept.contains(ch) || except.contains(ch),
+                    //     "Invalid state transition: {:?} {:?}",
+                    //     range,
+                    //     range,
+                    // );
+
                     let row =
                         Row::new(from, begin ..= close, ch ..= ch, onto, act);
+
+                    // * 100% chance of success: continuously split accept by ch
 
                     rows[fast] = row;
                     fast += 1; // Outpace input table index
