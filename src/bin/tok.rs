@@ -593,26 +593,27 @@ impl State
 
     fn finalize(self, buffer: &String) -> PqResult<Tok>
     {
+        use self::*;
+        let non_terminal = || panic!("Token non-terminal encountered");
+
         match self
         {
-            Self::BEG if buffer == "," => Ok(Tok::Comma),
-            Self::BEG => unreachable!("BEG tokenizer state unutilized"),
-            Self::NUM => buffer.parse().map_err(Into::into).map(Tok::Signed),
-            Self::COM => Ok(Tok::Comma),
-            Self::BIT0S => Ok(Tok::False),
-            Self::BIT0F => todo!(),
-            Self::BIT0A => todo!(),
-            Self::BIT0L => todo!(),
-            Self::BIT1E => todo!(),
-            Self::ComOrClose => todo!(),
-            Self::BIT1T => todo!(),
-            Self::BIT1R => todo!(),
-            Self::BIT1U => Ok(Tok::True),
-            Self::TXT => Ok(Tok::Text(buffer.clone())),
-            Self::ESC => Ok(Tok::Escape(buffer.clone())),
-            Self::ESCHEX3 => Ok(Tok::EscapeHex(buffer.clone())),
-            Self::END => todo!(),
-            Self::ESCHEX0 | Self::ESCHEX1 | Self::ESCHEX2 => unreachable!(),
+            BEG if buffer == "," => Ok(Tok::Comma),
+            BEG => panic!("BEG tokenizer state unutilized"),
+            END => todo!(),
+            NUM => buffer.parse().map_err(Into::into).map(Tok::Signed),
+            COM => Ok(Tok::Comma),
+            ComOrClose => non_terminal(),
+            BIT1T | BIT1R => non_terminal(),
+            BIT1U => Ok(Tok::True),
+            TXT => Ok(Tok::Text(buffer.clone())),
+            BIT0F | BIT0A | BIT0L => non_terminal(),
+            BIT0S => Ok(Tok::False),
+            NIL0 | NIL1 => non_terminal(),
+            NIL2 => Ok(Tok::Null),
+            ESC => Ok(Tok::Escape(buffer.clone())),
+            ESCHEX0 | ESCHEX1 | ESCHEX2 => non_terminal(),
+            ESCHEX3 => Ok(Tok::EscapeHex(buffer.clone())),
         }
     }
 }
@@ -772,7 +773,9 @@ pub enum State
     BIT1T,
     BIT1R,
     BIT1U,
-    BIT1E,
+    NIL0,
+    NIL1,
+    NIL2,
     TXT,
     ESC,
     ESCHEX0,
@@ -811,6 +814,7 @@ const STATE_TRANSITION_TABLE: &[(State, CharMatch, CharMatch, State, Act)] = &[
     (BEG, Within('0', '9'), Unused, NUM, ACC),
     (NUM, Within('0', '9'), Unused, NUM, ACC),
     (NUM, WHITESPACE, Unused, ComOrClose, IGN),
+    (NUM, EOS, Unused, BEG, TOK),
     // Boolean -----------------------------------------------------------------
     (BEG, AnyOf("f"), Unused, BIT0F, IGN),
     (BIT0F, AnyOf("a"), Unused, BIT0A, IGN),
@@ -821,8 +825,13 @@ const STATE_TRANSITION_TABLE: &[(State, CharMatch, CharMatch, State, Act)] = &[
     (BIT1T, AnyOf("r"), Unused, BIT1R, IGN),
     (BIT1R, AnyOf("u"), Unused, BIT1U, IGN),
     (BIT1U, AnyOf("e"), Unused, BEG, TOK),
+    // Null --------------------------------------------------------------------
+    (BEG, AnyOf("n"), Unused, NIL0, IGN),
+    (NIL0, AnyOf("u"), Unused, NIL1, IGN),
+    (NIL1, AnyOf("l"), Unused, NIL2, IGN),
+    (NIL2, AnyOf("l"), Unused, BEG, TOK),
     // Comma -------------------------------------------------------------------
-    (BEG, AnyOf(","), Unused, COM, FIN),
+    (BEG, AnyOf(","), Unused, BEG, ATK),
     (COM, AnyOf("f"), Unused, BIT0F, IGN),
     (COM, AnyOf("t"), Unused, BIT1T, IGN),
     (COM, Within('0', '9'), Unused, NUM, ACC),
