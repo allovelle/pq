@@ -24,6 +24,7 @@
 // ! The goal is to not need serde_json for input or output
 
 use crossterm::style::Stylize;
+use pq::replay::Replayable;
 use std::collections::{HashMap, HashSet};
 use std::ops::{Deref, RangeInclusive};
 use std::{fmt, hash};
@@ -447,7 +448,12 @@ pub fn tokenize(source: &str) -> PqResult<()>
     let dbg_expect_transitions: HashSet<Row> =
         HashSet::from_iter(state_transition_table());
 
-    for ch in source.chars().chain("\0".chars())
+    // TODO: Use cursor api for this?
+    // TODO: What about iterator.pause() or replay() one iteration
+
+    let mut stream = source.chars().chain("\0".chars()).replayable();
+    while let Some(ch) = stream.next()
+    // for ch in source.chars().chain("\0".chars())
     {
         // ? Find the transition for the current state and character
         let row = match transitions.iter().find(|row| row.matches(curr, ch))
@@ -456,6 +462,7 @@ pub fn tokenize(source: &str) -> PqResult<()>
             None => return Err(LexErr::InvalidStateTransition(curr, ch).into()),
         };
 
+        // Debug-print row info
         if !(row.from == row.onto && row.act == IGN)
         {
             println!(
@@ -473,6 +480,7 @@ pub fn tokenize(source: &str) -> PqResult<()>
                     TOK | ATK => String::new(),
                     ACC => format!("{buf}{ch}"),
                     IGN => buf.clone(),
+                    AGN => String::new(),
                 })
             );
         }
@@ -485,6 +493,13 @@ pub fn tokenize(source: &str) -> PqResult<()>
                 buf.push(ch);
                 toks.push(row.from.finalize(&buf)?);
                 buf.clear();
+            }
+            // Token can be created from buffer, replay the current character
+            Act::AGN =>
+            {
+                toks.push(row.from.finalize(&buf)?);
+                buf.clear();
+                stream.replay();
             }
             // Token can be created from the buffer, do not accumulate character
             Act::TOK =>
@@ -558,6 +573,9 @@ pub fn tokenize(source: &str) -> PqResult<()>
 #[repr(u8)]
 pub enum Act
 {
+    /// Consume buffer as token, preserve current character in 1-char buffer,
+    /// and replay character for next transitioned state
+    AGN,
     /// Consume buffer as token, accumulate current character into empty buffer
     FIN,
     /// Consume buffer as token, ignore current character
@@ -601,6 +619,10 @@ impl State
         match self
         {
             BEG if buffer == "," => Ok(Tok::Comma),
+            BEG if buffer == "[" => Ok(Tok::ArrayOpen),
+            BEG if buffer == "]" => Ok(Tok::ArrayClose),
+            BEG if buffer == "{" => Ok(Tok::ObjectOpen),
+            BEG if buffer == "}" => Ok(Tok::ObjectClose),
             BEG => panic!("BEG tokenizer state unutilized"),
             END => todo!(),
             COM => Ok(Tok::Comma),
@@ -636,14 +658,13 @@ pub enum Tok
     Escape(String),    // "\n"
     EscapeHex(String), // "\uAb34"
     Number(f64),       // +0.0 0.0 0 10
-    Comma,             // ,
+    ArrayOpen,         // [
+    ArrayClose,        // ]
+    ObjectOpen,        // {
+    ObjectClose,       // }
     //
-    Colon,       // :
-    Dot,         // .
-    SquareOpen,  // [
-    SquareClose, // ]
-    BlockOpen,   // {
-    BlockClose,  // }
+    Comma, // ,
+    Colon, // :
 }
 
 // /// State transitions are locked to character iteration.
@@ -813,13 +834,13 @@ pub enum State
 /// that char is in this range or set and also not in this range or set.**
 /// `[curr state][accept ch range][except ch range][next state][tok & buf act]`
 const STATE_TRANSITION_TABLE: &[(State, CharMatch, CharMatch, State, Act)] = &[
-    ignore_spaces_after(COM),
-    ignore_spaces_after(ComOrClose),
-    (ComOrClose, AnyOf(","), Unused, COM, IGN),
-    (ComOrClose, AnyOf("]"), Unused, END, IGN),
-    (ComOrClose, AnyOf("}"), Unused, END, IGN),
-    (COM, AnyOf("0"), Unused, ZERO, FIN),
-    (COM, Within('1', '9'), Unused, INT, FIN),
+    // ignore_spaces_after(COM),
+    // ignore_spaces_after(ComOrClose),
+    // (ComOrClose, AnyOf(","), Unused, COM, IGN),
+    // (ComOrClose, AnyOf("]"), Unused, END, IGN),
+    // (ComOrClose, AnyOf("}"), Unused, END, IGN),
+    // (COM, AnyOf("0"), Unused, ZERO, FIN),
+    // (COM, Within('1', '9'), Unused, INT, FIN),
     // Beginning ---------------------------------------------------------------
     (BEG, EOS, Unused, END, IGN),
     (BEG, WHITESPACE, Unused, BEG, IGN),
@@ -884,6 +905,16 @@ const STATE_TRANSITION_TABLE: &[(State, CharMatch, CharMatch, State, Act)] = &[
     (ESCHEX2, Within('a', 'f'), Unused, ESCHEX3, ACC),
     (ESCHEX3, Within('0', 'F'), Within(':', '@'), TXT, ATK),
     (ESCHEX3, Within('a', 'f'), Unused, TXT, ATK),
+    // Array -------------------------------------------------------------------
+    (BEG, AnyOf("["), Unused, BEG, ATK),
+    (ZERO, AnyOf(",]"), Unused, BEG, AGN),
+    (INT, AnyOf(",]"), Unused, BEG, AGN),
+    (FRAC, AnyOf(",]"), Unused, BEG, AGN),
+    (EXP, AnyOf(",]"), Unused, BEG, AGN),
+    (BEG, AnyOf("]"), Unused, BEG, ATK),
+    // Object ------------------------------------------------------------------
+    (BEG, AnyOf("{"), Unused, BEG, ATK),
+    (BEG, AnyOf("}"), Unused, BEG, ATK),
 ];
 
 /// Each row represents at least one tokenizer state transition. When examining
@@ -1126,9 +1157,17 @@ fn main() -> PqResult<()>
         81800.0e-2
         []
         {}
+        [0]
+        # [0,1,2,3]
+        # {"a":0,"b":1,"c":2}
+        # [0, 1, 2, 3]
+        # {"a": 0, "b": 1, "c": 2}
     "#;
 
-    for line in json.lines().filter(|line| !line.trim().is_empty())
+    for line in json.lines().filter(|line| {
+        let trim = line.trim();
+        !trim.is_empty() && !trim.starts_with("#")
+    })
     {
         if let Err(err) = tokenize(line)
         {

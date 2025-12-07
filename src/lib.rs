@@ -1,5 +1,6 @@
 pub mod inc;
 pub mod range;
+pub mod replay;
 pub mod tok;
 pub mod txt;
 
