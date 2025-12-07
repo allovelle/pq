@@ -30,7 +30,7 @@ use std::ops::{Deref, RangeInclusive};
 use std::{fmt, hash};
 use strum::*;
 use thiserror::Error;
-use {Accept::*, Act::*, State::*};
+use {Act::*, CharMatch::*, State::*};
 
 fn longest_variant_name<E: VariantNames>() -> usize
 {
@@ -370,10 +370,10 @@ struct Row
 {
     /// The state performing an examination for transition determination
     from: State,
-    /// Current character is within this range (matches first)
-    accept: CharRangeInclusive,
-    /// Current character is outside this range (matches second)
-    except: CharRangeInclusive,
+    /// Current character is within this range or set (matches first)
+    accept: CharMatch,
+    /// Current character is outside this range or set (matches second)
+    except: CharMatch,
     /// The state to transition to if accept & except ranges match on char
     onto: State,
     /// Discard or accumulate current character, append to or clear buffer,
@@ -385,19 +385,17 @@ impl Row
 {
     const fn zero() -> Self
     {
-        Self::new(BEG, '\0' ..= '\0', '\0' ..= '\0', BEG, IGN)
+        Self::new(BEG, Unused, Unused, BEG, IGN)
     }
 
     const fn new(
         from: State,
-        accept: RangeInclusive<char>,
-        except: RangeInclusive<char>,
+        accept: CharMatch,
+        except: CharMatch,
         onto: State,
         action: Act,
     ) -> Self
     {
-        let accept = CharRangeInclusive::from(accept);
-        let except = CharRangeInclusive::from(except);
         Self { from, accept, except, onto, act: action }
     }
 
@@ -412,13 +410,15 @@ impl Row
 
         // panic!("The Within&AnyOf must match ALL combinations");
 
-        let enable_accept = self.accept != ('\0' ..= '\0');
-        let allow = self.accept.contains(ch) && enable_accept;
+        // let enable_accept = self.accept != ('\0' ..= '\0');
+        // let allow = self.accept.contains(ch) && enable_accept;
 
-        let enable_except = self.except != ('\0' ..= '\0');
-        let deny = self.except.contains(ch) && enable_except;
+        // let enable_except = self.except != ('\0' ..= '\0');
+        // let deny = self.except.contains(ch) && enable_except;
 
-        allow && !deny
+        // allow && !deny
+
+        self.accept.contains(ch) && !self.except.contains(ch)
     }
 }
 
@@ -448,94 +448,24 @@ pub fn tokenize(source: &str) -> PqResult<()>
     for ch in source.chars().chain("\0".chars())
     {
         // ? Find the transition for the current state and character
-        // let row = match transitions.iter().find(|row| row.matches(curr, ch))
-        // {
-        //     Some(row) => row,
-        //     None => return Err(LexErr::InvalidStateTransition(curr, ch).into()),
-        // };
-
-        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
-        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
-        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
-        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
-        // TODO: Colate these by FROM & ACCEPT, then test all by EXCEPT to find row
-
-        // ! THIS WONT WORK UNTIL I GO X * Y ON THE ACCEPT & EXCEPT FOR ANYOF()
-        // ! THIS WONT WORK UNTIL I GO X * Y ON THE ACCEPT & EXCEPT FOR ANYOF()
-        // ! THIS WONT WORK UNTIL I GO X * Y ON THE ACCEPT & EXCEPT FOR ANYOF()
-        // ! THIS WONT WORK UNTIL I GO X * Y ON THE ACCEPT & EXCEPT FOR ANYOF()
-        // ! THIS WONT WORK UNTIL I GO X * Y ON THE ACCEPT & EXCEPT FOR ANYOF()
-        // ! THIS WONT WORK UNTIL I GO X * Y ON THE ACCEPT & EXCEPT FOR ANYOF()
-        // ! THIS WONT WORK UNTIL I GO X * Y ON THE ACCEPT & EXCEPT FOR ANYOF()
-        // ! THIS WONT WORK UNTIL I GO X * Y ON THE ACCEPT & EXCEPT FOR ANYOF()
-        // ! THIS WONT WORK UNTIL I GO X * Y ON THE ACCEPT & EXCEPT FOR ANYOF()
-        // ! THIS WONT WORK UNTIL I GO X * Y ON THE ACCEPT & EXCEPT FOR ANYOF()
-        // ! THIS WONT WORK UNTIL I GO X * Y ON THE ACCEPT & EXCEPT FOR ANYOF()
-        // ! THIS WONT WORK UNTIL I GO X * Y ON THE ACCEPT & EXCEPT FOR ANYOF()
-        // ! THIS WONT WORK UNTIL I GO X * Y ON THE ACCEPT & EXCEPT FOR ANYOF()
-        // ! THIS WONT WORK UNTIL I GO X * Y ON THE ACCEPT & EXCEPT FOR ANYOF()
-        // ! THIS WONT WORK UNTIL I GO X * Y ON THE ACCEPT & EXCEPT FOR ANYOF()
-        // ! THIS WONT WORK UNTIL I GO X * Y ON THE ACCEPT & EXCEPT FOR ANYOF()
-
-        // ? The rows have siblings, like the tree.
-
-        let mut row_match = Row::zero();
-        for state in transitions
-            .iter()
-            .rev() // ? iter order shoulding matter
-            .filter(|row| row.from == curr && !row.except.contains(ch))
+        let row = match transitions.iter().find(|row| row.matches(curr, ch))
         {
-            /*
-            Unfortunately, these rows are actually 1 row and match together
-            | TXT        | \_ .. U+10FFFF |   `\` .. `\`   | TXT        | ACC |
-            | TXT        | \_ .. U+10FFFF |   `"` .. `"`   | TXT        | ACC |
-            allow \_ .. U+10FFFF, explicitly deny `\` and `"`
-            */
-            if state.accept.contains(ch)
-            {
-                row_match = *state;
-            }
-        }
+            Some(row) => *row,
+            None => return Err(LexErr::InvalidStateTransition(curr, ch).into()),
+        };
 
-        if row_match == Row::zero()
-        {
-            return Err(LexErr::InvalidStateTransition(curr, ch).into());
-        }
-
-        // Find all transitions for the current state and character
-        // let transitions = transitions
-        //     .iter()
-        //     .filter(|row| row.from == curr && row.accept.contains(ch));
-        // let matches =
-        //     transitions.iter().filter(|row| Row::matches(row, curr, ch));
-
-        // let mut row_match = Row::zero();
-        // for transition in matches
-        // {
-        //     // println!("Checking: {transition:?}");
-
-        //     if transition.except.contains(ch)
-        //     {
-        //         println!("{}", "WHATWHATWHAT".dark_red());
-        //         println!("Found this success: {transition:?}");
-
-        //         return Err(LexErr::InvalidStateTransition(curr, ch).into());
-        //     }
-        //     row_match = *transition;
-        // }
-
-        if !(row_match.from == row_match.onto && row_match.act == IGN)
+        if !(row.from == row.onto && row.act == IGN)
         {
             println!(
                 "{from:<w_state$} {char:<w_ch$} {next:<w_state$} {act:<w_tok_act$} {acc:<16} {exc:<16} {prebuf:<w_buf$} {postbuf:w_buf$}",
                 from = format!("{:?}", curr),
                 char = format!("{:?}", ch),
-                next = format!("{:?}", row_match.onto),
-                act = format!("{:?}", row_match.act),
-                acc = format!("{:?}", row_match.accept),
-                exc = format!("{:?}", row_match.except),
+                next = format!("{:?}", row.onto),
+                act = format!("{:?}", row.act),
+                acc = format!("{:?}", row.accept),
+                exc = format!("{:?}", row.except),
                 prebuf = format!("{:?}", buf),
-                postbuf = format!("{:?}   ", match row_match.act
+                postbuf = format!("{:?}   ", match row.act
                 {
                     FIN => ch.to_string(),
                     TOK | ATK => String::new(),
@@ -545,19 +475,19 @@ pub fn tokenize(source: &str) -> PqResult<()>
             );
         }
 
-        match row_match.act
+        match row.act
         {
             // Token can be created using the currect character and the buffer
             Act::ATK =>
             {
                 buf.push(ch);
-                toks.push(row_match.from.finalize(&buf)?);
+                toks.push(row.from.finalize(&buf)?);
                 buf.clear();
             }
             // Token can be created from the buffer, do not accumulate character
             Act::TOK =>
             {
-                toks.push(row_match.from.finalize(&buf)?);
+                toks.push(row.from.finalize(&buf)?);
                 buf.clear();
             }
             // If no token can be constructed, continue accumulating the buffer
@@ -568,7 +498,7 @@ pub fn tokenize(source: &str) -> PqResult<()>
             // Token an be created while preserving the current character
             Act::FIN =>
             {
-                toks.push(row_match.from.finalize(&buf)?);
+                toks.push(row.from.finalize(&buf)?);
                 buf.clear();
                 buf.push(ch);
             }
@@ -576,15 +506,15 @@ pub fn tokenize(source: &str) -> PqResult<()>
             Act::IGN => (),
         }
 
-        dbg_used_transitions.insert(row_match);
+        dbg_used_transitions.insert(row);
 
-        if row_match.onto == State::end_state()
+        if row.onto == State::end_state()
         {
             println!("Hit explicit {} state", "END".underlined());
             break;
         }
 
-        curr = row_match.onto;
+        curr = row.onto;
     }
 
     println!();
@@ -685,18 +615,6 @@ impl State
             Self::ESCHEX0 | Self::ESCHEX1 | Self::ESCHEX2 => unreachable!(),
         }
     }
-
-    fn max_variant_name() -> usize
-    {
-        let mut longest = 0;
-        for (from, _, _, onto, _) in STATE_TRANSITION_TABLE.iter()
-        {
-            let from_len = format!("{from:?}").len();
-            let onto_len = format!("{onto:?}").len();
-            longest = longest.max(from_len.max(onto_len));
-        }
-        longest
-    }
 }
 
 #[derive(VariantNames, Debug, Clone, PartialEq)]
@@ -752,8 +670,10 @@ pub enum Tok
 // ];
 
 /// **Allowed & disallowed patterns for state transitions.**
-#[derive(VariantNames, Debug, Clone, Copy)]
-pub enum Accept
+#[derive(
+    VariantNames, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash,
+)]
+pub enum CharMatch
 {
     /// **Explicitly listed elements**
     AnyOf(&'static str),
@@ -763,12 +683,73 @@ pub enum Accept
     Unused,
 }
 
-const EOS: Accept = AnyOf("\0");
-const WHITESPACE: Accept = AnyOf("\n \t\r");
+mod impl_char_match
+{
+    use super::*;
+
+    impl CharMatch
+    {
+        pub fn contains(&self, ch: char) -> bool
+        {
+            match self
+            {
+                AnyOf(these_chars) => these_chars.contains(ch),
+                Within(from, onto) => (from ..= onto).contains(&&ch),
+                Unused => false,
+            }
+        }
+    }
+
+    // /// Compare [CharRangeInclusive] == [RangeInclusive<char>]
+    // impl PartialEq<RangeInclusive<char>> for CharRangeInclusive
+    // {
+    //     fn eq(&self, other: &RangeInclusive<char>) -> bool
+    //     {
+    //         self.from == *other.start() && self.onto == *other.end()
+    //     }
+    // }
+
+    // /// Compare [RangeInclusive<char>] == [CharRangeInclusive]
+    // impl PartialEq<CharRangeInclusive> for RangeInclusive<char>
+    // {
+    //     fn eq(&self, other: &CharRangeInclusive) -> bool
+    //     {
+    //         *self.start() == other.from && *self.end() == other.onto
+    //     }
+    // }
+
+    // Compare [CharMatch] == [CharMatch]
+    // impl PartialEq for CharMatch
+    // {
+    //     fn eq(&self, other: &Self) -> bool
+    //     {
+    //         match self
+    //         {
+    //             AnyOf(_) => todo!(),
+    //             Within(..) => todo!(),
+    //             Unused => todo!(),
+    //         }
+
+    //         self.from == other.from && self.onto == other.onto
+    //     }
+    // }
+
+    // impl hash::Hash for CharMatch
+    // {
+    //     fn hash<H: hash::Hasher>(&self, state: &mut H)
+    //     {
+    //         self.from.hash(state);
+    //         self.onto.hash(state);
+    //     }
+    // }
+}
+
+const EOS: CharMatch = AnyOf("\0");
+const WHITESPACE: CharMatch = AnyOf("\n \t\r");
 
 const fn ignore_spaces_after(
     status: State,
-) -> (State, Accept, Accept, State, Act)
+) -> (State, CharMatch, CharMatch, State, Act)
 {
     (status, WHITESPACE, Unused, status, IGN)
 }
@@ -816,7 +797,7 @@ pub enum State
 /// **State transitions are locked to character iteration. Essentially, check
 /// that char is in this range or set and also not in this range or set.**
 /// `[curr state][accept ch range][except ch range][next state][tok & buf act]`
-const STATE_TRANSITION_TABLE: &[(State, Accept, Accept, State, Act)] = &[
+const STATE_TRANSITION_TABLE: &[(State, CharMatch, CharMatch, State, Act)] = &[
     ignore_spaces_after(COM),
     ignore_spaces_after(ComOrClose),
     (BEG, Within('0', '9'), Unused, NUM, ACC),
@@ -849,7 +830,6 @@ const STATE_TRANSITION_TABLE: &[(State, Accept, Accept, State, Act)] = &[
     (BEG, AnyOf("\""), Unused, TXT, IGN),
     (TXT, AnyOf("\""), Unused, BEG, TOK),
     (TXT, Within('\u{0020}', '\u{10FFFF}'), AnyOf("\\\""), TXT, ACC),
-    // (TXT, Within('\u{0020}', '\u{10FFFF}'), Within('\\', '\\'), TXT, ACC),
     (TXT, AnyOf("\\"), Unused, ESC, FIN),
     (ESC, AnyOf("\"\\/bfnrt"), Unused, TXT, ATK),
     (ESC, AnyOf("u"), Unused, ESCHEX0, ACC),
@@ -896,16 +876,27 @@ const fn max_state_transitions() -> usize
     transitions
 }
 
-const fn state_transition_table() -> [Row; max_state_transitions()]
+const fn state_transition_table() -> [Row; STATE_TRANSITION_TABLE.len()]
 {
     const EXPANDED_TABLE_LEN: usize = max_state_transitions();
-    let mut rows: [Row; EXPANDED_TABLE_LEN] = [Row::zero(); EXPANDED_TABLE_LEN];
+    // let mut rows: [Row; EXPANDED_TABLE_LEN] = [Row::zero(); EXPANDED_TABLE_LEN];
+    let mut rows: [Row; STATE_TRANSITION_TABLE.len()] =
+        [Row::zero(); STATE_TRANSITION_TABLE.len()];
+
+    let mut row_udx = 0usize;
+    while row_udx < rows.len()
+    {
+        let (from, accept, except, onto, act) = STATE_TRANSITION_TABLE[row_udx];
+        rows[row_udx] = Row { from, accept, except, onto, act };
+        row_udx += 1;
+    }
 
     // Slow index is input table, fast index is output table because it adds
     // more rows than the input table. Destination index doesn't matter since
     // lookup will be O(N) anyway.
     let (mut slow, mut fast) = (0, 0);
 
+    #[cfg(false)]
     while slow < STATE_TRANSITION_TABLE.len()
     {
         let (from, accept, except, onto, act) = STATE_TRANSITION_TABLE[slow];
@@ -1032,7 +1023,7 @@ const fn state_transition_table() -> [Row; max_state_transitions()]
         }
     }
 
-    assert!(fast == rows.len(), "Sanity check: were offsets correct?");
+    // assert!(fast == rows.len(), "Sanity check: were offsets correct?");
 
     rows
 }
@@ -1097,3 +1088,26 @@ fn main() -> PqResult<()>
 
     Ok(())
 }
+
+// mod iter
+// {
+//     pub struct SeqIter<'col, T>
+//     {
+//         at: usize,
+//         of: &'col [T],
+//     }
+
+//     impl<'col, T> SeqIter<'col, T>
+//     {
+//         pub const fn next(&mut self) -> Option<&'col T>
+//         {
+//             if self.at < self.of.len()
+//             {
+//                 let item: T = self.of[self.at];
+//                 self.at += 1;
+//                 return Some(&item);
+//             }
+//             None
+//         }
+//     }
+// }
