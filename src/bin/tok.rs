@@ -800,17 +800,17 @@ pub enum State
 const STATE_TRANSITION_TABLE: &[(State, CharMatch, CharMatch, State, Act)] = &[
     ignore_spaces_after(COM),
     ignore_spaces_after(ComOrClose),
-    (BEG, Within('0', '9'), Unused, NUM, ACC),
-    (NUM, Within('0', '9'), Unused, NUM, ACC),
-    (NUM, WHITESPACE, Unused, ComOrClose, IGN),
     (ComOrClose, AnyOf(","), Unused, COM, IGN),
     (ComOrClose, AnyOf("]"), Unused, END, IGN),
     (ComOrClose, AnyOf("}"), Unused, END, IGN),
     (COM, Within('0', '9'), Unused, NUM, FIN),
-    (NUM, AnyOf(","), Unused, COM, TOK),
     // Beginning ---------------------------------------------------------------
     (BEG, EOS, Unused, END, IGN),
-    ignore_spaces_after(BEG),
+    (BEG, WHITESPACE, Unused, BEG, IGN),
+    // Numbers -----------------------------------------------------------------
+    (BEG, Within('0', '9'), Unused, NUM, ACC),
+    (NUM, Within('0', '9'), Unused, NUM, ACC),
+    (NUM, WHITESPACE, Unused, ComOrClose, IGN),
     // Boolean -----------------------------------------------------------------
     (BEG, AnyOf("f"), Unused, BIT0F, IGN),
     (BIT0F, AnyOf("a"), Unused, BIT0A, IGN),
@@ -826,6 +826,7 @@ const STATE_TRANSITION_TABLE: &[(State, CharMatch, CharMatch, State, Act)] = &[
     (COM, AnyOf("f"), Unused, BIT0F, IGN),
     (COM, AnyOf("t"), Unused, BIT1T, IGN),
     (COM, Within('0', '9'), Unused, NUM, ACC),
+    (NUM, AnyOf(","), Unused, COM, TOK),
     // Key or Value ------------------------------------------------------------
     (BEG, AnyOf("\""), Unused, TXT, IGN),
     (TXT, AnyOf("\""), Unused, BEG, TOK),
@@ -1078,7 +1079,7 @@ fn main() -> PqResult<()>
         {}
     "#;
 
-    for line in json.lines().take(2).filter(|line| !line.trim().is_empty())
+    for line in json.lines().filter(|line| !line.trim().is_empty())
     {
         if let Err(err) = tokenize(line)
         {
@@ -1089,6 +1090,7 @@ fn main() -> PqResult<()>
     Ok(())
 }
 
+// TODO: Fix the const loops using manual indices
 // mod iter
 // {
 //     pub struct SeqIter<'col, T>
