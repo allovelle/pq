@@ -23,8 +23,7 @@
 // ! The goal is to not need serde_json for input or output
 // ! The goal is to not need serde_json for input or output
 
-use crossterm::style::{PrintStyledContent, Stylize};
-use pq::txt::{self, utf8_char_on};
+use crossterm::style::Stylize;
 use std::collections::{HashMap, HashSet};
 use std::ops::{Deref, RangeInclusive};
 use std::{fmt, hash};
@@ -37,14 +36,14 @@ fn longest_variant_name<E: VariantNames>() -> usize
     E::VARIANTS.iter().map(Deref::deref).map(str::len).max().unwrap_or_default()
 }
 
-trait EmitTable {}
-trait EmitColumn
+pub trait EmitTable {}
+pub trait EmitColumn
 {
     fn as_column() -> String;
 }
 
 impl<T: fmt::Debug> ToDebug for T {}
-trait ToDebug: fmt::Debug
+pub trait ToDebug: fmt::Debug
 {
     /// Equivalent to `format!("{:?}", thing);`
     fn to_debug(&self) -> String
@@ -121,6 +120,9 @@ pub enum PqErr
 
     #[error(transparent)]
     ParseIntErr(#[from] std::num::ParseIntError),
+
+    #[error(transparent)]
+    ParseFloatErr(#[from] std::num::ParseFloatError),
 }
 
 pub type PqResult<T> = Result<T, PqErr>;
@@ -158,7 +160,7 @@ pub enum LexErr
 
 /// **Format ASCII & multi-byte codepoints as either their escape-code format
 /// `\u{AB12}` or their Unicode codepoint `U+AB12`.**
-trait CodepointView
+pub trait CodepointView
 {
     fn fmt_escape(self) -> String;
     fn fmt_unicode(self) -> String;
@@ -179,7 +181,7 @@ impl CodepointView for char
 
 /// Exists because [RangeInclusive<char>] is not [Copy].
 #[derive(Clone, Copy, PartialOrd, Eq)]
-struct CharRangeInclusive
+pub struct CharRangeInclusive
 {
     from: char,
     onto: char,
@@ -601,7 +603,6 @@ impl State
             BEG if buffer == "," => Ok(Tok::Comma),
             BEG => panic!("BEG tokenizer state unutilized"),
             END => todo!(),
-            NUM => buffer.parse().map_err(Into::into).map(Tok::Signed),
             COM => Ok(Tok::Comma),
             ComOrClose => non_terminal(),
             BIT1T | BIT1R => non_terminal(),
@@ -614,6 +615,13 @@ impl State
             ESC => Ok(Tok::Escape(buffer.clone())),
             ESCHEX0 | ESCHEX1 | ESCHEX2 => non_terminal(),
             ESCHEX3 => Ok(Tok::EscapeHex(buffer.clone())),
+
+            SGN => buffer.parse().map_err(Into::into).map(Tok::Number),
+            ZERO => buffer.parse().map_err(Into::into).map(Tok::Number),
+            INT => buffer.parse().map_err(Into::into).map(Tok::Number),
+            FRAC => buffer.parse().map_err(Into::into).map(Tok::Number),
+            ESGN => non_terminal(),
+            EXP => buffer.parse().map_err(Into::into).map(Tok::Number),
         }
     }
 }
@@ -627,16 +635,15 @@ pub enum Tok
     Text(String),      // "a"
     Escape(String),    // "\n"
     EscapeHex(String), // "\uAb34"
+    Number(f64),       // +0.0 0.0 0 10
     Comma,             // ,
     //
-    Colon,        // :
-    Dot,          // .
-    SquareOpen,   // [
-    SquareClose,  // ]
-    BlockOpen,    // {
-    BlockClose,   // }
-    Signed(i32),  // +0 -0
-    Decimal(f64), // +0.0 -0.0
+    Colon,       // :
+    Dot,         // .
+    SquareOpen,  // [
+    SquareClose, // ]
+    BlockOpen,   // {
+    BlockClose,  // }
 }
 
 // /// State transitions are locked to character iteration.
@@ -765,12 +772,11 @@ pub enum State
     BEG,
     SGN,
     ZERO,
-    NUM,
     INT,
     FRAC,
+    ESGN,
     EXP,
     COM,
-    NUM0,
     ComOrClose,
     BIT0F,
     BIT0A,
@@ -812,7 +818,8 @@ const STATE_TRANSITION_TABLE: &[(State, CharMatch, CharMatch, State, Act)] = &[
     (ComOrClose, AnyOf(","), Unused, COM, IGN),
     (ComOrClose, AnyOf("]"), Unused, END, IGN),
     (ComOrClose, AnyOf("}"), Unused, END, IGN),
-    (COM, Within('0', '9'), Unused, NUM, FIN),
+    (COM, AnyOf("0"), Unused, ZERO, FIN),
+    (COM, Within('1', '9'), Unused, INT, FIN),
     // Beginning ---------------------------------------------------------------
     (BEG, EOS, Unused, END, IGN),
     (BEG, WHITESPACE, Unused, BEG, IGN),
@@ -820,6 +827,7 @@ const STATE_TRANSITION_TABLE: &[(State, CharMatch, CharMatch, State, Act)] = &[
     //
     (BEG, AnyOf("0"), Unused, ZERO, ACC),
     (ZERO, AnyOf("."), Unused, FRAC, ACC),
+    (ZERO, AnyOf("eE"), Unused, ESGN, ACC),
     (ZERO, EOS, Unused, BEG, TOK),
     //
     (BEG, AnyOf("-"), Unused, SGN, ACC),
@@ -829,10 +837,16 @@ const STATE_TRANSITION_TABLE: &[(State, CharMatch, CharMatch, State, Act)] = &[
     (BEG, Within('1', '9'), Unused, INT, ACC),
     (INT, Within('0', '9'), Unused, INT, ACC),
     (INT, AnyOf("."), Unused, FRAC, ACC),
+    (INT, AnyOf("eE"), Unused, ESGN, ACC),
     (INT, EOS, Unused, BEG, TOK),
     //
     (FRAC, Within('0', '9'), Unused, FRAC, ACC),
+    (FRAC, AnyOf("eE"), Unused, ESGN, ACC),
     (FRAC, EOS, Unused, BEG, TOK),
+    //
+    (ESGN, AnyOf("+-"), Unused, EXP, ACC),
+    (EXP, Within('0', '9'), Unused, EXP, ACC),
+    (EXP, EOS, Unused, BEG, TOK),
     //
     // Boolean -----------------------------------------------------------------
     (BEG, AnyOf("f"), Unused, BIT0F, IGN),
@@ -853,8 +867,7 @@ const STATE_TRANSITION_TABLE: &[(State, CharMatch, CharMatch, State, Act)] = &[
     (BEG, AnyOf(","), Unused, BEG, ATK),
     (COM, AnyOf("f"), Unused, BIT0F, IGN),
     (COM, AnyOf("t"), Unused, BIT1T, IGN),
-    (COM, Within('0', '9'), Unused, NUM, ACC),
-    (NUM, AnyOf(","), Unused, COM, TOK),
+    (COM, AnyOf("n"), Unused, NIL1, FIN),
     // Key or Value ------------------------------------------------------------
     (BEG, AnyOf("\""), Unused, TXT, IGN),
     (TXT, AnyOf("\""), Unused, BEG, TOK),
@@ -907,6 +920,7 @@ const fn max_state_transitions() -> usize
 
 const fn state_transition_table() -> [Row; STATE_TRANSITION_TABLE.len()]
 {
+    #[cfg(false)]
     const EXPANDED_TABLE_LEN: usize = max_state_transitions();
     // let mut rows: [Row; EXPANDED_TABLE_LEN] = [Row::zero(); EXPANDED_TABLE_LEN];
     let mut rows: [Row; STATE_TRANSITION_TABLE.len()] =
@@ -1106,6 +1120,10 @@ fn main() -> PqResult<()>
         null
         0.22
         -0.22
+        8.18e+2
+        81800e-2
+        818e+2
+        81800.0e-2
         []
         {}
     "#;
