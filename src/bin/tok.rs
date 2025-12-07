@@ -763,8 +763,14 @@ const fn ignore_spaces_after(
 pub enum State
 {
     BEG,
+    SGN,
+    ZERO,
     NUM,
+    INT,
+    FRAC,
+    EXP,
     COM,
+    NUM0,
     ComOrClose,
     BIT0F,
     BIT0A,
@@ -811,10 +817,23 @@ const STATE_TRANSITION_TABLE: &[(State, CharMatch, CharMatch, State, Act)] = &[
     (BEG, EOS, Unused, END, IGN),
     (BEG, WHITESPACE, Unused, BEG, IGN),
     // Numbers -----------------------------------------------------------------
-    (BEG, Within('0', '9'), Unused, NUM, ACC),
-    (NUM, Within('0', '9'), Unused, NUM, ACC),
-    (NUM, WHITESPACE, Unused, ComOrClose, IGN),
-    (NUM, EOS, Unused, BEG, TOK),
+    //
+    (BEG, AnyOf("0"), Unused, ZERO, ACC),
+    (ZERO, AnyOf("."), Unused, FRAC, ACC),
+    (ZERO, EOS, Unused, BEG, TOK),
+    //
+    (BEG, AnyOf("-"), Unused, SGN, ACC),
+    (SGN, AnyOf("0"), Unused, ZERO, ACC),
+    (SGN, Within('1', '9'), Unused, INT, ACC),
+    //
+    (BEG, Within('1', '9'), Unused, INT, ACC),
+    (INT, Within('0', '9'), Unused, INT, ACC),
+    (INT, AnyOf("."), Unused, FRAC, ACC),
+    (INT, EOS, Unused, BEG, TOK),
+    //
+    (FRAC, Within('0', '9'), Unused, FRAC, ACC),
+    (FRAC, EOS, Unused, BEG, TOK),
+    //
     // Boolean -----------------------------------------------------------------
     (BEG, AnyOf("f"), Unused, BIT0F, IGN),
     (BIT0F, AnyOf("a"), Unused, BIT0A, IGN),
@@ -904,6 +923,7 @@ const fn state_transition_table() -> [Row; STATE_TRANSITION_TABLE.len()]
     // Slow index is input table, fast index is output table because it adds
     // more rows than the input table. Destination index doesn't matter since
     // lookup will be O(N) anyway.
+    #[cfg(false)]
     let (mut slow, mut fast) = (0, 0);
 
     #[cfg(false)]
@@ -1080,10 +1100,12 @@ fn main() -> PqResult<()>
     let json = r#"
         "init"
         818
+        -818
         "\n"
         true, false
         null
         0.22
+        -0.22
         []
         {}
     "#;
