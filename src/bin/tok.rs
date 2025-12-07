@@ -410,6 +410,8 @@ impl Row
         // TODO: Row accept allows OR is unused and
         // TODO: Row except lacks OR is unused
 
+        // panic!("The Within&AnyOf must match ALL combinations");
+
         let enable_accept = self.accept != ('\0' ..= '\0');
         let allow = self.accept.contains(ch) && enable_accept;
 
@@ -475,27 +477,52 @@ pub fn tokenize(source: &str) -> PqResult<()>
         // ! THIS WONT WORK UNTIL I GO X * Y ON THE ACCEPT & EXCEPT FOR ANYOF()
         // ! THIS WONT WORK UNTIL I GO X * Y ON THE ACCEPT & EXCEPT FOR ANYOF()
 
+        // ? The rows have siblings, like the tree.
+
+        let mut row_match = Row::zero();
+        for state in transitions
+            .iter()
+            .rev() // ? iter order shoulding matter
+            .filter(|row| row.from == curr && !row.except.contains(ch))
+        {
+            /*
+            Unfortunately, these rows are actually 1 row and match together
+            | TXT        | \_ .. U+10FFFF |   `\` .. `\`   | TXT        | ACC |
+            | TXT        | \_ .. U+10FFFF |   `"` .. `"`   | TXT        | ACC |
+            allow \_ .. U+10FFFF, explicitly deny `\` and `"`
+            */
+            if state.accept.contains(ch)
+            {
+                row_match = *state;
+            }
+        }
+
+        if row_match == Row::zero()
+        {
+            return Err(LexErr::InvalidStateTransition(curr, ch).into());
+        }
+
         // Find all transitions for the current state and character
         // let transitions = transitions
         //     .iter()
         //     .filter(|row| row.from == curr && row.accept.contains(ch));
-        let matches =
-            transitions.iter().filter(|row| Row::matches(row, curr, ch));
+        // let matches =
+        //     transitions.iter().filter(|row| Row::matches(row, curr, ch));
 
-        let mut row_match = Row::zero();
-        for transition in matches
-        {
-            // println!("Checking: {transition:?}");
+        // let mut row_match = Row::zero();
+        // for transition in matches
+        // {
+        //     // println!("Checking: {transition:?}");
 
-            if transition.except.contains(ch)
-            {
-                println!("{}", "WHATWHATWHAT".dark_red());
-                println!("Found this success: {transition:?}");
+        //     if transition.except.contains(ch)
+        //     {
+        //         println!("{}", "WHATWHATWHAT".dark_red());
+        //         println!("Found this success: {transition:?}");
 
-                return Err(LexErr::InvalidStateTransition(curr, ch).into());
-            }
-            row_match = *transition;
-        }
+        //         return Err(LexErr::InvalidStateTransition(curr, ch).into());
+        //     }
+        //     row_match = *transition;
+        // }
 
         if !(row_match.from == row_match.onto && row_match.act == IGN)
         {
