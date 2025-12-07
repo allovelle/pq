@@ -569,12 +569,13 @@ pub fn tokenize(source: &str) -> PqResult<()>
     Ok(())
 }
 
+// TODO: Could this benefit from a bit of:
+// TODO: [TOKEN ACT][BUFFER ACT] since they seem to be combos of that?
 #[derive(VariantNames, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Hash)]
 #[repr(u8)]
 pub enum Act
 {
-    /// Consume buffer as token, preserve current character in 1-char buffer,
-    /// and replay character for next transitioned state
+    /// Consume buffer as token, and replay current character for the next state
     AGN,
     /// Consume buffer as token, accumulate current character into empty buffer
     FIN,
@@ -586,20 +587,6 @@ pub enum Act
     ACC,
     /// Ignore current character, leave buffer untouched
     IGN,
-    // /// Collect current character into buffer *first*, then Finalize buffer as token *second*
-    // COL,
-
-    // /// Finalize buffer as token *first*, then accumulate current character.
-    // FIN,
-
-    // /// Finalize buffer as token, then ignore current character
-    // TOK, // ? Can this be removed if prev state is tracked?
-
-    // /// Accumulate current character. Append to buffer.
-    // ACC,
-
-    // /// Ignore the current character. Do not append to buffer.
-    // IGN,
 }
 
 impl State
@@ -619,6 +606,7 @@ impl State
         match self
         {
             BEG if buffer == "," => Ok(Tok::Comma),
+            BEG if buffer == ":" => Ok(Tok::Colon),
             BEG if buffer == "[" => Ok(Tok::ArrayOpen),
             BEG if buffer == "]" => Ok(Tok::ArrayClose),
             BEG if buffer == "{" => Ok(Tok::ObjectOpen),
@@ -914,6 +902,11 @@ const STATE_TRANSITION_TABLE: &[(State, CharMatch, CharMatch, State, Act)] = &[
     (BEG, AnyOf("]"), Unused, BEG, ATK),
     // Object ------------------------------------------------------------------
     (BEG, AnyOf("{"), Unused, BEG, ATK),
+    (BEG, AnyOf(":,}"), Unused, BEG, ATK),
+    (ZERO, AnyOf(":,}"), Unused, BEG, AGN),
+    (INT, AnyOf(":,}"), Unused, BEG, AGN),
+    (FRAC, AnyOf(":,}"), Unused, BEG, AGN),
+    (EXP, AnyOf(":,}"), Unused, BEG, AGN),
     (BEG, AnyOf("}"), Unused, BEG, ATK),
 ];
 
@@ -1158,8 +1151,8 @@ fn main() -> PqResult<()>
         []
         {}
         [0]
-        # [0,1,2,3]
-        # {"a":0,"b":1,"c":2}
+        [0,1,2,3]
+        {"a":0,"b":1,"c":2}
         # [0, 1, 2, 3]
         # {"a": 0, "b": 1, "c": 2}
     "#;
