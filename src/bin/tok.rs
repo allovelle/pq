@@ -425,8 +425,71 @@ impl Row
     }
 }
 
-pub fn tokenize(source: &str) -> PqResult<()>
+pub struct UsageReport
 {
+    used_transitions: HashSet<Row>,
+    expect_transitions: HashSet<Row>,
+    documents_examined: usize,
+}
+
+impl UsageReport
+{
+    fn new() -> Self
+    {
+        let used_transitions = HashSet::with_capacity(max_state_transitions());
+        let expect_transitions = HashSet::from_iter(state_transition_table());
+        Self { used_transitions, expect_transitions, documents_examined: 0 }
+    }
+
+    fn new_document(&mut self)
+    {
+        self.documents_examined += 1;
+    }
+
+    fn log_row(&mut self, row: Row)
+    {
+        self.used_transitions.insert(row);
+    }
+
+    fn report(&self)
+    {
+        let dbg_msg = format!(
+            "Hit {} out of {} state transitions, missed:",
+            self.used_transitions.len(),
+            self.expect_transitions.len(),
+        );
+
+        let style = if self.used_transitions.len()
+            < self.expect_transitions.len()
+        {
+            <String as Stylize>::yellow
+        }
+        else
+        {
+            <String as Stylize>::reset
+        };
+
+        println!("{}", style(dbg_msg));
+
+        if self.used_transitions.len() < self.expect_transitions.len()
+        {
+            for unused in self
+                .expect_transitions
+                .difference(&self.used_transitions)
+                .take(4)
+            {
+                println!("{}", style(unused.to_debug()))
+            }
+            println!("{}", style("...".to_string()));
+            println!("{}", style("...".to_string()));
+        }
+    }
+}
+
+pub fn tokenize(source: &str, usage_report: &mut UsageReport) -> PqResult<()>
+{
+    usage_report.new_document();
+
     let transitions: [Row; _] = state_transition_table();
     let mut curr = BEG;
     let mut buf = String::with_capacity(32);
@@ -442,14 +505,6 @@ pub fn tokenize(source: &str) -> PqResult<()>
         "State", "Char", "Next", "Act", "Accept", "Except", "PreBuf", "EndBuf"
     );
     println!("\n\n\n{}", header.underlined());
-
-    let mut dbg_used_transitions: HashSet<Row> =
-        HashSet::with_capacity(max_state_transitions());
-    let dbg_expect_transitions: HashSet<Row> =
-        HashSet::from_iter(state_transition_table());
-
-    // TODO: Use cursor api for this?
-    // TODO: What about iterator.pause() or replay() one iteration
 
     let mut stream = source.chars().chain("\0".chars()).replayable();
     while let Some(ch) = stream.next()
@@ -523,7 +578,7 @@ pub fn tokenize(source: &str) -> PqResult<()>
             Act::IGN => (),
         }
 
-        dbg_used_transitions.insert(row);
+        usage_report.log_row(row);
 
         if row.onto == State::end_state()
         {
@@ -537,34 +592,6 @@ pub fn tokenize(source: &str) -> PqResult<()>
     println!();
     println!("{}", format!("Tokens: {toks:?}").green());
     println!();
-
-    let dbg_msg = format!(
-        "Only hit {} out of {} state transitions, missed:",
-        dbg_used_transitions.len(),
-        dbg_expect_transitions.len(),
-    );
-
-    let style = if dbg_used_transitions.len() < dbg_expect_transitions.len()
-    {
-        <String as Stylize>::yellow
-    }
-    else
-    {
-        <String as Stylize>::reset
-    };
-
-    println!("{}", style(dbg_msg));
-
-    if dbg_used_transitions.len() < dbg_expect_transitions.len()
-    {
-        for unused in
-            dbg_expect_transitions.difference(&dbg_used_transitions).take(4)
-        {
-            println!("{}", style(unused.to_debug()))
-        }
-        println!("{}", style("...".to_string()));
-        println!("{}", style("...".to_string()));
-    }
 
     Ok(())
 }
@@ -1153,20 +1180,24 @@ fn main() -> PqResult<()>
         [0]
         [0,1,2,3]
         {"a":0,"b":1,"c":2}
-        # [0, 1, 2, 3]
-        # {"a": 0, "b": 1, "c": 2}
+        [0, 1, 2, 3]
+        {"a": 0, "b": 1, "c": 2}
     "#;
+
+    let mut usage_report = UsageReport::new();
 
     for line in json.lines().filter(|line| {
         let trim = line.trim();
         !trim.is_empty() && !trim.starts_with("#")
     })
     {
-        if let Err(err) = tokenize(line)
+        if let Err(err) = tokenize(line, &mut usage_report)
         {
             println!("{}", format!("{err}").red());
         }
     }
+
+    usage_report.report();
 
     Ok(())
 }

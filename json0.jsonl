@@ -1,0 +1,28 @@
+"simple string"
+""
+"line\nbreak\tunicode\u2764"
+"quote:\"back\\slash\""
+0
+-0
+3.1415
+1e10
+-2.5e-3
+12345678901234567890
+[]
+[0,-0,1,-1,1.0,1e+2,-1E-2]
+["",null,true,false,[],{}]
+[[[]],[1,[2,[3]]]]
+{}
+{"a":1,"b":true,"c":null}
+{"spaced key":"value", "quote\"key":"v\""}
+{"\u2603":"snow","emoji":"\uD83D\uDE00"}
+{"int":0,"neg":-42,"frac":0.001,"exp":6.022e23}
+{"arr":[{"n":-0,"s":""},[true,false,null],"str":"\n\t"],"obj":{"nested":{"deep":[1,2,3]}}}
+true
+false
+null
+"\"\\/\\b\\f\\n\\r\\t\\u0041"
+[0.0, -0.0, 1e0, 1E+0, 6.022e23, 1.23456789e-10]
+{"":"empty key"}
+{"chars":"\u0020\u007E\u00A9\u20AC"}
+[{"k":[null,{"x":[true,false,"end"]}]}]
