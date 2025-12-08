@@ -1,6 +1,7 @@
+pub mod cli;
 pub mod inc;
+pub mod iter;
 pub mod range;
-pub mod replay;
 pub mod tok;
 pub mod txt;
 
@@ -10,7 +11,20 @@ use thiserror::Error;
 #[error("Pique Error")]
 pub enum PqErr
 {
+    #[error(transparent)]
     Io(#[from] std::io::Error),
+
+    #[error(transparent)]
+    LexErr(#[from] crate::tok::LexErr),
+
+    #[error(transparent)]
+    ParseIntErr(#[from] std::num::ParseIntError),
+
+    #[error(transparent)]
+    ParseFloatErr(#[from] std::num::ParseFloatError),
+
+    #[error(transparent)]
+    CliErr(#[from] clap::Error),
 }
 
 pub type PqResult<T> = Result<T, PqErr>;

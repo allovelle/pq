@@ -24,7 +24,7 @@
 // ! The goal is to not need serde_json for input or output
 
 use crossterm::style::Stylize;
-use pq::replay::Replayable;
+use pq::iter::Replayable;
 use std::collections::{HashMap, HashSet};
 use std::ops::{Deref, RangeInclusive};
 use std::{fmt, hash};
