@@ -429,6 +429,7 @@ pub struct UsageReport
 {
     used_transitions: HashSet<Row>,
     expect_transitions: HashSet<Row>,
+    errors: usize,
     documents_examined: usize,
 }
 
@@ -438,7 +439,13 @@ impl UsageReport
     {
         let used_transitions = HashSet::with_capacity(max_state_transitions());
         let expect_transitions = HashSet::from_iter(state_transition_table());
-        Self { used_transitions, expect_transitions, documents_examined: 0 }
+        let (documents_examined, errors) = (0, 0);
+        Self {
+            used_transitions,
+            expect_transitions,
+            documents_examined,
+            errors,
+        }
     }
 
     fn new_document(&mut self)
@@ -449,6 +456,11 @@ impl UsageReport
     fn log_row(&mut self, row: Row)
     {
         self.used_transitions.insert(row);
+    }
+
+    fn error(&mut self)
+    {
+        self.errors += 1;
     }
 
     fn report(&self)
@@ -483,6 +495,8 @@ impl UsageReport
             println!("{}", style("...".to_string()));
             println!("{}", style("...".to_string()));
         }
+
+        println!("Hit {} errors", self.errors.to_string().red());
     }
 }
 
@@ -849,13 +863,6 @@ pub enum State
 /// that char is in this range or set and also not in this range or set.**
 /// `[curr state][accept ch range][except ch range][next state][tok & buf act]`
 const STATE_TRANSITION_TABLE: &[(State, CharMatch, CharMatch, State, Act)] = &[
-    // ignore_spaces_after(COM),
-    // ignore_spaces_after(ComOrClose),
-    // (ComOrClose, AnyOf(","), Unused, COM, IGN),
-    // (ComOrClose, AnyOf("]"), Unused, END, IGN),
-    // (ComOrClose, AnyOf("}"), Unused, END, IGN),
-    // (COM, AnyOf("0"), Unused, ZERO, FIN),
-    // (COM, Within('1', '9'), Unused, INT, FIN),
     // Beginning ---------------------------------------------------------------
     (BEG, EOS, Unused, END, IGN),
     (BEG, WHITESPACE, Unused, BEG, IGN),
@@ -902,9 +909,10 @@ const STATE_TRANSITION_TABLE: &[(State, CharMatch, CharMatch, State, Act)] = &[
     (NIL2, AnyOf("l"), Unused, BEG, TOK),
     // Comma -------------------------------------------------------------------
     (BEG, AnyOf(","), Unused, BEG, ATK),
-    (COM, AnyOf("f"), Unused, BIT0F, IGN),
-    (COM, AnyOf("t"), Unused, BIT1T, IGN),
-    (COM, AnyOf("n"), Unused, NIL1, FIN),
+    (ZERO, AnyOf(","), Unused, BEG, AGN),
+    (INT, AnyOf(","), Unused, BEG, AGN),
+    (FRAC, AnyOf(","), Unused, BEG, AGN),
+    (EXP, AnyOf(","), Unused, BEG, AGN),
     // Key or Value ------------------------------------------------------------
     (BEG, AnyOf("\""), Unused, TXT, IGN),
     (TXT, AnyOf("\""), Unused, BEG, TOK),
@@ -914,27 +922,23 @@ const STATE_TRANSITION_TABLE: &[(State, CharMatch, CharMatch, State, Act)] = &[
     (ESC, AnyOf("u"), Unused, ESCHEX0, ACC),
     // Hex Escape --------------- 0-9A-F → U+0030 ..= U+0046 - U+003A ..= U+0040
     (ESCHEX0, Within('0', 'F'), Within(':', '@'), ESCHEX1, ACC),
-    (ESCHEX0, Within('a', 'f'), Unused, ESCHEX1, ACC),
     (ESCHEX1, Within('0', 'F'), Within(':', '@'), ESCHEX2, ACC),
-    (ESCHEX1, Within('a', 'f'), Unused, ESCHEX2, ACC),
     (ESCHEX2, Within('0', 'F'), Within(':', '@'), ESCHEX3, ACC),
-    (ESCHEX2, Within('a', 'f'), Unused, ESCHEX3, ACC),
     (ESCHEX3, Within('0', 'F'), Within(':', '@'), TXT, ATK),
-    (ESCHEX3, Within('a', 'f'), Unused, TXT, ATK),
     // Array -------------------------------------------------------------------
     (BEG, AnyOf("["), Unused, BEG, ATK),
-    (ZERO, AnyOf(",]"), Unused, BEG, AGN),
-    (INT, AnyOf(",]"), Unused, BEG, AGN),
-    (FRAC, AnyOf(",]"), Unused, BEG, AGN),
-    (EXP, AnyOf(",]"), Unused, BEG, AGN),
+    (ZERO, AnyOf("]"), Unused, BEG, AGN),
+    (INT, AnyOf("]"), Unused, BEG, AGN),
+    (FRAC, AnyOf("]"), Unused, BEG, AGN),
+    (EXP, AnyOf("]"), Unused, BEG, AGN),
     (BEG, AnyOf("]"), Unused, BEG, ATK),
     // Object ------------------------------------------------------------------
     (BEG, AnyOf("{"), Unused, BEG, ATK),
-    (BEG, AnyOf(":,}"), Unused, BEG, ATK),
-    (ZERO, AnyOf(":,}"), Unused, BEG, AGN),
-    (INT, AnyOf(":,}"), Unused, BEG, AGN),
-    (FRAC, AnyOf(":,}"), Unused, BEG, AGN),
-    (EXP, AnyOf(":,}"), Unused, BEG, AGN),
+    (BEG, AnyOf(":"), Unused, BEG, ATK),
+    (ZERO, AnyOf("}"), Unused, BEG, AGN),
+    (INT, AnyOf("}"), Unused, BEG, AGN),
+    (FRAC, AnyOf("}"), Unused, BEG, AGN),
+    (EXP, AnyOf("}"), Unused, BEG, AGN),
     (BEG, AnyOf("}"), Unused, BEG, ATK),
 ];
 
@@ -1198,6 +1202,7 @@ fn main() -> PqResult<()>
     {
         if let Err(err) = tokenize(line, &mut usage_report)
         {
+            usage_report.error();
             println!("{}", format!("{err}").red().bold());
             println!("{}", format!("tokenizing line: {}", line).red().italic());
         }

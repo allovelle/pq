@@ -21,8 +21,19 @@
 true
 false
 null
+[true, true]
+[false, false]
+[null, null]
+[818, 22, 11]
+{"a": 0}
+{"a": 111}
+{"a": 1.0001}
+["a", null,123]
+[1.0001]
+[0e1]
+[0]
 "\"\\/\\b\\f\\n\\r\\t\\u0041"
 [0.0, -0.0, 1e0, 1E+0, 1e000, 1e-01, 1e-001, 1e2, 6.022e23, 1.23456789e-10]
 {"":"empty key"}
-{"chars":"\u0020\u007E\u00A9\u20AC"}
+{"chars":"\u0020\u007E\u00A9\u20AC", "chars2":"\u0020\u007E\u00A9\u20AC"}
 [{"k":[null,{"x":[true,false,"end"]}]}]
