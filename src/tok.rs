@@ -90,6 +90,8 @@ fraction
 
 exponent
     ""
+    'E' '0'  // added by me
+    'e' '0'  // added by me
     'E' sign digits
     'e' sign digits
 

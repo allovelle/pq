@@ -504,7 +504,7 @@ pub fn tokenize(source: &str, usage_report: &mut UsageReport) -> PqResult<()>
         "{:<w_state$} {:<w_ch$} {:<w_state$} {:<w_tok_act$} {:<16} {:<16} {:<w_buf$} {:<w_buf$}",
         "State", "Char", "Next", "Act", "Accept", "Except", "PreBuf", "EndBuf"
     );
-    println!("\n\n\n{}", header.underlined());
+    println!("\n\n\n{}", header.cyan().underlined());
 
     let mut stream = source.chars().chain("\0".chars()).replayable();
     while let Some(ch) = stream.next()
@@ -860,27 +860,28 @@ const STATE_TRANSITION_TABLE: &[(State, CharMatch, CharMatch, State, Act)] = &[
     (BEG, EOS, Unused, END, IGN),
     (BEG, WHITESPACE, Unused, BEG, IGN),
     // Numbers -----------------------------------------------------------------
-    //
+    // Zero
     (BEG, AnyOf("0"), Unused, ZERO, ACC),
     (ZERO, AnyOf("."), Unused, FRAC, ACC),
     (ZERO, AnyOf("eE"), Unused, ESGN, ACC),
     (ZERO, EOS, Unused, BEG, TOK),
-    //
+    // Sign
     (BEG, AnyOf("-"), Unused, SGN, ACC),
     (SGN, AnyOf("0"), Unused, ZERO, ACC),
     (SGN, Within('1', '9'), Unused, INT, ACC),
-    //
+    // Integer
     (BEG, Within('1', '9'), Unused, INT, ACC),
     (INT, Within('0', '9'), Unused, INT, ACC),
     (INT, AnyOf("."), Unused, FRAC, ACC),
     (INT, AnyOf("eE"), Unused, ESGN, ACC),
     (INT, EOS, Unused, BEG, TOK),
-    //
+    // Fraction
     (FRAC, Within('0', '9'), Unused, FRAC, ACC),
     (FRAC, AnyOf("eE"), Unused, ESGN, ACC),
     (FRAC, EOS, Unused, BEG, TOK),
-    //
+    // Exponent
     (ESGN, AnyOf("+-"), Unused, EXP, ACC),
+    (ESGN, Within('0', '9'), Unused, EXP, ACC),
     (EXP, Within('0', '9'), Unused, EXP, ACC),
     (EXP, EOS, Unused, BEG, TOK),
     //
@@ -1139,10 +1140,12 @@ fn emit_table(table: &[Row])
             .max()
             .unwrap_or_default()
     };
-    println!(
+    let header = format!(
         "| {:<state$} | {:^accept$} | {:^accept$} | {:<state$} | {:<tok_act$} |",
         "From", "Accept", "Except", "Onto", "Action",
     );
+
+    println!("{}", header.blue().underlined());
 
     for row in table
     {
@@ -1162,7 +1165,7 @@ fn main() -> PqResult<()>
 {
     emit_table(&state_transition_table()[..]);
 
-    let json = r#"
+    let _json = r#"
         "init"
         818
         -818
@@ -1184,16 +1187,19 @@ fn main() -> PqResult<()>
         {"a": 0, "b": 1, "c": 2}
     "#;
 
+    let json = std::fs::read_to_string("json0.jsonl")?;
+
     let mut usage_report = UsageReport::new();
 
     for line in json.lines().filter(|line| {
         let trim = line.trim();
-        !trim.is_empty() && !trim.starts_with("#")
+        !trim.is_empty() && !trim.starts_with("//")
     })
     {
         if let Err(err) = tokenize(line, &mut usage_report)
         {
-            println!("{}", format!("{err}").red());
+            println!("{}", format!("{err}").red().bold());
+            println!("{}", format!("tokenizing line: {}", line).red().italic());
         }
     }
 
