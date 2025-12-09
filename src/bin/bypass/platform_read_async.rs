@@ -42,9 +42,9 @@ async fn read_bytes(buf: &mut [u8]) -> usize
 }
 
 #[tokio::main]
-async fn main()
+pub async fn main_platform_read_async()
 {
-    let mut buf = [0u8; 2];
+    let mut buf = [0u8; 1024];
     loop
     {
         let n = read_bytes(&mut buf).await;
@@ -53,6 +53,6 @@ async fn main()
             println!("Read: {:?}", &buf[.. n]);
         }
         // Sleep just to avoid busy loop; remove if you want immediate reads.
-        sleep(Duration::from_millis(10)).await;
+        sleep(Duration::from_millis(100)).await;
     }
 }

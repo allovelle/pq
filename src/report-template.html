@@ -1,0 +1,491 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Passkeys.directory — Walmart (mock)</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0f1724;
+            --card: #071127;
+            --muted: #9aa4b2;
+            --accent: #7c5cff;
+            --glass: rgba(255, 255, 255, 0.03);
+            --radius: 16px;
+            --text: #e6eef8;
+            color-scheme: dark;
+        }
+
+        :root[data-theme="light"] {
+            --bg: #f6f7fb;
+            --card: #ffffff;
+            --muted: #5b6472;
+            --accent: #5b4bff;
+            --glass: rgba(0, 0, 0, 0.04);
+            --text: #0b1220;
+            color-scheme: light;
+        }
+
+        * {
+            box-sizing: border-box
+        }
+
+        html,
+        body {
+            height: 100%;
+            margin: 0;
+            font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial;
+            color: var(--text);
+            background: linear-gradient(180deg, var(--bg) 0%, var(--bg) 100%);
+            -webkit-font-smoothing: antialiased;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .wrap {
+            max-width: 1100px;
+            margin: 40px auto;
+            padding: 20px
+        }
+
+        .topbar {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 20px
+        }
+
+        .back {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            background: var(--glass);
+            padding: 8px 12px;
+            border-radius: 12px;
+            color: var(--muted);
+            cursor: pointer
+        }
+
+        .back svg {
+            opacity: .9
+        }
+
+        .title {
+            font-weight: 700;
+            font-size: 22px
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 360px 1fr;
+            gap: 20px
+        }
+
+        .card {
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.01));
+            padding: 20px;
+            border-radius: var(--radius);
+            box-shadow: 0 6px 30px rgba(2, 6, 23, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.03)
+        }
+
+        /* Left column */
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 14px
+        }
+
+        .logo {
+            width: 72px;
+            height: 72px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, var(--accent), #4f9cff);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 800;
+            font-size: 28px;
+            box-shadow: inset 0 -6px 18px rgba(0, 0, 0, 0.25)
+        }
+
+        .brand h2 {
+            margin: 0;
+            font-size: 20px
+        }
+
+        .brand p {
+            margin: 0;
+            color: var(--muted);
+            font-size: 13px
+        }
+
+        .meta {
+            margin-top: 16px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px
+        }
+
+        .meta .item {
+            background: rgba(255, 255, 255, 0.02);
+            padding: 10px;
+            border-radius: 10px, inset 0 -2px 6px rgba(0, 0, 0, 0.45)
+        }
+
+        .meta .label {
+            font-size: 12px;
+            color: var(--muted)
+        }
+
+        .meta .val {
+            font-weight: 700
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 10px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.02);
+            font-size: 13px
+        }
+
+        .copy-block {
+            margin-top: 16px
+        }
+
+        pre {
+            background: rgba(0, 0, 0, 0.28);
+            padding: 12px;
+            border-radius: 10px;
+            overflow: auto;
+            color: #dff;
+            white-space: pre-wrap
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 14px;
+            border-radius: 12px;
+            border: 0;
+            cursor: pointer;
+            font-weight: 600
+        }
+
+        .btn.primary {
+            background: linear-gradient(90deg, var(--accent), #5ad2ff);
+            color: #041022
+        }
+
+        .btn.ghost {
+            background: transparent;
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            color: var(--muted)
+        }
+
+        /* Right column */
+        .hero {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 16px
+        }
+
+        .hero .info {
+            flex: 1
+        }
+
+        .hero h1 {
+            margin: 0;
+            font-size: 28px
+        }
+
+        .hero p {
+            margin-top: 8px;
+            color: var(--muted)
+        }
+
+        .actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 14px
+        }
+
+        .section {
+            margin-top: 18px
+        }
+
+        .section h3 {
+            margin: 0 0 8px 0;
+            font-size: 15px
+        }
+
+        .desc {
+            color: var(--muted);
+            line-height: 1.5
+        }
+
+        .grid-3 {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px
+        }
+
+        .accordion {
+            margin-top: 10px
+        }
+
+        .accordion summary {
+            list-style: none;
+            cursor: pointer;
+            padding: 10px;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.02)
+        }
+
+        .accordion details[open] summary {
+            border-bottom-left-radius: 0;
+            border-bottom-right-radius: 0
+        }
+
+        details p {
+            margin: 10px 0;
+            color: var(--muted)
+        }
+
+        footer {
+            margin-top: 28px;
+            color: var(--muted);
+            font-size: 13px
+        }
+
+        @media (max-width:900px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+
+            .logo {
+                width: 56px;
+                height: 56px
+            }
+
+            .wrap {
+                margin: 20px
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="wrap">
+        <div class="topbar">
+            <button class="btn ghost" id="themeToggle" style="margin-right:8px" onclick="toggleTheme()">🌗
+                Theme</button>
+            <div class="back" onclick="history.back()" title="Back">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M15 18L9 12L15 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round" />
+                </svg>
+                <span style="font-weight:600">Back</span>
+            </div>
+            <div style="margin-left:auto;color:var(--muted);font-size:13px">Demo · Passkeys.directory style</div>
+        </div>
+
+        <div class="grid">
+            <div class="card">
+                <div class="brand">
+                    <div class="logo">W</div>
+                    <div>
+                        <h2>Walmart</h2>
+                        <p>Retail • passkeys supported</p>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <div class="badge">🔒 Passkeys • WebAuthn</div>
+                    <div style="height:8px"></div>
+                    <div class="copy-block">
+                        <div style="display:flex;gap:8px;align-items:center;justify-content:space-between">
+                            <div style="font-size:13px;color:var(--muted)">Example publicKeyCredentialCreationOptions
+                            </div>
+                            <div>
+                                <button class="btn ghost" onclick="downloadSample()">Download</button>
+                                <button class="btn primary" id="copyBtn" onclick="copyCode()">Copy JSON</button>
+                            </div>
+                        </div>
+
+                        <pre id="snippet">{
+  "rp": { "name": "Walmart" },
+  "user": { "id": "base64user", "name": "user@walmart.com", "displayName": "User" },
+  "pubKeyCredParams": [{ "type": "public-key", "alg": -7 }],
+  "challenge": "base64-challenge",
+  "timeout": 60000
+}</pre>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h3>Metadata</h3>
+                    <div class="meta">
+                        <div class="item">
+                            <div class="label">Origin</div>
+                            <div class="val">https://www.walmart.com</div>
+                        </div>
+                        <div class="item">
+                            <div class="label">Type</div>
+                            <div class="val">Enterprise</div>
+                        </div>
+                        <div class="item">
+                            <div class="label">Status</div>
+                            <div class="val">Live</div>
+                        </div>
+                        <div class="item">
+                            <div class="label">Last updated</div>
+                            <div class="val">2025-12-09</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h3>Security</h3>
+                    <div class="grid-3" style="margin-top:8px">
+                        <div class="item">
+                            <div class="label">FIDO</div>
+                            <div class="val">Compliant</div>
+                        </div>
+                        <div class="item">
+                            <div class="label">MFA</div>
+                            <div class="val">Optional</div>
+                        </div>
+                        <div class="item">
+                            <div class="label">Recovery</div>
+                            <div class="val">Email fallback</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h3>Notes</h3>
+                    <div class="desc">This is a mock page styled to look like the example you provided. It lists the
+                        credential creation options and provides an example snippet you can copy, download, or
+                        experiment with in a dev environment.</div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="hero">
+                    <div class="info">
+                        <h1>Walmart — Passkey details</h1>
+                        <p class="desc">Official support for passkeys (WebAuthn) across web and mobile. Use platform
+                            authenticators or roaming authenticators to register and sign in securely without passwords.
+                        </p>
+
+                        <div class="actions">
+                            <button class="btn primary" onclick="alert('Pretend to register...')">Register
+                                passkey</button>
+                            <button class="btn ghost" onclick="alert('Pretend to sign in...')">Sign in</button>
+                        </div>
+
+                        <div class="section">
+                            <h3>Endpoints</h3>
+                            <div style="display:flex;flex-direction:column;gap:8px">
+                                <code
+                                    style="padding:8px;border-radius:8px;background:rgba(255,255,255,0.02);">POST /webauthn/register</code>
+                                <code
+                                    style="padding:8px;border-radius:8px;background:rgba(255,255,255,0.02);">POST /webauthn/verify</code>
+                            </div>
+                        </div>
+
+                        <div class="section">
+                            <h3>How it works</h3>
+                            <ol style="color:var(--muted);padding-left:18px">
+                                <li>Client requests registration options from server.</li>
+                                <li>Client calls navigator.credentials.create() with the options.</li>
+                                <li>Client sends attestation to the server for verification and storage.</li>
+                            </ol>
+                        </div>
+
+                        <div class="accordion">
+                            <details>
+                                <summary>More details</summary>
+                                <p>Try copying the JSON and using it with your WebAuthn test harness. This demo is
+                                    intentionally simplified and safe — do not paste real user secrets here.</p>
+                            </details>
+                        </div>
+
+                    </div>
+                    <div style="width:200px;text-align:center">
+                        <div
+                            style="background:linear-gradient(180deg,#0b2337, #092033);padding:18px;border-radius:12px;box-shadow:0 6px 30px rgba(2,6,23,0.6)">
+                            <svg width="64" height="64" viewBox="0 0 24 24" fill="none"
+                                style="display:block;margin:0 auto 8px auto">
+                                <path
+                                    d="M12 2C8.13 2 5 5.13 5 9v3H4a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1h-1V9c0-3.87-3.13-7-7-7z"
+                                    stroke="#5ad2ff" stroke-width="1.2" stroke-linecap="round"
+                                    stroke-linejoin="round" />
+                            </svg>
+                            <div style="color:var(--muted);font-size:13px">Platform</div>
+                            <div style="font-weight:700;font-size:18px;margin-top:8px">Web + Mobile</div>
+                        </div>
+
+                        <div style="margin-top:12px;font-size:13px;color:var(--muted)">
+                            <div style="margin-bottom:8px"><strong>Supported</strong>: Platform authenticators</div>
+                            <div><strong>Browsers</strong>: Chrome, Edge, Safari, Firefox</div>
+                        </div>
+                    </div>
+                </div>
+
+                <footer>
+                    This is a static mockup inspired by the linked page. If you want exact styling or dynamic data
+                    integration (API, CMS), tell me which parts to wire up.
+                </footer>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const THEME_KEY = 'pd-theme';
+        (function initTheme() {
+            const saved = localStorage.getItem(THEME_KEY);
+            if (saved) { document.documentElement.setAttribute('data-theme', saved); }
+        })();
+        function toggleTheme() {
+            const root = document.documentElement;
+            const current = root.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+            const next = current === 'light' ? 'dark' : 'light';
+            root.setAttribute('data-theme', next);
+            localStorage.setItem(THEME_KEY, next);
+        }
+
+        function copyCode() {
+            const txt = document.getElementById('snippet').innerText;
+            navigator.clipboard.writeText(txt).then(() => {
+                const b = document.getElementById('copyBtn');
+                const prev = b.innerText;
+                b.innerText = 'Copied!';
+                setTimeout(() => b.innerText = prev, 1600);
+            }).catch(() => alert('Copy failed'));
+        }
+
+        function downloadSample() {
+            const text = document.getElementById('snippet').innerText;
+            const blob = new Blob([text], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'walmart-webauthn-options.json';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+        }
+    </script>
+</body>
+
+</html>

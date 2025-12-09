@@ -35,7 +35,7 @@ fn read_bytes(buf: &mut [u8]) -> usize
     n
 }
 
-fn main()
+pub fn main_platform_read()
 {
     let mut buf = [0u8; 2];
     loop

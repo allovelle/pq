@@ -35,7 +35,7 @@ fn write_bytes(bytes: &[u8])
     std::mem::forget(stdout);
 }
 
-fn main()
+pub fn main_platform_write()
 {
     loop
     {

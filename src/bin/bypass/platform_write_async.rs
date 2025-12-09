@@ -34,7 +34,7 @@ async fn write_bytes(bytes: &[u8])
 }
 
 #[tokio::main]
-async fn main()
+pub async fn main_platform_write_async()
 {
     loop
     {
