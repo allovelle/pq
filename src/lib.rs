@@ -55,4 +55,40 @@ macro_rules! ret_if {
             return $val;
         }
     };
+
+    ($cond:expr) => {
+        if $cond
+        {
+            return;
+        }
+    };
+}
+
+/// A macro for breaking loops early based on a condition.
+#[macro_export]
+macro_rules! brk_if {
+    ($cond:expr, $val:expr) => {
+        if $cond
+        {
+            break $val;
+        }
+    };
+
+    ($cond:expr) => {
+        if $cond
+        {
+            break;
+        }
+    };
+}
+
+/// A macro for continuing loops based on a condition.
+#[macro_export]
+macro_rules! continue_if {
+    ($cond:expr) => {
+        if $cond
+        {
+            continue;
+        }
+    };
 }

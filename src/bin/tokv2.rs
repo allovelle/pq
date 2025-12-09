@@ -1,229 +1,123 @@
 use crossterm::style::Stylize;
-use pq::iter::Replayable;
-use pq::ret_if;
-use pq::tok::{Act::*, CharMatch::*, State::*};
-use std::collections::{HashMap, HashSet};
-use std::ops::RangeInclusive;
-use std::{fmt, hash};
-use strum::*;
-use thiserror::Error;
+use pq::PqResult;
+use pq::diagnostics::UsageReport;
+use pq::tok::{Act::*, CharMatch::*, State::*, state_transition_table};
 
-#[derive(Default, Clone)]
-pub struct UsageReport
+// fn main() -> PqResult<()>
+// {
+//     let mut report = UsageReport::new();
+
+//     UsageReport::emit_state_transition_table(&state_transition_table()[..]);
+
+//     let _json = r#"
+//         "init"
+//         818
+//         -818
+//         "\n"
+//         true, false
+//         null
+//         0.22
+//         -0.22
+//         8.18e+2
+//         81800e-2
+//         818e+2
+//         81800.0e-2
+//         []
+//         {}
+//         [0]
+//         [0,1,2,3]
+//         {"a":0,"b":1,"c":2}
+//         [0, 1, 2, 3]
+//         {"a": 0, "b": 1, "c": 2}
+//     "#;
+
+//     let json = std::fs::read_to_string("json0.jsonl")?;
+
+//     for line in json.lines().filter(|line| {
+//         let trim = line.trim();
+//         !trim.is_empty() && !trim.starts_with("//")
+//     })
+//     {
+//         if let Err(err) = tokenize(line, &mut usage_report)
+//         {
+//             usage_report.error();
+//             println!("{}", format!("{err}").red().bold());
+//             println!("{}", format!("tokenizing line: {}", line).red().italic());
+//         }
+//     }
+
+//     usage_report.report();
+
+//     Ok(())
+// }
+
+// TODO: Rework tokenize() so that it works off of a stream of characters and
+// TODO: lazily produces tokens to an output stream
+
+pub async fn tokenize_stream(stream: &mut impl Iterator<Item = char>)
 {
-    used_transitions: HashSet<Row>,
-    expect_transitions: HashSet<Row>,
-    errors: usize,
-    documents_examined: usize,
-    w_state: usize,
-    w_tok_act: usize,
-    w_ch: usize,
-    w_buf: usize,
+    if let Some(ch) = stream.next()
+    {}
 }
 
-impl UsageReport
+// file stream |> tokenizer |> parser
+
+use tokio::fs::File;
+use tokio::io::{self, AsyncReadExt, AsyncWriteExt};
+use tokio::sync::mpsc;
+
+#[tokio::main(flavor = "multi_thread", worker_threads = 3)]
+async fn main() -> io::Result<()>
 {
-    fn new() -> Self
-    {
-        let used_transitions = HashSet::with_capacity(max_state_transitions());
-        let expect_transitions = HashSet::from_iter(state_transition_table());
-        let this =
-            Self { used_transitions, expect_transitions, ..Default::default() };
-        this.w_state = longest_variant_name::<State>();
-        this.w_tok_act = longest_variant_name::<Act>() + 2;
-        this.w_ch = format!("{:?}", '\u{10FFFF}').len();
-        this.w_buf = 8;
-        this
-    }
+    let (tx_in, mut rx_in) = mpsc::channel::<String>(8);
+    let (tx_out, mut rx_out) = mpsc::channel::<String>(8);
 
-    fn log_new_document(&self)
-    {
-        let Self { w_state, w_tok_act, w_ch, w_buf, .. } = self;
+    /* ---------------- INPUT ---------------- */
 
-        let header = format!(
-            "{:<w_state$} {:<w_ch$} {:<w_state$} {:<w_tok_act$} {:<16} {:<16} {:<w_buf$} {:<w_buf$}",
-            "State",
-            "Char",
-            "Next",
-            "Act",
-            "Accept",
-            "Except",
-            "PreBuf",
-            "EndBuf"
-        );
-        println!("\n\n\n{}", header.cyan().underlined());
-    }
+    tokio::spawn(async move {
+        let mut stdin = io::stdin();
 
-    fn log_state_transition(&mut self, curr: State, ch: char, next: Row)
-    {
-        let row = next;
-        self.used_transitions.insert(row);
-        ret_if!(row.from == row.onto && row.act == IGN, ());
-        let Self { w_state, w_tok_act, w_ch, w_buf, .. } = self;
-
-        println!(
-            "{from:<w_state$} {char:<w_ch$} {next:<w_state$} {act:<w_tok_act$} {acc:<16} {exc:<16} {prebuf:<w_buf$} {postbuf:w_buf$}",
-            from = format!("{:?}", curr),
-            char = format!("{:?}", ch),
-            next = format!("{:?}", row.onto),
-            act = format!("{:?}", row.act),
-            acc = format!("{:?}", row.accept),
-            exc = format!("{:?}", row.except),
-            prebuf = format!("{:?}", buf),
-            postbuf = format!("{:?}   ", match row.act
+        loop
+        {
+            let mut buf = String::new();
+            let n = stdin.read_to_string(&mut buf).await.unwrap();
+            if n == 0
             {
-                FIN => ch.to_string(),
-                TOK | ATK => String::new(),
-                ACC => format!("{buf}{ch}"),
-                IGN => buf.clone(),
-                AGN => String::new(),
-            })
-        );
-
-        if row.onto == State::end_state()
-        {
-            return println!("Hit explicit {} state", "END".underlined());
-        }
-    }
-
-    fn log_end_document(&self)
-    {
-        println!("\n{}\n", format!("Tokens: {toks:?}").green());
-    }
-
-    fn new_document(&mut self)
-    {
-        self.documents_examined += 1;
-    }
-
-    fn log_row(&mut self, row: Row)
-    {
-        self.used_transitions.insert(row);
-    }
-
-    fn error(&mut self)
-    {
-        self.errors += 1;
-    }
-
-    fn final_report(&self)
-    {
-        let dbg_msg = format!(
-            "Hit {} out of {} state transitions, missed:",
-            self.used_transitions.len(),
-            self.expect_transitions.len(),
-        );
-
-        let style = if self.used_transitions.len()
-            < self.expect_transitions.len()
-        {
-            <String as Stylize>::yellow
-        }
-        else
-        {
-            <String as Stylize>::reset
-        };
-
-        println!("{}", style(dbg_msg));
-
-        if self.used_transitions.len() < self.expect_transitions.len()
-        {
-            for unused in self
-                .expect_transitions
-                .difference(&self.used_transitions)
-                .take(4)
-            {
-                println!("{}", style(unused.to_debug()))
+                break;
             }
-            println!("{}", style("...".to_string()));
-            println!("{}", style("...".to_string()));
+            tx_in.send(buf).await.unwrap();
         }
+        // tx_in dropped → downstream shuts down automatically
+    });
 
-        println!("Hit {} errors", self.errors.to_string().red());
-    }
+    /* --------------- PROCESS --------------- */
 
-    fn emit_state_transition_table(table: &[Row])
-    {
-        let state = longest_variant_name::<State>();
-        let tok_act = longest_variant_name::<Act>();
-        let accept = {
-            table
-                .iter()
-                .map(|s| {
-                    // Within('\u{10FFFF}', '\u{10FFFF}');
-                    let len_acc = format!("{:?}", s.accept).len();
-                    let len_exc = format!("{:?}", s.except).len();
-                    len_acc.max(len_exc)
-                })
-                .max()
-                .unwrap_or_default()
-        };
-        let header = format!(
-            "| {:<state$} | {:^accept$} | {:^accept$} | {:<state$} | {:<tok_act$} |",
-            "From", "Accept", "Except", "Onto", "Action",
-        );
-
-        println!("{}", header.blue().underlined());
-
-        for row in table
+    tokio::spawn(async move {
+        while let Some(input) = rx_in.recv().await
         {
-            println!(
-                "| {fro:<state$} | {acc:^accept$} | {exc:^accept$} | {to:<state$} | {act:<tok_act$} |",
-                fro = format!("{:?}", row.from),
-                acc = format!("{:?}", row.accept),
-                exc = format!("{:?}", row.except),
-                to = format!("{:?}", row.onto),
-                act = format!("{:?}", row.act),
-            );
+            let output = process(input);
+            tx_out.send(output).await.unwrap();
         }
-        println!();
-    }
-}
+        // tx_out dropped
+    });
 
-fn main() -> PqResult<()>
-{
-    emit_table(&state_transition_table()[..]);
+    /* ---------------- OUTPUT --------------- */
 
-    let _json = r#"
-        "init"
-        818
-        -818
-        "\n"
-        true, false
-        null
-        0.22
-        -0.22
-        8.18e+2
-        81800e-2
-        818e+2
-        81800.0e-2
-        []
-        {}
-        [0]
-        [0,1,2,3]
-        {"a":0,"b":1,"c":2}
-        [0, 1, 2, 3]
-        {"a": 0, "b": 1, "c": 2}
-    "#;
+    // ? let mut file = File::create("out.txt").await?;
+    let mut stdout = io::stdout();
 
-    let json = std::fs::read_to_string("json0.jsonl")?;
-
-    let mut usage_report = UsageReport::new();
-
-    for line in json.lines().filter(|line| {
-        let trim = line.trim();
-        !trim.is_empty() && !trim.starts_with("//")
-    })
+    while let Some(msg) = rx_out.recv().await
     {
-        if let Err(err) = tokenize(line, &mut usage_report)
-        {
-            usage_report.error();
-            println!("{}", format!("{err}").red().bold());
-            println!("{}", format!("tokenizing line: {}", line).red().italic());
-        }
+        stdout.write_all(msg.as_bytes()).await?;
+        stdout.flush().await?;
+        // ? file.write_all(msg.as_bytes()).await?;
     }
-
-    usage_report.report();
 
     Ok(())
+}
+
+fn process(mut s: String) -> String
+{
+    s.make_ascii_uppercase();
+    s
 }

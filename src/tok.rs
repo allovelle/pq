@@ -2,7 +2,7 @@
 
 use std::ops::Deref;
 
-use crate::{PqResult, iter::Replayable, ret_if};
+use crate::{PqResult, brk_if, iter::Replayable, ret_if};
 use crossterm::style::Stylize;
 use strum::VariantNames;
 use thiserror::Error;
@@ -356,6 +356,15 @@ pub const fn max_state_transitions() -> usize
     transitions
 }
 
+// TODO: Rework tokenize() so that it works off of a stream of characters and
+// TODO: lazily produces tokens to an output stream
+
+pub async fn tokenize_stream(stream: &mut impl Iterator<Item = char>)
+{
+    if let Some(ch) = stream.next()
+    {}
+}
+
 pub fn tokenize(source: &str) -> PqResult<()>
 {
     let transitions: [Row; _] = state_transition_table();
@@ -411,11 +420,7 @@ pub fn tokenize(source: &str) -> PqResult<()>
             Act::IGN => (),
         }
 
-        if row.onto == State::end_state()
-        {
-            println!("Hit explicit {} state", "END".underlined());
-            break;
-        }
+        brk_if!(row.onto == State::end_state());
 
         curr = row.onto;
     }

@@ -4,12 +4,15 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-# ! tokio = { version = "1.48.0", features = ["full"] }
-tokio = { version = "1", default-features = false, features = [
-    "rt",      # single-threaded runtime
-    "fs",      # file I/O
-    "io-util", # stdin/stdout
-    "sync",    # mpsc, oneshot, Mutex, RwLock
+# tokio = { version = "1.48.0", features = ["full"] }
+tokio = { version = "1.48.0", default-features = false, features = [
+    "rt",              # the runtime itself
+    "rt-multi-thread", # use rt for a single-threaded runtime
+    "fs",              # file I/O
+    "io-std",          # stdin/stdout
+    "io-util",         # general io
+    "sync",            # mpsc, oneshot, Mutex, RwLock
+    "macros",          # tokio::main
 ] }
 
 

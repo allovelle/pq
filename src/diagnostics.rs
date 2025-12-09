@@ -27,7 +27,7 @@ pub struct UsageReport
 
 impl UsageReport
 {
-    fn new() -> Self
+    pub fn new() -> Self
     {
         let used_transitions = HashSet::with_capacity(max_state_transitions());
         let expect_transitions = HashSet::from_iter(state_transition_table());
@@ -40,7 +40,7 @@ impl UsageReport
         this
     }
 
-    fn log_new_document(&self)
+    pub fn log_new_document(&self)
     {
         let Self { w_state, w_tok_act, w_ch, w_buf, .. } = self;
 
@@ -58,7 +58,7 @@ impl UsageReport
         println!("\n\n\n{}", header.cyan().underlined());
     }
 
-    fn log_state_transition(
+    pub fn log_state_transition(
         &mut self,
         curr: State,
         ch: char,
@@ -96,27 +96,27 @@ impl UsageReport
         }
     }
 
-    fn log_end_document(&self, toks: &Vec<Tok>)
+    pub fn log_end_document(&self, toks: &Vec<Tok>)
     {
         println!("\n{}\n", format!("Tokens: {toks:?}").green());
     }
 
-    fn new_document(&mut self)
+    pub fn new_document(&mut self)
     {
         self.documents_examined += 1;
     }
 
-    fn log_row(&mut self, row: Row)
+    pub fn log_row(&mut self, row: Row)
     {
         self.used_transitions.insert(row);
     }
 
-    fn error(&mut self)
+    pub fn error(&mut self)
     {
         self.errors += 1;
     }
 
-    fn final_report(&self)
+    pub fn final_report(&self)
     {
         let dbg_msg = format!(
             "Hit {} out of {} state transitions, missed:",
@@ -152,7 +152,7 @@ impl UsageReport
         println!("Hit {} errors", self.errors.to_string().red());
     }
 
-    fn emit_state_transition_table(table: &[Row])
+    pub fn emit_state_transition_table(table: &[Row])
     {
         let state = longest_variant_name::<State>();
         let tok_act = longest_variant_name::<Act>();
