@@ -1,12 +1,16 @@
+use crate::iter::Replayable;
+use crate::ret_if;
+use crate::tok::{Act::*, CharMatch::*, State::*};
+use crate::tok::{Act::*, CharMatch::*, State::*, *};
+use crate::txt::ToDebug;
 use crossterm::style::Stylize;
-use pq::iter::Replayable;
-use pq::ret_if;
-use pq::tok::{Act::*, CharMatch::*, State::*};
 use std::collections::{HashMap, HashSet};
 use std::ops::RangeInclusive;
 use std::{fmt, hash};
 use strum::*;
 use thiserror::Error;
+
+use crate::tok;
 
 #[derive(Default, Clone)]
 pub struct UsageReport
@@ -27,7 +31,7 @@ impl UsageReport
     {
         let used_transitions = HashSet::with_capacity(max_state_transitions());
         let expect_transitions = HashSet::from_iter(state_transition_table());
-        let this =
+        let mut this =
             Self { used_transitions, expect_transitions, ..Default::default() };
         this.w_state = longest_variant_name::<State>();
         this.w_tok_act = longest_variant_name::<Act>() + 2;
@@ -54,7 +58,13 @@ impl UsageReport
         println!("\n\n\n{}", header.cyan().underlined());
     }
 
-    fn log_state_transition(&mut self, curr: State, ch: char, next: Row)
+    fn log_state_transition(
+        &mut self,
+        curr: State,
+        ch: char,
+        next: Row,
+        buf: String,
+    )
     {
         let row = next;
         self.used_transitions.insert(row);
@@ -86,7 +96,7 @@ impl UsageReport
         }
     }
 
-    fn log_end_document(&self)
+    fn log_end_document(&self, toks: &Vec<Tok>)
     {
         println!("\n{}\n", format!("Tokens: {toks:?}").green());
     }
@@ -178,52 +188,4 @@ impl UsageReport
         }
         println!();
     }
-}
-
-fn main() -> PqResult<()>
-{
-    emit_table(&state_transition_table()[..]);
-
-    let _json = r#"
-        "init"
-        818
-        -818
-        "\n"
-        true, false
-        null
-        0.22
-        -0.22
-        8.18e+2
-        81800e-2
-        818e+2
-        81800.0e-2
-        []
-        {}
-        [0]
-        [0,1,2,3]
-        {"a":0,"b":1,"c":2}
-        [0, 1, 2, 3]
-        {"a": 0, "b": 1, "c": 2}
-    "#;
-
-    let json = std::fs::read_to_string("json0.jsonl")?;
-
-    let mut usage_report = UsageReport::new();
-
-    for line in json.lines().filter(|line| {
-        let trim = line.trim();
-        !trim.is_empty() && !trim.starts_with("//")
-    })
-    {
-        if let Err(err) = tokenize(line, &mut usage_report)
-        {
-            usage_report.error();
-            println!("{}", format!("{err}").red().bold());
-            println!("{}", format!("tokenizing line: {}", line).red().italic());
-        }
-    }
-
-    usage_report.report();
-
-    Ok(())
 }

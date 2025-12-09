@@ -1,4 +1,5 @@
 pub mod cli;
+pub mod diagnostics;
 pub mod inc;
 pub mod iter;
 pub mod range;

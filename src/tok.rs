@@ -1,8 +1,11 @@
 //! State transition table for the streaming JSON tokenizer
 
-use thiserror::Error;
+use std::ops::Deref;
 
-use crate::PqResult;
+use crate::{PqResult, iter::Replayable, ret_if};
+use crossterm::style::Stylize;
+use strum::VariantNames;
+use thiserror::Error;
 use {Act::*, CharMatch::*, State::*};
 
 /*
@@ -326,7 +329,7 @@ const STATE_TRANSITION_TABLE: &[(State, CharMatch, CharMatch, State, Act)] = &[
 /// (that are not a consecutive range), one new row is created for each of the
 /// specified exclusion characters. This also works the other way around for
 /// disallowed range & allowed specified character set.
-const fn max_state_transitions() -> usize
+pub const fn max_state_transitions() -> usize
 {
     let mut transitions = 0;
     let mut udx = 0;
@@ -353,59 +356,22 @@ const fn max_state_transitions() -> usize
     transitions
 }
 
-pub fn tokenize(source: &str, usage_report: &mut UsageReport) -> PqResult<()>
+pub fn tokenize(source: &str) -> PqResult<()>
 {
-    usage_report.new_document();
-
     let transitions: [Row; _] = state_transition_table();
     let mut curr = BEG;
     let mut buf = String::with_capacity(32);
     let mut toks: Vec<Tok> = Vec::with_capacity(source.len());
 
-    let w_state = longest_variant_name::<State>();
-    let w_tok_act = longest_variant_name::<Act>() + 2;
-    let w_ch = format!("{:?}", '\u{10FFFF}').len();
-    let w_buf = 8;
-
-    let header = format!(
-        "{:<w_state$} {:<w_ch$} {:<w_state$} {:<w_tok_act$} {:<16} {:<16} {:<w_buf$} {:<w_buf$}",
-        "State", "Char", "Next", "Act", "Accept", "Except", "PreBuf", "EndBuf"
-    );
-    println!("\n\n\n{}", header.cyan().underlined());
-
     let mut stream = source.chars().chain("\0".chars()).replayable();
     while let Some(ch) = stream.next()
-    // for ch in source.chars().chain("\0".chars())
     {
-        // ? Find the transition for the current state and character
+        // Find the transition for the current state and character
         let row = match transitions.iter().find(|row| row.matches(curr, ch))
         {
             Some(row) => *row,
             None => return Err(LexErr::InvalidStateTransition(curr, ch).into()),
         };
-
-        // Debug-print row info
-        if !(row.from == row.onto && row.act == IGN)
-        {
-            println!(
-                "{from:<w_state$} {char:<w_ch$} {next:<w_state$} {act:<w_tok_act$} {acc:<16} {exc:<16} {prebuf:<w_buf$} {postbuf:w_buf$}",
-                from = format!("{:?}", curr),
-                char = format!("{:?}", ch),
-                next = format!("{:?}", row.onto),
-                act = format!("{:?}", row.act),
-                acc = format!("{:?}", row.accept),
-                exc = format!("{:?}", row.except),
-                prebuf = format!("{:?}", buf),
-                postbuf = format!("{:?}   ", match row.act
-                {
-                    FIN => ch.to_string(),
-                    TOK | ATK => String::new(),
-                    ACC => format!("{buf}{ch}"),
-                    IGN => buf.clone(),
-                    AGN => String::new(),
-                })
-            );
-        }
 
         match row.act
         {
@@ -445,8 +411,6 @@ pub fn tokenize(source: &str, usage_report: &mut UsageReport) -> PqResult<()>
             Act::IGN => (),
         }
 
-        usage_report.log_row(row);
-
         if row.onto == State::end_state()
         {
             println!("Hit explicit {} state", "END".underlined());
@@ -456,14 +420,10 @@ pub fn tokenize(source: &str, usage_report: &mut UsageReport) -> PqResult<()>
         curr = row.onto;
     }
 
-    println!();
-    println!("{}", format!("Tokens: {toks:?}").green());
-    println!();
-
     Ok(())
 }
 
-const fn state_transition_table() -> [Row; STATE_TRANSITION_TABLE.len()]
+pub const fn state_transition_table() -> [Row; STATE_TRANSITION_TABLE.len()]
 {
     #[cfg(false)]
     const EXPANDED_TABLE_LEN: usize = max_state_transitions();
@@ -621,12 +581,12 @@ impl State
 {
     /// Callback to be used by the tokenizer machinery as a sentinel on when to stop
     /// lexing, even with a non-empty buffer.
-    const fn end_state() -> Self
+    pub const fn end_state() -> Self
     {
         Self::END
     }
 
-    fn finalize(self, buffer: &String) -> PqResult<Tok>
+    pub fn finalize(self, buffer: &String) -> PqResult<Tok>
     {
         use self::*;
         let non_terminal = || panic!("Token non-terminal encountered");
@@ -724,19 +684,19 @@ mod impl_char_match
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Hash)]
-struct Row
+pub struct Row
 {
     /// The state performing an examination for transition determination
-    from: State,
+    pub from: State,
     /// Current character is within this range or set (matches first)
-    accept: CharMatch,
+    pub accept: CharMatch,
     /// Current character is outside this range or set (matches second)
-    except: CharMatch,
+    pub except: CharMatch,
     /// The state to transition to if accept & except ranges match on char
-    onto: State,
+    pub onto: State,
     /// Discard or accumulate current character, append to or clear buffer,
     /// and record new token
-    act: Act,
+    pub act: Act,
 }
 
 impl Row
@@ -790,9 +750,9 @@ pub struct CharRangeInclusive
 
 mod impl_char_range_inclusive
 {
-    use std::collections::HashMap;
+    use std::{collections::HashMap, fmt, hash, ops::RangeInclusive};
 
-    use crate::ret_if;
+    use crate::{ret_if, txt::CodepointView};
 
     use super::*;
 
@@ -970,4 +930,9 @@ mod impl_char_range_inclusive
             value.from ..= value.onto
         }
     }
+}
+
+pub fn longest_variant_name<E: VariantNames>() -> usize
+{
+    E::VARIANTS.iter().map(Deref::deref).map(str::len).max().unwrap_or_default()
 }
