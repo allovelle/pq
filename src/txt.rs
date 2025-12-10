@@ -12,6 +12,111 @@ pub const fn utf8_byte_udx_after(buffer: &[u8], udx: usize) -> Option<usize>
     None
 }
 
+/// Returns the number of bytes of the first char in the buffer. Retrns none if
+/// char is invalid, and 1-4 for valid codepoints. If udx is none, index of 0 is
+/// assumed.
+pub const fn utf8_codepoint_len(buffer: &[u8]) -> Option<usize>
+{
+    const UTF8_MASKS: [[u8; 4]; 4] = [
+        [0b1000_0000, 0, 0, 0b1111_1111],
+        [0b1110_0000, 0b1100_0000, 1, 0b0001_1111],
+        [0b1111_0000, 0b1110_0000, 2, 0b0000_1111],
+        [0b1111_1000, 0b1111_0000, 3, 0b0000_0111],
+    ];
+
+    let udx = 0;
+    let byte0 = if udx < buffer.len() { buffer[udx] } else { 0 };
+
+    let mut udx_checker = 0;
+    while udx_checker < UTF8_MASKS.len()
+    {
+        let [mask, valid_mask, additional_len, strip] = UTF8_MASKS[udx_checker];
+        udx_checker += 1;
+
+        if udx + additional_len as usize >= buffer.len()
+        {
+            return None;
+        }
+
+        let len = buffer.len();
+        let offsets =
+            [len.checked_sub(1), len.checked_sub(2), len.checked_sub(3)];
+        let offsets2 = [0; 3];
+
+        let byte1 = match buffer.len().checked_sub(1)
+        {
+            Some(_) => 0,
+            Some(offset) if udx < offset => buffer[udx + 1],
+            None => 0,
+        };
+
+        if byte0 & mask == valid_mask
+        {
+            let mut bytes = [byte0, 0, 0, 0];
+            let mut i = 1;
+            while let Some(boundary) = buffer.len().checked_sub(i)
+                && i < bytes.len()
+                && udx < boundary
+            {
+                bytes[i] = buffer[udx + i];
+                i += 1;
+            }
+
+            // let bytes = [byte0, byte1, byte2, byte3];
+            let strip_masks = [strip, 0b0011_1111, 0b0011_1111, 0b0011_1111];
+            let mut codepoint: u32 = 0;
+
+            let mut udx_i = 0usize;
+            while udx_i < additional_len as usize + 1
+            {
+                let shift = 6 * (additional_len - udx_i as u8);
+                let stripped_byte = bytes[udx_i] & strip_masks[udx_i];
+                codepoint |= (stripped_byte as u32) << (shift as u32);
+                udx_i += 1;
+            }
+
+            // TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above
+            // TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above
+            let char = std::char::from_u32(codepoint);
+            return char.map(char::len_utf8);
+        }
+    }
+
+    None
+}
+
 /// Returns a [char] for a specific byte index. If the byte index is not on a
 /// valid codepoint boundary (specifically the start byte of that codepoint),
 /// [Option::None] is returned.
@@ -232,4 +337,40 @@ impl CodepointView for char
     {
         format!("U+{:04X}", self as u32)
     }
+}
+
+/// Partial iterator for allowing looping over UTF-8 codepoint fragments.
+/// Terminates at end of buffer or when a partial fragment is hit. Returns the
+/// size of the partial character. 0-4 bytes, 0 for end of stream, 1-4 for valid
+/// codepoints that were sent fragmented.
+#[derive(Debug)]
+pub struct Utf8PartIter<'a>
+{
+    bytes: &'a [u8],
+    pos: usize,
+}
+
+impl<'a> Utf8PartIter<'a>
+{
+    pub fn new(bytes: &'a [u8]) -> Self
+    {
+        Self { bytes, pos: 0 }
+    }
+}
+
+impl<'a> Iterator for Utf8PartIter<'a>
+{
+    type Item = char;
+
+    fn next(&mut self) -> Option<Self::Item>
+    {
+        let codepoint = utf8_char_on(self.bytes, self.pos)?;
+        self.pos += codepoint.len_utf8();
+        Some(codepoint)
+    }
+}
+
+pub fn utf8_iter_chars<'buf>(txt: &'buf str) -> Utf8PartIter<'buf>
+{
+    Utf8PartIter::new(txt.as_bytes())
 }
