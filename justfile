@@ -13,6 +13,11 @@ stream:
                 sys.stdout.flush()
         except KeyboardInterrupt:
             break
+        except BrokenPipeError:
+            print('\n', 'Consumer closed pipe unexpectedly')
+            break
+        except Exception as e:
+            print('error', e, '\n')
         offset += length
         length = random.randint(1, 8)
 

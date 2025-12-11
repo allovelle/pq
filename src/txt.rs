@@ -12,10 +12,16 @@ pub const fn utf8_byte_udx_after(buffer: &[u8], udx: usize) -> Option<usize>
     None
 }
 
+pub const fn utf8_codepoint_at(buffer: &[u8], udx: usize)
+-> Result<char, usize>
+{
+    Err(0)
+}
+
 /// Returns the number of bytes of the first char in the buffer. Retrns none if
 /// char is invalid, and 1-4 for valid codepoints. If udx is none, index of 0 is
 /// assumed.
-pub const fn utf8_codepoint_len(buffer: &[u8]) -> Option<usize>
+pub const fn utf8_codepoint_len(buffer: &[u8], udx: usize) -> Option<usize>
 {
     const UTF8_MASKS: [[u8; 4]; 4] = [
         [0b1000_0000, 0, 0, 0b1111_1111],
@@ -26,6 +32,22 @@ pub const fn utf8_codepoint_len(buffer: &[u8]) -> Option<usize>
 
     let udx = 0;
     let byte0 = if udx < buffer.len() { buffer[udx] } else { 0 };
+    let mut udx_checker = 0;
+
+    while udx_checker < UTF8_MASKS.len()
+    {
+        let [mask, valid_mask, additional_len, strip] = UTF8_MASKS[udx_checker];
+        udx_checker += 1;
+
+        if udx + additional_len as usize >= buffer.len()
+        {
+            // TODO: Return the delta
+            return None;
+        }
+
+        if byte0 & mask == valid_mask
+        {}
+    }
 
     let mut udx_checker = 0;
     while udx_checker < UTF8_MASKS.len()
@@ -35,6 +57,7 @@ pub const fn utf8_codepoint_len(buffer: &[u8]) -> Option<usize>
 
         if udx + additional_len as usize >= buffer.len()
         {
+            // TODO: Return the delta
             return None;
         }
 
@@ -110,7 +133,8 @@ pub const fn utf8_codepoint_len(buffer: &[u8]) -> Option<usize>
             // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
             // TODO: that means remove some checks from above
             let char = std::char::from_u32(codepoint);
-            return char.map(char::len_utf8);
+            // return char.map(char::len_utf8);
+            return None;
         }
     }
 
@@ -370,7 +394,7 @@ impl<'a> Iterator for Utf8PartIter<'a>
     }
 }
 
-pub fn utf8_iter_chars<'buf>(txt: &'buf str) -> Utf8PartIter<'buf>
+pub fn utf8_iter_part_chars<'buf>(txt: &'buf str) -> Utf8PartIter<'buf>
 {
     Utf8PartIter::new(txt.as_bytes())
 }

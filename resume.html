@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Full Name — Resume</title>
+    <style>
+        :root {
+            --bg: #f6f7f8;
+            --card: #ffffff;
+            --muted: #6b7280;
+            --accent: #0f172a;
+            --rule: rgba(15, 23, 42, 0.06);
+            --radius: 12px;
+            --maxw: 880px;
+            --pad: 20px;
+            font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+            color: var(--accent);
+        }
+
+        html,
+        body {
+            height: 100%;
+        }
+
+        body {
+            margin: 0;
+            background: linear-gradient(180deg, var(--bg), #ffffff);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 32px;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* Outer container like a single centered card */
+        .resume {
+            width: 100%;
+            max-width: var(--maxw);
+            background: var(--card);
+            border-radius: var(--radius);
+            box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+            padding: calc(var(--pad) * 1.1);
+            box-sizing: border-box;
+            border: 1px solid var(--rule);
+        }
+
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 8px;
+        }
+
+        .name {
+            font-size: 20px;
+            font-weight: 700;
+            letter-spacing: -0.01em;
+        }
+
+        .meta {
+            font-size: 12px;
+            color: var(--muted);
+            text-align: right;
+        }
+
+        .meta a {
+            color: inherit;
+            text-decoration: none;
+        }
+
+        .summary {
+            margin-top: 8px;
+            font-size: 13px;
+            color: var(--muted);
+            line-height: 1.45;
+        }
+
+        /* layout: left narrow column + right main column */
+        .grid {
+            display: grid;
+            grid-template-columns: 280px 1fr;
+            gap: 18px;
+            margin-top: 18px;
+        }
+
+        /* left column (contact, certs) */
+        .left {
+            border-right: 1px solid var(--rule);
+            padding-right: 14px;
+            box-sizing: border-box;
+        }
+
+        .section-title {
+            display: block;
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--muted);
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .contact-list,
+        .certs-list {
+            font-size: 13px;
+            color: var(--accent);
+            margin: 0;
+            padding: 0;
+            list-style: none;
+        }
+
+        .contact-list li,
+        .certs-list li {
+            margin-bottom: 8px;
+            line-height: 1.3;
+        }
+
+        .contact-muted {
+            font-size: 12px;
+            color: var(--muted);
+        }
+
+        .cert-badge {
+            display: inline-block;
+            font-size: 12px;
+            color: var(--muted);
+            padding: 6px 8px;
+            border-radius: 999px;
+            border: 1px solid var(--rule);
+            margin: 6px 6px 6px 0;
+        }
+
+        /* right column (education, jobs, refs) */
+        .right {
+            padding-left: 14px;
+            box-sizing: border-box;
+        }
+
+        .card {
+            padding: 8px 0;
+            margin-bottom: 14px;
+        }
+
+        .edu-item,
+        .job-item,
+        .ref-item {
+            margin-bottom: 12px;
+        }
+
+        .item-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 8px;
+        }
+
+        .item-title {
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .item-sub {
+            font-size: 12px;
+            color: var(--muted);
+        }
+
+        .item-bullets {
+            margin: 8px 0 0 0;
+            padding-left: 18px;
+            color: var(--accent);
+            font-size: 13px;
+            line-height: 1.35;
+        }
+
+        hr.sep {
+            border: 0;
+            height: 1px;
+            background: var(--rule);
+            margin: 14px 0;
+        }
+
+        /* compact footer note (optional) */
+        .footer-note {
+            font-size: 11px;
+            color: var(--muted);
+            text-align: center;
+            margin-top: 8px;
+        }
+
+        /* responsive: stack columns on narrow screens */
+        @media (max-width:720px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+
+            .left {
+                border-right: 0;
+                padding-right: 0;
+                padding-bottom: 8px;
+                border-bottom: 1px solid var(--rule);
+            }
+
+            .right {
+                padding-left: 0;
+                padding-top: 12px;
+            }
+
+            .name {
+                font-size: 18px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <main class="resume" role="main" aria-label="Resume">
+        <header class="header">
+            <div>
+                <div class="name">FULL NAME</div>
+                <div class="summary">Short 1–2 line summary: role + 1–2 strengths (e.g., "Product engineer with 6 years
+                    building scalable APIs and strong cross-functional collaboration").</div>
+            </div>
+            <div class="meta">
+                City, State<br>
+                (555) 123-4567 • email@example.com<br>
+                <a href="#" aria-label="website link">linkedin.com/in/you</a>
+            </div>
+        </header>
+
+        <div class="grid">
+            <!-- LEFT: Contact / Certifications / Skills -->
+            <aside class="left" aria-label="Sidebar">
+                <div class="card" id="contact">
+                    <span class="section-title">Contact</span>
+                    <ul class="contact-list">
+                        <li><strong>Address</strong>
+                            <div class="contact-muted">City, State ZIP</div>
+                        </li>
+                        <li><strong>Phone</strong>
+                            <div class="contact-muted">(555) 123-4567</div>
+                        </li>
+                        <li><strong>Email</strong>
+                            <div class="contact-muted">email@example.com</div>
+                        </li>
+                        <li><strong>Website</strong>
+                            <div class="contact-muted">your-portfolio.example.com</div>
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="card" id="certs">
+                    <span class="section-title">Certifications</span>
+                    <div>
+                        <span class="cert-badge">Cert Name — Issuer (2024)</span>
+                        <span class="cert-badge">Cert Two — Issuer (2022)</span>
+                    </div>
+                </div>
+
+                <div class="card" id="skills">
+                    <span class="section-title">Skills</span>
+                    <div class="contact-muted" style="font-size:13px; line-height:1.4;">
+                        • Skill A — brief note<br>
+                        • Skill B — brief note<br>
+                        • Tool X, Tool Y, Tool Z
+                    </div>
+                </div>
+            </aside>
+
+            <!-- RIGHT: Education / Work / References -->
+            <section class="right" aria-label="Main content">
+                <div class="card" id="education">
+                    <span class="section-title">Education</span>
+
+                    <div class="edu-item">
+                        <div class="item-head">
+                            <div>
+                                <div class="item-title">University Name — B.S. in Something</div>
+                                <div class="item-sub">City, State · Graduation Month Year</div>
+                            </div>
+                            <div class="item-sub">GPA: 3.8 (optional)</div>
+                        </div>
+                        <ul class="item-bullets">
+                            <li>Relevant coursework: Course A, Course B, Course C</li>
+                        </ul>
+                    </div>
+
+                </div>
+
+                <hr class="sep" />
+
+                <div class="card" id="work">
+                    <span class="section-title">Work Experience</span>
+
+                    <div class="job-item">
+                        <div class="item-head">
+                            <div>
+                                <div class="item-title">Senior Product Engineer</div>
+                                <div class="item-sub">Acme Corp — City, State</div>
+                            </div>
+                            <div class="item-sub">Jan 2021 — Present</div>
+                        </div>
+                        <ul class="item-bullets">
+                            <li>Led design and deployment of X which improved Y by 35%.</li>
+                            <li>Managed cross-functional team of 4 to ship feature Z.</li>
+                        </ul>
+                    </div>
+
+                    <div class="job-item">
+                        <div class="item-head">
+                            <div>
+                                <div class="item-title">Software Engineer</div>
+                                <div class="item-sub">OtherCo — City, State</div>
+                            </div>
+                            <div class="item-sub">Jun 2018 — Dec 2020</div>
+                        </div>
+                        <ul class="item-bullets">
+                            <li>Implemented systems for A, reducing cost by 12%.</li>
+                        </ul>
+                    </div>
+
+                </div>
+
+                <hr class="sep" />
+
+                <div class="card" id="references">
+                    <span class="section-title">References</span>
+
+                    <div class="ref-item">
+                        <div class="item-title">Alex Manager — Former Manager</div>
+                        <div class="item-sub">Company Name</div>
+                        <div style="margin-top:6px; font-size:13px;">
+                            <div class="contact-muted">Phone: (555) 222-3333</div>
+                            <div class="contact-muted">Email: alex.manager@example.com</div>
+                        </div>
+                    </div>
+
+                    <div class="ref-item">
+                        <div class="item-title">Jamie Colleague — Colleague</div>
+                        <div class="item-sub">Company Name</div>
+                        <div style="margin-top:6px; font-size:13px;">
+                            <div class="contact-muted">Phone: (555) 444-5555</div>
+                            <div class="contact-muted">Email: jamie.colleague@example.com</div>
+                        </div>
+                    </div>
+
+                    <!-- small caption if you want to avoid listing full contacts -->
+                    <!-- <div class="contact-muted" style="margin-top:8px;">Or: "References available upon request"</div> -->
+                </div>
+            </section>
+        </div>
+
+        <div class="footer-note">Compact resume • Replace placeholder text with your details</div>
+    </main>
+</body>
+
+</html>

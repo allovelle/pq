@@ -4,19 +4,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-# tokio = { version = "1.48.0", features = ["full"] }
-tokio = { version = "1.48.0", default-features = false, features = [
-    "rt",              # the runtime itself
-    "rt-multi-thread", # use rt for a single-threaded runtime
-    "fs",              # file I/O
-    "io-std",          # stdin/stdout
-    "io-util",         # general io
-    "sync",            # mpsc, oneshot, Mutex, RwLock
-    "macros",          # tokio::main
-    "time",
-] }
-
-
 # sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite"] }
 clap = { version = "4.5.51", features = ["derive"] }
 # starlark = "0.13.0"
@@ -39,11 +26,24 @@ pyo3 = { version = "0.21.2", features = ["auto-initialize"], optional = true }
 regex = { version = "1.10.5", features = [], optional = true }
 rustpython-parser = { version = "0.3.1", features = [], optional = true }
 
+[dependencies.tokio]
+version = "1.48.0"
+default-features = false
+features = [
+    "rt",              # the runtime itself
+    "rt-multi-thread", # use rt for a single-threaded runtime
+    "fs",              # file I/O
+    "io-std",          # stdin/stdout
+    "io-util",         # general io
+    "sync",            # mpsc, oneshot, Mutex, RwLock
+    "macros",          # tokio::main
+    "time",
+]
+
 [features]
-tokenizer-pom = ["pom"]
+default = []
 query-engine-pyo3 = ["pyo3"]
 query-parser-rustpython = ["rustpython-parser", "regex"]
-
-# default = []
+tokenizer-pom = ["pom"]
 # log_n_indentation = []
 # implicit_row_ids = []

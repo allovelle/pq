@@ -214,3 +214,15 @@ pq-python:
 
 Run all pique queries at the same time:
     Because the filter is row based, you can just increment the ID and then only re-compute the stuff that comes after for incremental querying
+
+
+
+How to list keys?
+foo.bar.{}
+foo.bar.?
+
+
+- Show toplevel keys: Instead of current method: `pq '(list(IT.keys()))'`
+- Make sure to add a screenshot using [Carbon - Screenshot of Source Code Example For Embedding or Sharing](https://www.notion.so/Carbon-Screenshot-of-Source-Code-Example-For-Embedding-or-Sharing-7414f9b67c6a4816a1d769861a645c98?pvs=21).
+- Take a look at how https://github.com/adam-mcdaniel/oakc did a readme also.
+- Also add cli option to list built in functions `--help`?
