@@ -8,6 +8,7 @@
 
 use clap::Parser;
 use std::path::PathBuf;
+use std::str;
 use thiserror::Error;
 use tokio::fs::File;
 use tokio::io::{self, AsyncReadExt, AsyncWriteExt, BufReader};
@@ -41,7 +42,7 @@ enum AppError
     Io(#[from] io::Error),
 
     #[error("utf8 error while decoding: {0}")]
-    Utf8(#[from] std::str::Utf8Error),
+    Utf8(#[from] str::Utf8Error),
 
     #[error("invalid direct index {0}")]
     InvalidDirectIndex(usize),
@@ -196,7 +197,8 @@ async fn consume_chunk(
         small[*tail_len .. *tail_len + take].copy_from_slice(&chunk[.. take]);
 
         // Try to decode as UTF-8. If valid, we can pull the first char and continue with rest of chunk.
-        match std::str::from_utf8(&small[.. *tail_len + take])
+
+        match str::from_utf8(&small[.. *tail_len + take])
         {
             Ok(s) =>
             {
@@ -249,7 +251,7 @@ async fn consume_chunk(
                     // Some bytes were valid (unlikely for the small combine), consume them accordingly
                     // Convert valid prefix to chars and emit
                     let valid = &small[.. valid_up_to];
-                    let s = std::str::from_utf8(valid)?;
+                    let s = str::from_utf8(valid)?;
                     for ch in s.chars()
                     {
                         process_char(ch).await;
@@ -278,7 +280,7 @@ async fn consume_chunk(
     {
         let rest = &chunk[offset ..];
 
-        match std::str::from_utf8(rest)
+        match str::from_utf8(rest)
         {
             Ok(s) =>
             {
@@ -296,7 +298,7 @@ async fn consume_chunk(
                 if valid > 0
                 {
                     // emit valid prefix
-                    let s = std::str::from_utf8(&rest[.. valid])?;
+                    let s = str::from_utf8(&rest[.. valid])?;
                     for ch in s.chars()
                     {
                         process_char(ch).await;
