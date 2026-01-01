@@ -1,12 +1,24 @@
+#![allow(clippy::unit_arg)]
+
 use crossterm::style::{Color, Stylize};
 use serde_json::{Number, Value};
-use std::convert::From;
+use std::{
+    convert::From,
+    env, fmt,
+    io::{self, IsTerminal},
+};
 
 const DEBUG_TAGS: bool = true;
 
-fn main() -> Result<(), std::io::Error>
+fn main() -> Result<(), io::Error>
 {
-    let value: serde_json::Value = serde_json::from_reader(std::io::stdin())?;
+    let stdin = io::stdin();
+    if stdin.is_terminal() && env::args().len() == 1
+    {
+        return Ok(println!("Usage: bat json.json | emit"));
+    }
+
+    let value: serde_json::Value = serde_json::from_reader(stdin)?;
 
     let mut table = Vec::new();
     traverse(&mut table, String::new(), value, 0);
@@ -18,7 +30,7 @@ fn main() -> Result<(), std::io::Error>
 fn udx<T>(val: T) -> usize
 where
     T: TryInto<usize>,
-    <T as TryInto<usize>>::Error: std::fmt::Debug,
+    <T as TryInto<usize>>::Error: fmt::Debug,
 {
     val.try_into().expect("failed to convert")
 }
