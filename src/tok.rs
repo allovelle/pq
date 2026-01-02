@@ -477,10 +477,8 @@ impl UsageReport
     }
 }
 
-pub fn tokenize(source: &str, usage_report: &mut UsageReport) -> PqResult<()>
+pub fn tokenize(source: &str) -> PqResult<Vec<Tok>>
 {
-    usage_report.new_document();
-
     let transitions: [Row; _] = state_transition_table();
     let mut curr = BEG;
     let mut buf = String::with_capacity(32);
@@ -569,8 +567,6 @@ pub fn tokenize(source: &str, usage_report: &mut UsageReport) -> PqResult<()>
             Act::IGN => (),
         }
 
-        usage_report.log_row(row);
-
         if row.onto == State::end_state()
         {
             println!("Hit explicit {} state", "END".underlined());
@@ -584,7 +580,7 @@ pub fn tokenize(source: &str, usage_report: &mut UsageReport) -> PqResult<()>
     println!("{}", format!("Tokens: {toks:?}").green());
     println!();
 
-    Ok(())
+    Ok(toks)
 }
 
 // TODO: Could this benefit from a bit of:
@@ -781,13 +777,6 @@ mod impl_char_match
 
 const EOS: CharMatch = AnyOf("\0");
 const WHITESPACE: CharMatch = AnyOf("\n \t\r");
-
-const fn ignore_spaces_after(
-    status: State,
-) -> (State, CharMatch, CharMatch, State, Act)
-{
-    (status, WHITESPACE, Unused, status, IGN)
-}
 
 /// Some of these states produce tokens when finalized.
 #[derive(
@@ -1170,22 +1159,17 @@ fn main() -> PqResult<()>
 
     let json = std::fs::read_to_string("json0.jsonl")?;
 
-    let mut usage_report = UsageReport::new();
-
     for line in json.lines().filter(|line| {
         let trim = line.trim();
         !trim.is_empty() && !trim.starts_with("//")
     })
     {
-        if let Err(err) = tokenize(line, &mut usage_report)
+        if let Err(err) = tokenize(line)
         {
-            usage_report.error();
             println!("{}", format!("{err}").red().bold());
             println!("{}", format!("tokenizing line: {}", line).red().italic());
         }
     }
-
-    usage_report.report();
 
     Ok(())
 }
@@ -1210,6 +1194,17 @@ pub enum Tok
 }
 */
 
+#[derive(Debug, Error)]
+#[error("Parse Error")]
+pub enum ParseErr
+{
+    // While building
+    #[error("unexpected token `{1:?}` while building `{2:?}`: expected {0:?}")]
+    Expectation(Tok, Tok, AstRowType),
+}
+
+pub type ParseResult<T> = Result<T, ParseErr>;
+
 #[rustfmt::skip]
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(u8)]
@@ -1227,7 +1222,40 @@ struct AstRow
     indent: u32,
 }
 
+fn accept_open_obj(token: &Tok) -> bool
+{
+    matches!(token, Tok::ObjectOpen)
+}
+
+fn expect_open_obj(token: &Tok) -> ParseResult<AstRow>
+{
+    let ty = AstRowType::Arr;
+    match token
+    {
+        Tok::ObjectOpen => Ok(AstRow {
+            id: todo!(),
+            parent: todo!(),
+            key: todo!(),
+            value: todo!(),
+            ty,
+            indent: todo!(),
+        }),
+
+        // TODO: Tok(index) & ::val(), TokVal so that Tok is clone if source offset exists
+        _ => Err(ParseErr::Expectation(Tok::ArrayOpen, token.clone(), ty)),
+    }
+}
+
 fn build_ast_table(tokens: Vec<Tok>) -> Vec<AstRow>
 {
+    let mut state = 0;
+    for token in tokens
+    {
+        if state == 0 && accept_open_obj(token)
+        {
+            let row = expect_open_obj(token).unwrap();
+        }
+    }
+
     vec![]
 }
