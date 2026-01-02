@@ -1,4 +1,4 @@
-use pq::tok::{Act::*, CharMatch::*, State::*};
+use pq::tokv1::{Act::*, CharMatch::*, State::*};
 use std::io::Read;
 use thiserror::Error;
 

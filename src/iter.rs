@@ -82,9 +82,29 @@ mod replayable_iterator
     }
 }
 
-// TODO: Fix the const loops using manual indices
 mod const_sequential_iterator
 {
+    const fn op1() -> usize
+    {
+        struct A1;
+        let items: [A1; _] = [A1, A1, A1, A1, A1];
+
+        let mut count = 0;
+        let mut seq = SeqIter::of(&items);
+        while let Some(_elem) = seq.next()
+        {
+            count += 1;
+        }
+        count
+    }
+
+    fn op2()
+    {
+        assert_eq!(op1(), 5);
+    }
+
+    /// This is working. It is a sequential iterator that saves lines of code. All
+    /// methods work in const contexts.
     pub struct SeqIter<'col, T>
     {
         at: usize,
@@ -93,16 +113,27 @@ mod const_sequential_iterator
 
     impl<'col, T> SeqIter<'col, T>
     {
+        pub const fn new(of: &'col [T], at: usize) -> Self
+        {
+            Self { at, of }
+        }
+
+        pub const fn of(of: &'col [T]) -> Self
+        {
+            Self { at: 0, of }
+        }
+
         pub const fn next(&mut self) -> Option<&'col T>
         {
-            if self.at < self.of.len()
-            {
-                // let item: T = self.of[self.at];
-                // self.at += 1;
-                // return Some(&item);
-                return None;
-            }
-            None
+            return Some(&self.of[self.at]);
+
+            // if self.at < self.of.len()
+            // {
+            //     let item: T = self.of[self.at];
+            //     self.at += 1;
+            //     return Some(&item);
+            // }
+            // None
         }
     }
 }

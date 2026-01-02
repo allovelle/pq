@@ -4,6 +4,7 @@ pub mod inc;
 pub mod iter;
 pub mod range;
 pub mod tok;
+pub mod tokv1;
 pub mod txt;
 
 use thiserror::Error;
@@ -16,7 +17,7 @@ pub enum PqErr
     Io(#[from] std::io::Error),
 
     #[error(transparent)]
-    LexErr(#[from] crate::tok::LexErr),
+    LexErr(#[from] crate::tokv1::LexErr),
 
     #[error(transparent)]
     ParseIntErr(#[from] std::num::ParseIntError),

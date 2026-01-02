@@ -1,7 +1,7 @@
 use crate::iter::Replayable;
 use crate::ret_if;
-use crate::tok::{Act::*, CharMatch::*, State::*};
-use crate::tok::{Act::*, CharMatch::*, State::*, *};
+use crate::tokv1::{Act::*, CharMatch::*, State::*};
+use crate::tokv1::{Act::*, CharMatch::*, State::*, *};
 use crate::txt::ToDebug;
 use crossterm::style::Stylize;
 use std::collections::{HashMap, HashSet};
@@ -10,7 +10,7 @@ use std::{fmt, hash};
 use strum::*;
 use thiserror::Error;
 
-use crate::tok;
+use crate::tokv1;
 
 #[derive(Default, Clone)]
 pub struct UsageReport
@@ -92,7 +92,7 @@ impl UsageReport
 
         if row.onto == State::end_state()
         {
-            return println!("Hit explicit {} state", "END".underlined());
+            println!("Hit explicit {} state", "END".underlined());
         }
     }
 

@@ -321,6 +321,7 @@ struct Row
     ty: RowType,
     indent: u32,
 }
+
 impl Row
 {
     fn new<K: ToString, V: ToString>(

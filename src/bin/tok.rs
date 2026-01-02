@@ -1212,27 +1212,3 @@ fn main() -> PqResult<()>
 
     Ok(())
 }
-
-// TODO: Fix the const loops using manual indices
-// mod iter
-// {
-//     pub struct SeqIter<'col, T>
-//     {
-//         at: usize,
-//         of: &'col [T],
-//     }
-
-//     impl<'col, T> SeqIter<'col, T>
-//     {
-//         pub const fn next(&mut self) -> Option<&'col T>
-//         {
-//             if self.at < self.of.len()
-//             {
-//                 let item: T = self.of[self.at];
-//                 self.at += 1;
-//                 return Some(&item);
-//             }
-//             None
-//         }
-//     }
-// }

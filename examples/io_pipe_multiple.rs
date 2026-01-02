@@ -1,7 +1,7 @@
 use crossterm::style::Stylize;
 use pq::PqResult;
 use pq::diagnostics::UsageReport;
-use pq::tok::{Act::*, CharMatch::*, State::*, state_transition_table};
+use pq::tokv1::{Act::*, CharMatch::*, State::*, state_transition_table};
 
 // fn main() -> PqResult<()>
 // {
