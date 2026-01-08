@@ -167,6 +167,7 @@ fn iter()
     let mut rows: Vec<Row> = vec![];
     let mut curr: State = BEG;
     let mut key = String::default();
+    // let mut id_stack = vec![];
 
     // TODO: The token buffer should be 1 and should end with value
     // TODO: The parent ID tracking should be just inc id each row
@@ -174,21 +175,26 @@ fn iter()
     // !!!!!!! ALL THE TOKEN TYPES SHOULD BE STRINGS STILL, THEY ARE CONVERTED
     // !!!!!!! TO STRS HERE. THE VALUE SHOULD STILL BE A STRING
 
+    // TODO: [id 0][parent 0][key ''][val '{'][ty obj]
+    // TODO: [id 1][parent 0][key 'name'][val 'Alo'][ty obj]
+
     let test_tokens = vec![Tok::True];
 
     for token in test_tokens
     {
         let tok_ty = TokTy::from(token);
 
+        // let id = id_stack.last().unwrap_or_default();
+
         for Transition(from, ty, to, act) in transitions.iter()
         {
             if curr == *from && tok_ty == *ty
             {
                 curr = *to;
-                match act
-                {
-                    FIN => rows.push(Row(0, 0, key, val, *ty)),
-                }
+                // match act
+                // {
+                //     FIN => rows.push(Row(0, 0, key, val, *ty)),
+                // }
             }
         }
     }
