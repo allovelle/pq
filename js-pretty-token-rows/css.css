@@ -1,5 +1,5 @@
 body {
-    font-family: 'Courier New', monospace;
+    font-family: 'Ubuntu Mono', monospace;
     max-width: 1000px;
     margin: 40px auto;
     padding: 20px;
@@ -32,7 +32,8 @@ textarea {
     resize: vertical;
 }
 
-#tokens {
+#tokens,
+#stateTable {
     margin-top: 20px;
     padding: 12px;
     background: #2d2d2d;
@@ -132,13 +133,36 @@ tr:last-child td {
 
 .type-col {
     color: #4ec9b0;
-    width: 150px;
+    width: 60px;
 }
 
 .key-col {
     color: #9cdcfe;
+    width: 85px;
 }
 
 .value-col {
     color: #ce9178;
+    width: 85px;
+}
+
+#stateTable {
+    font-size: 12px;
+    overflow-x: auto;
+}
+
+.state-table {
+    width: 100%;
+    font-size: 11px;
+}
+
+.state-table th {
+    background: #264f78;
+    font-size: 11px;
+    padding: 6px;
+}
+
+.state-table td {
+    padding: 4px 6px;
+    font-size: 11px;
 }
