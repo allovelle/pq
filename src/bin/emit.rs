@@ -1,6 +1,7 @@
 #![allow(clippy::unit_arg)]
 
 use crossterm::style::{Color, Stylize};
+use pq::cli::*;
 use pq::{
     PqResult,
     tok::{Tok, tokenize},
@@ -333,18 +334,89 @@ fn tokens_to_rows(tokens: &[Tok]) -> io::Result<Vec<Row>>
 
     let mut rows = Vec::new();
 
+    let mut id = 0;
+
+    use Action::{KEY as ActKEY, *};
+    use State::{ARR, BEG, COL, END, KEY, OBJ, TXT, VAL};
+    use TokTy::{COL as TyCOL, TXT as TyTXT, *};
+    let table = [
+        (BEG, NEW_OBJ, KEY, FIN),
+        (KEY, TyTXT, COL, FIN),
+        (COL, TyCOL, VAL, FIN),
+        (VAL, TyTXT, END, FIN),
+        (END, END_OBJ, BEG, FIN),
+    ];
+
+    let mut state = BEG;
+    let mut i = 0;
+    '_process_token: while i < tokens.len()
+    {
+        let tok = &tokens[i];
+
+        state = *to;
+        // match act
+        // {
+        //     FIN =>
+        //     {
+        //         // [ID][PARENT][KEY][VALUE][TYPE]
+        //         let parent_id = *id_stack.get(id_stack.len()).unwrap();
+        //         let row =
+        //             AstRow(id, parent_id, String::new(), String::new(), ty);
+        //     }
+        //     ActKEY => (),
+        // }
+    }
+
     let mut container_stack: Vec<RowType> = Vec::new();
     let mut parent_stack: Vec<u32> = vec![u32::MAX]; // root sentinel
     let mut index_stack: Vec<u32> = vec![0];
-
     let mut current_key = String::new();
-
     let mut state = State::BEG;
-
     let mut i = 0;
+
     while i < tokens.len()
     {
         let tok = &tokens[i];
+
+        // curr state, curr char, onto state, buffer action
+        let ty: TokTy = tok.clone().into();
+        let mut transition = None;
+        '_find_transition: for trans @ (from, tok, to, act) in table.iter()
+        {
+            if *from == state && *tok == ty
+            {
+                let new_transition = Some(trans);
+                // Multiple valid ways for a row to be created is not valid as
+                // it would make the parser non-deterministic if ordering was
+                // not accidentally-enfored by another mechanism
+                if cfg!(debug_assertions) && transition.is_some()
+                {
+                    panic!(concat!(
+                        "invalid state transition table: multiple valid paths ",
+                        "exists for state & token combo"
+                    ))
+                }
+                // Ensuring no duplicative state transitions exist
+                else if cfg!(debug_assertions)
+                {
+                    transition = new_transition;
+                }
+                // No need to iterate through all once one is found
+                else
+                {
+                    transition = new_transition;
+                    break;
+                }
+            }
+        }
+
+        let Some((from, tok, to, act)) = transition
+        else
+        {
+            return Err(io::Error::other("no state transition exists"));
+        };
+
+        state = *to;
 
         match tok
         {
@@ -613,7 +685,6 @@ fn main() -> PqResult<()>
         // Interactive no filename, nothing to read from
         (true, None) =>
         {
-            const BLUE: &str = "\x1b[34m";
             print!("{BLUE}> ");
             io::stdout().flush()?;
             let mut input = String::new();
@@ -640,13 +711,13 @@ fn main() -> PqResult<()>
     let mut table = Vec::new();
     traverse(&mut table, String::new(), value.clone(), 0);
     // ! view_table(&table);
-    println!("{:#?}", table);
 
     let tokens = tokenize(&value.to_string())?;
-
     let rows = tokens_to_rows(&tokens)?;
 
-    println!("{:?}", rows);
+    println!("{GREEN}{:#?}{RESET}", table);
+    println!("{YELLOW}{:#?}{RESET}", tokens);
+    println!("{BLUE}{:#?}{RESET}", rows);
 
     Ok(())
 }
