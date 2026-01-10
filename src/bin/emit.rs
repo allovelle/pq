@@ -426,10 +426,56 @@ fn main() -> Result<(), io::Error>
 fn tokens_to_rows(tokens: Vec<Tok>) -> io::Result<Vec<Row>>
 {
     let mut id_stack: Vec<usize> = vec![0];
+    let mut id = 0;
 
-    use State::*;
-    use TokTy::*;
-    let table = [(BEG, NEW_OBJ)];
+    use Action::{KEY as ActKEY, *};
+    use State::{ARR, BEG, COL, END, KEY, OBJ, TXT, VAL};
+    use TokTy::{COL as TyCOL, TXT as TyTXT, *};
+    let table = [
+        (BEG, NEW_OBJ, KEY, FIN),
+        (KEY, TyTXT, COL, FIN),
+        (COL, TyCOL, VAL, FIN),
+        (VAL, TyTXT, END, FIN),
+        (END, END_OBJ, BEG, FIN),
+    ];
+
+    let mut state = BEG;
+    let mut i = 0;
+    '_process_token: while i < tokens.len()
+    {
+        let tok = &tokens[i];
+        let ty: TokTy = tok.clone().into();
+        let mut transition = None;
+        '_find_transition: for trans @ (from, tok, to, act) in table.iter()
+        {
+            if *from == state && *tok == ty
+            {
+                transition = Some(trans);
+                break;
+            }
+        }
+
+        let Some((from, tok, to, act)) = transition
+        else
+        {
+            return Err(io::Error::other("no state transition exists"));
+        };
+
+        state = *to;
+        match act
+        {
+            FIN =>
+            {
+                // [ID][PARENT][KEY][VALUE][TYPE]
+                let parent_id = *id_stack.get(id_stack.len()).unwrap();
+                let row =
+                    AstRow(id, parent_id, String::new(), String::new(), ty);
+            }
+            ActKEY => (),
+        }
+
+        i += 1;
+    }
 
     Ok(vec![])
 }
@@ -450,7 +496,7 @@ enum TokTy
 #[repr(u8)]
 pub enum State
 {
-    BEG = 1, END, OBJ, ARR, TXT,
+    BEG = 1, END, OBJ, ARR, TXT, KEY, COL, VAL
 }
 
 #[rustfmt::skip]
@@ -468,3 +514,27 @@ pub enum Action
 // [ID][PARENT][KEY][VALUE][TYPE]
 struct AstRow(usize, usize, String, String, TokTy);
 struct Transition(State, TokTy, State, Action);
+
+impl From<Tok> for TokTy
+{
+    fn from(value: Tok) -> Self
+    {
+        use TokTy::*;
+        match value
+        {
+            Tok::True => TRU,
+            Tok::False => FAL,
+            Tok::Null => NUL,
+            Tok::Text(_) => TXT,
+            Tok::Escape(_) => ESC,
+            Tok::EscapeHex(_) => HEX,
+            Tok::Number(_) => NUM,
+            Tok::ArrayOpen => NEW_ARR,
+            Tok::ArrayClose => END_ARR,
+            Tok::ObjectOpen => NEW_OBJ,
+            Tok::ObjectClose => END_OBJ,
+            Tok::Comma => COM,
+            Tok::Colon => COL,
+        }
+    }
+}
