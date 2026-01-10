@@ -663,6 +663,31 @@ pub enum Tok
     Colon, // :
 }
 
+impl std::fmt::Display for Tok
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
+    {
+        let display = match self
+        {
+            Tok::True => String::from("true"),
+            Tok::False => String::from("false"),
+            Tok::Null => String::from("null"),
+            Tok::Text(txt) => txt.clone(),
+            Tok::Escape(esc) => esc.clone(),
+            Tok::EscapeHex(hex) => hex.clone(),
+            Tok::Number(num) => num.to_string(),
+            Tok::ArrayOpen => "[".to_string(),
+            Tok::ArrayClose => "]".to_string(),
+            Tok::ObjectOpen => "{".to_string(),
+            Tok::ObjectClose => "}".to_string(),
+            Tok::Comma => ",".to_string(),
+            Tok::Colon => ":".to_string(),
+        };
+
+        write!(f, "{display}")
+    }
+}
+
 // /// State transitions are locked to character iteration.
 // /// [curr state][ch][next state][tok & buf act]
 // const STATE_TRANSITION_TABLE: &[(State, &str, State, Act)] = &[

@@ -332,60 +332,39 @@ fn tokens_to_rows(tokens: &[Tok]) -> io::Result<Vec<Row>>
     use Tok::*;
     use TokTy::*;
 
-    let mut rows = Vec::new();
-
-    let mut id = 0;
-
-    use Action::{KEY as ActKEY, *};
+    use Action::{END as ActEND, KEY as ActKEY, *};
     use State::{ARR, BEG, COL, END, KEY, OBJ, TXT, VAL};
     use TokTy::{COL as TyCOL, TXT as TyTXT, *};
     let table = [
         (BEG, NEW_OBJ, KEY, FIN),
-        (KEY, TyTXT, COL, FIN),
-        (COL, TyCOL, VAL, FIN),
+        (KEY, TyTXT, COL, ActKEY),
+        (COL, TyCOL, VAL, IGN),
         (VAL, TyTXT, END, FIN),
-        (END, END_OBJ, BEG, FIN),
+        (END, END_OBJ, BEG, IGN),
     ];
 
-    let mut state = BEG;
-    let mut i = 0;
-    '_process_token: while i < tokens.len()
-    {
-        let tok = &tokens[i];
-
-        state = *to;
-        // match act
-        // {
-        //     FIN =>
-        //     {
-        //         // [ID][PARENT][KEY][VALUE][TYPE]
-        //         let parent_id = *id_stack.get(id_stack.len()).unwrap();
-        //         let row =
-        //             AstRow(id, parent_id, String::new(), String::new(), ty);
-        //     }
-        //     ActKEY => (),
-        // }
-    }
-
     let mut container_stack: Vec<RowType> = Vec::new();
-    let mut parent_stack: Vec<u32> = vec![u32::MAX]; // root sentinel
-    let mut index_stack: Vec<u32> = vec![0];
     let mut current_key = String::new();
     let mut state = State::BEG;
-    let mut i = 0;
 
+    let mut rows = Vec::new();
+    let mut buffer: Vec<String> = vec!["".into()];
+    let mut id_stack: Vec<u32> = vec![0];
+    let mut id_counter = 0;
+
+    let mut i = 0;
     while i < tokens.len()
     {
-        let tok = &tokens[i];
+        let token = &tokens[i];
+        i += 1;
 
         // curr state, curr char, onto state, buffer action
-        let ty: TokTy = tok.clone().into();
+        let ty: TokTy = token.clone().into();
         let mut transition = None;
         '_find_transition: for trans @ (from, tok, to, act) in table.iter()
         {
             if *from == state && *tok == ty
             {
-                let new_transition = Some(trans);
                 // Multiple valid ways for a row to be created is not valid as
                 // it would make the parser non-deterministic if ordering was
                 // not accidentally-enfored by another mechanism
@@ -396,15 +375,13 @@ fn tokens_to_rows(tokens: &[Tok]) -> io::Result<Vec<Row>>
                         "exists for state & token combo"
                     ))
                 }
+
+                transition = Some(trans);
+
                 // Ensuring no duplicative state transitions exist
-                else if cfg!(debug_assertions)
-                {
-                    transition = new_transition;
-                }
                 // No need to iterate through all once one is found
-                else
+                if !cfg!(debug_assertions)
                 {
-                    transition = new_transition;
                     break;
                 }
             }
@@ -416,198 +393,225 @@ fn tokens_to_rows(tokens: &[Tok]) -> io::Result<Vec<Row>>
             return Err(io::Error::other("no state transition exists"));
         };
 
+        println!("{BLUE}{from:?}, {tok:?}, {to:?}, {act:?}{RESET}");
+
         state = *to;
-
-        match tok
+        match act
         {
-            ObjectOpen =>
+            ActKEY =>
             {
-                let key = if matches!(container_stack.last(), Some(Obj))
-                {
-                    std::mem::take(&mut current_key)
-                }
-                else
-                {
-                    index_stack.last().unwrap().to_string()
-                };
-
-                let parent = *parent_stack.last().unwrap();
-
-                let row_id = rows.len() as u32;
-                rows.push(Row::new(
-                    *index_stack.last().unwrap(),
-                    parent,
-                    key,
-                    "{",
-                    RowType::Obj,
-                ));
-
-                *index_stack.last_mut().unwrap() += 1;
-
-                container_stack.push(Obj);
-                parent_stack.push(row_id);
-                index_stack.push(0);
-
-                state = State::KEY;
+                #[rustfmt::skip]
+                let Tok::Text(txt) = token else { unreachable!() };
+                buffer.push(txt.clone());
             }
-
-            ArrayOpen =>
+            FIN =>
             {
-                let key = index_stack.last().unwrap().to_string();
-                let parent = *parent_stack.last().unwrap();
+                let id = id_counter;
+                id_counter += 1;
+                let parent = id_stack[id_stack.len() - 1];
+                let key = buffer.pop().unwrap();
+                let value = token.to_string();
+                let row_type = RowType::from(token.clone());
 
-                let row_id = rows.len() as u32;
-                rows.push(Row::new(
-                    *index_stack.last().unwrap(),
-                    parent,
-                    key,
-                    "[",
-                    RowType::Arr,
-                ));
-
-                *index_stack.last_mut().unwrap() += 1;
-
-                container_stack.push(Arr);
-                parent_stack.push(row_id);
-                index_stack.push(0);
-
-                state = State::VAL;
+                rows.push(Row::new(id, parent, key, value, row_type));
             }
-
-            ObjectClose | ArrayClose =>
+            ActEND =>
             {
-                container_stack.pop();
-                parent_stack.pop();
-                index_stack.pop();
-                state = State::END;
+                break;
             }
-
-            Text(s) =>
-            {
-                if state == State::KEY
-                {
-                    current_key = s.clone();
-                    state = State::COL;
-                }
-                else
-                {
-                    let key = if matches!(container_stack.last(), Some(Obj))
-                    {
-                        std::mem::take(&mut current_key)
-                    }
-                    else
-                    {
-                        index_stack.last().unwrap().to_string()
-                    };
-
-                    let parent = *parent_stack.last().unwrap();
-
-                    rows.push(Row::new(
-                        *index_stack.last().unwrap(),
-                        parent,
-                        key,
-                        s,
-                        RowType::Obj,
-                    ));
-
-                    *index_stack.last_mut().unwrap() += 1;
-                    state = State::END;
-                }
-            }
-
-            Number(n) =>
-            {
-                let key = if matches!(container_stack.last(), Some(Obj))
-                {
-                    std::mem::take(&mut current_key)
-                }
-                else
-                {
-                    index_stack.last().unwrap().to_string()
-                };
-
-                let parent = *parent_stack.last().unwrap();
-
-                rows.push(Row::new(
-                    *index_stack.last().unwrap(),
-                    parent,
-                    key,
-                    n.to_string(),
-                    RowType::Obj,
-                ));
-
-                *index_stack.last_mut().unwrap() += 1;
-                state = State::END;
-            }
-
-            True | False =>
-            {
-                let key = if matches!(container_stack.last(), Some(Obj))
-                {
-                    std::mem::take(&mut current_key)
-                }
-                else
-                {
-                    index_stack.last().unwrap().to_string()
-                };
-
-                let parent = *parent_stack.last().unwrap();
-
-                rows.push(Row::new(
-                    *index_stack.last().unwrap(),
-                    parent,
-                    key,
-                    matches!(tok, Tok::True),
-                    RowType::Obj,
-                ));
-
-                *index_stack.last_mut().unwrap() += 1;
-                state = State::END;
-            }
-
-            Null =>
-            {
-                let key = if matches!(container_stack.last(), Some(Obj))
-                {
-                    std::mem::take(&mut current_key)
-                }
-                else
-                {
-                    index_stack.last().unwrap().to_string()
-                };
-
-                let parent = *parent_stack.last().unwrap();
-
-                rows.push(Row::new(
-                    *index_stack.last().unwrap(),
-                    parent,
-                    key,
-                    "null",
-                    RowType::Obj,
-                ));
-
-                *index_stack.last_mut().unwrap() += 1;
-                state = State::END;
-            }
-
-            Colon => state = State::VAL,
-            Comma =>
-            {
-                state = if matches!(container_stack.last(), Some(Obj))
-                {
-                    State::KEY
-                }
-                else
-                {
-                    State::VAL
-                }
-            }
-
-            _ =>
-            {}
+            IGN => (),
+            ACC => todo!(),
         }
 
-        i += 1;
+        /*         match tok
+               {
+                   ObjectOpen =>
+                   {
+                       let key = if matches!(container_stack.last(), Some(Obj))
+                       {
+                           std::mem::take(&mut current_key)
+                       }
+                       else
+                       {
+                           index_stack.last().unwrap().to_string()
+                       };
+
+                       let parent = *parent_stack.last().unwrap();
+
+                       let row_id = rows.len() as u32;
+                       rows.push(Row::new(
+                           *index_stack.last().unwrap(),
+                           parent,
+                           key,
+                           "{",
+                           RowType::Obj,
+                       ));
+
+                       *index_stack.last_mut().unwrap() += 1;
+
+                       container_stack.push(Obj);
+                       parent_stack.push(row_id);
+                       index_stack.push(0);
+
+                       state = State::KEY;
+                   }
+
+                   ArrayOpen =>
+                   {
+                       let key = index_stack.last().unwrap().to_string();
+                       let parent = *parent_stack.last().unwrap();
+
+                       let row_id = rows.len() as u32;
+                       rows.push(Row::new(
+                           *index_stack.last().unwrap(),
+                           parent,
+                           key,
+                           "[",
+                           RowType::Arr,
+                       ));
+
+                       *index_stack.last_mut().unwrap() += 1;
+
+                       container_stack.push(Arr);
+                       parent_stack.push(row_id);
+                       index_stack.push(0);
+
+                       state = State::VAL;
+                   }
+
+                   ObjectClose | ArrayClose =>
+                   {
+                       container_stack.pop();
+                       parent_stack.pop();
+                       index_stack.pop();
+                       state = State::END;
+                   }
+
+                   Text(s) =>
+                   {
+                       if state == State::KEY
+                       {
+                           current_key = s.clone();
+                           state = State::COL;
+                       }
+                       else
+                       {
+                           let key = if matches!(container_stack.last(), Some(Obj))
+                           {
+                               std::mem::take(&mut current_key)
+                           }
+                           else
+                           {
+                               index_stack.last().unwrap().to_string()
+                           };
+
+                           let parent = *parent_stack.last().unwrap();
+
+                           rows.push(Row::new(
+                               *index_stack.last().unwrap(),
+                               parent,
+                               key,
+                               s,
+                               RowType::Obj,
+                           ));
+
+                           *index_stack.last_mut().unwrap() += 1;
+                           state = State::END;
+                       }
+                   }
+
+                   Number(n) =>
+                   {
+                       let key = if matches!(container_stack.last(), Some(Obj))
+                       {
+                           std::mem::take(&mut current_key)
+                       }
+                       else
+                       {
+                           index_stack.last().unwrap().to_string()
+                       };
+
+                       let parent = *parent_stack.last().unwrap();
+
+                       rows.push(Row::new(
+                           *index_stack.last().unwrap(),
+                           parent,
+                           key,
+                           n.to_string(),
+                           RowType::Obj,
+                       ));
+
+                       *index_stack.last_mut().unwrap() += 1;
+                       state = State::END;
+                   }
+
+                   True | False =>
+                   {
+                       let key = if matches!(container_stack.last(), Some(Obj))
+                       {
+                           std::mem::take(&mut current_key)
+                       }
+                       else
+                       {
+                           index_stack.last().unwrap().to_string()
+                       };
+
+                       let parent = *parent_stack.last().unwrap();
+
+                       rows.push(Row::new(
+                           *index_stack.last().unwrap(),
+                           parent,
+                           key,
+                           matches!(tok, Tok::True),
+                           RowType::Obj,
+                       ));
+
+                       *index_stack.last_mut().unwrap() += 1;
+                       state = State::END;
+                   }
+
+                   Null =>
+                   {
+                       let key = if matches!(container_stack.last(), Some(Obj))
+                       {
+                           std::mem::take(&mut current_key)
+                       }
+                       else
+                       {
+                           index_stack.last().unwrap().to_string()
+                       };
+
+                       let parent = *parent_stack.last().unwrap();
+
+                       rows.push(Row::new(
+                           *index_stack.last().unwrap(),
+                           parent,
+                           key,
+                           "null",
+                           RowType::Obj,
+                       ));
+
+                       *index_stack.last_mut().unwrap() += 1;
+                       state = State::END;
+                   }
+
+                   Colon => state = State::VAL,
+                   Comma =>
+                   {
+                       state = if matches!(container_stack.last(), Some(Obj))
+                       {
+                           State::KEY
+                       }
+                       else
+                       {
+                           State::VAL
+                       }
+                   }
+
+                   _ =>
+                   {}
+               }
+        */
     }
 
     Ok(rows)
@@ -639,7 +643,10 @@ pub enum State
 pub enum Action
 {
     FIN = 1,
+    ACC,
     KEY,
+    IGN,
+    END,
 }
 
 // Expect/Accept
@@ -668,6 +675,28 @@ impl From<Tok> for TokTy
             Tok::ObjectClose => END_OBJ,
             Tok::Comma => COM,
             Tok::Colon => COL,
+        }
+    }
+}
+
+impl From<Tok> for RowType
+{
+    fn from(value: Tok) -> Self
+    {
+        match value
+        {
+            Tok::True => RowType::Bit,
+            Tok::False => RowType::Bit,
+            Tok::Null => RowType::Nil,
+            Tok::Text(_) => RowType::Txt,
+            Tok::Escape(_) => RowType::Txt,
+            Tok::EscapeHex(_) => RowType::Txt,
+            Tok::Number(_) => RowType::Num,
+            Tok::ArrayOpen => RowType::Arr,
+            Tok::ArrayClose => RowType::Arr,
+            Tok::ObjectOpen => RowType::Obj,
+            Tok::ObjectClose => RowType::Obj,
+            Tok::Comma | Tok::Colon => panic!("nonsensical row type"),
         }
     }
 }
