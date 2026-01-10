@@ -644,9 +644,9 @@ fn main() -> PqResult<()>
 
     let tokens = tokenize(&value.to_string())?;
 
-    tokens_to_rows(&tokens)?;
+    let rows = tokens_to_rows(&tokens)?;
 
-    println!("{:?}", tokens);
+    println!("{:?}", rows);
 
     Ok(())
 }
