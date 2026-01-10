@@ -1,7 +1,10 @@
 #![allow(clippy::unit_arg)]
 
 use crossterm::style::{Color, Stylize};
-use pq::tok::{Tok, tokenize};
+use pq::{
+    PqResult,
+    tok::{Tok, tokenize},
+};
 use serde_json::{Number, Value};
 use std::{
     convert::From,
@@ -597,7 +600,7 @@ impl From<Tok> for TokTy
     }
 }
 
-fn main() -> Result<(), io::Error>
+fn main() -> PqResult<()>
 {
     let value: Value;
     let stdin = io::stdin();
@@ -639,7 +642,9 @@ fn main() -> Result<(), io::Error>
     // ! view_table(&table);
     println!("{:#?}", table);
 
-    let tokens = tokenize(&value.to_string());
+    let tokens = tokenize(&value.to_string())?;
+
+    tokens_to_rows(tokens);
 
     println!("{:?}", tokens);
 

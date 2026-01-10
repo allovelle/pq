@@ -24,6 +24,7 @@
 // ! The goal is to not need serde_json for input or output
 
 use crossterm::style::Stylize;
+use pq::PqResult;
 use pq::iter::Replayable;
 use std::collections::{HashMap, HashSet};
 use std::ops::{Deref, RangeInclusive};
@@ -108,25 +109,6 @@ macro_rules! ret_if {
         }
     };
 }
-
-#[derive(Debug, Error)]
-#[error("Pique Error")]
-pub enum PqErr
-{
-    #[error(transparent)]
-    Io(#[from] std::io::Error),
-
-    #[error(transparent)]
-    LexErr(#[from] LexErr),
-
-    #[error(transparent)]
-    ParseIntErr(#[from] std::num::ParseIntError),
-
-    #[error(transparent)]
-    ParseFloatErr(#[from] std::num::ParseFloatError),
-}
-
-pub type PqResult<T> = Result<T, PqErr>;
 
 #[derive(Debug, Error)]
 pub enum LexErr

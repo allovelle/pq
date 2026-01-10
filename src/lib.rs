@@ -18,7 +18,10 @@ pub enum PqErr
     Io(#[from] std::io::Error),
 
     #[error(transparent)]
-    LexErr(#[from] crate::tokv1::LexErr),
+    Json(#[from] serde_json::Error),
+
+    #[error(transparent)]
+    LexErr(#[from] crate::tok::LexErr),
 
     #[error(transparent)]
     ParseIntErr(#[from] std::num::ParseIntError),
