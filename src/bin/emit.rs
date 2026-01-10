@@ -639,9 +639,9 @@ fn main() -> Result<(), io::Error>
     // ! view_table(&table);
     println!("{:#?}", table);
 
-    // let tokens = tokenize(&value.to_string());
+    let tokens = tokenize(&value.to_string());
 
-    // println!("{:?}", tokens);
+    println!("{:?}", tokens);
 
     Ok(())
 }
