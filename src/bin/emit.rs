@@ -325,7 +325,7 @@ impl Row
     }
 }
 
-fn tokens_to_rows(tokens: Vec<Tok>) -> io::Result<Vec<Row>>
+fn tokens_to_rows(tokens: &[Tok]) -> io::Result<Vec<Row>>
 {
     use RowType::*;
     use Tok::*;
@@ -644,7 +644,7 @@ fn main() -> PqResult<()>
 
     let tokens = tokenize(&value.to_string())?;
 
-    tokens_to_rows(tokens);
+    tokens_to_rows(&tokens)?;
 
     println!("{:?}", tokens);
 
