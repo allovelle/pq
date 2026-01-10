@@ -6,7 +6,7 @@ use serde_json::{Number, Value};
 use std::{
     convert::From,
     env, fmt, fs,
-    io::{self, IsTerminal},
+    io::{self, IsTerminal, Write},
 };
 use strum::VariantNames;
 
@@ -610,7 +610,12 @@ fn main() -> Result<(), io::Error>
         // Interactive no filename, nothing to read from
         (true, None) =>
         {
-            return Ok(println!("Usage: bat json.json | emit\nemit json.json"));
+            const BLUE: &str = "\x1b[34m";
+            print!("{BLUE}> ");
+            io::stdout().flush()?;
+            let mut input = String::new();
+            let _ = stdin.read_line(&mut input)?;
+            value = serde_json::from_str(input.trim())?;
         }
         // Interactive with filename, read from file
         (true, Some(path)) =>
