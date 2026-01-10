@@ -493,7 +493,10 @@ pub fn tokenize(source: &str) -> PqResult<Vec<Tok>>
         "{:<w_state$} {:<w_ch$} {:<w_state$} {:<w_tok_act$} {:<16} {:<16} {:<w_buf$} {:<w_buf$}",
         "State", "Char", "Next", "Act", "Accept", "Except", "PreBuf", "EndBuf"
     );
-    println!("\n\n\n{}", header.cyan().underlined());
+    if false
+    {
+        println!("\n\n\n{}", header.cyan().underlined())
+    };
 
     let mut stream = source.chars().chain("\0".chars()).replayable();
     while let Some(ch) = stream.next()
@@ -509,24 +512,27 @@ pub fn tokenize(source: &str) -> PqResult<Vec<Tok>>
         // Debug-print row info
         if !(row.from == row.onto && row.act == IGN)
         {
-            println!(
-                "{from:<w_state$} {char:<w_ch$} {next:<w_state$} {act:<w_tok_act$} {acc:<16} {exc:<16} {prebuf:<w_buf$} {postbuf:w_buf$}",
-                from = format!("{:?}", curr),
-                char = format!("{:?}", ch),
-                next = format!("{:?}", row.onto),
-                act = format!("{:?}", row.act),
-                acc = format!("{:?}", row.accept),
-                exc = format!("{:?}", row.except),
-                prebuf = format!("{:?}", buf),
-                postbuf = format!("{:?}   ", match row.act
-                {
-                    FIN => ch.to_string(),
-                    TOK | ATK => String::new(),
-                    ACC => format!("{buf}{ch}"),
-                    IGN => buf.clone(),
-                    AGN => String::new(),
-                })
-            );
+            if false
+            {
+                println!(
+                    "{from:<w_state$} {char:<w_ch$} {next:<w_state$} {act:<w_tok_act$} {acc:<16} {exc:<16} {prebuf:<w_buf$} {postbuf:w_buf$}",
+                    from = format!("{:?}", curr),
+                    char = format!("{:?}", ch),
+                    next = format!("{:?}", row.onto),
+                    act = format!("{:?}", row.act),
+                    acc = format!("{:?}", row.accept),
+                    exc = format!("{:?}", row.except),
+                    prebuf = format!("{:?}", buf),
+                    postbuf = format!("{:?}   ", match row.act
+                    {
+                        FIN => ch.to_string(),
+                        TOK | ATK => String::new(),
+                        ACC => format!("{buf}{ch}"),
+                        IGN => buf.clone(),
+                        AGN => String::new(),
+                    })
+                );
+            }
         }
 
         match row.act
@@ -569,16 +575,22 @@ pub fn tokenize(source: &str) -> PqResult<Vec<Tok>>
 
         if row.onto == State::end_state()
         {
-            println!("Hit explicit {} state", "END".underlined());
+            if false
+            {
+                println!("Hit explicit {} state", "END".underlined())
+            };
             break;
         }
 
         curr = row.onto;
     }
 
-    println!();
-    println!("{}", format!("Tokens: {toks:?}").green());
-    println!();
+    if false
+    {
+        println!();
+        println!("{}", format!("Tokens: {toks:?}").green());
+        println!();
+    }
 
     Ok(toks)
 }

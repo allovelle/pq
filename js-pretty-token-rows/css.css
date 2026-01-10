@@ -1,0 +1,144 @@
+body {
+    font-family: 'Courier New', monospace;
+    max-width: 1000px;
+    margin: 40px auto;
+    padding: 20px;
+    background: #1e1e1e;
+    color: #d4d4d4;
+}
+
+h1 {
+    font-size: 24px;
+    margin-bottom: 20px;
+}
+
+h2 {
+    font-size: 18px;
+    margin-top: 30px;
+    margin-bottom: 10px;
+    color: #9cdcfe;
+}
+
+textarea {
+    width: 100%;
+    height: 150px;
+    padding: 12px;
+    background: #2d2d2d;
+    color: #d4d4d4;
+    border: 1px solid #3e3e3e;
+    border-radius: 4px;
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+    resize: vertical;
+}
+
+#tokens {
+    margin-top: 20px;
+    padding: 12px;
+    background: #2d2d2d;
+    border: 1px solid #3e3e3e;
+    border-radius: 4px;
+    min-height: 60px;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+.token {
+    display: inline-block;
+    margin: 2px;
+    padding: 4px 8px;
+    border-radius: 3px;
+    font-size: 13px;
+}
+
+.new-arr {
+    background: #264f78;
+}
+
+.end-arr {
+    background: #264f78;
+}
+
+.new-obj {
+    background: #4d4d4d;
+}
+
+.end-obj {
+    background: #4d4d4d;
+}
+
+.bit {
+    background: #1a7f64;
+}
+
+.nil {
+    background: #1a7f64;
+}
+
+.num {
+    background: #b5cea8;
+    color: #1e1e1e;
+}
+
+.txt-key {
+    background: #9cdcfe;
+    color: #1e1e1e;
+}
+
+.txt {
+    background: #ce9178;
+    color: #1e1e1e;
+}
+
+.colon {
+    background: #3e3e3e;
+}
+
+.comma {
+    background: #3e3e3e;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+    background: #2d2d2d;
+    border: 1px solid #3e3e3e;
+    border-radius: 4px;
+}
+
+th {
+    background: #383838;
+    padding: 10px;
+    text-align: left;
+    border-bottom: 2px solid #3e3e3e;
+    color: #9cdcfe;
+    font-weight: normal;
+}
+
+td {
+    padding: 8px 10px;
+    border-bottom: 1px solid #3e3e3e;
+}
+
+tr:last-child td {
+    border-bottom: none;
+}
+
+.id-col {
+    color: #858585;
+    width: 60px;
+}
+
+.type-col {
+    color: #4ec9b0;
+    width: 150px;
+}
+
+.key-col {
+    color: #9cdcfe;
+}
+
+.value-col {
+    color: #ce9178;
+}

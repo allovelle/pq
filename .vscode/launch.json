@@ -1,0 +1,28 @@
+{
+    "configurations": [
+        {
+            "type": "cppdbg",
+            "request": "launch",
+            "name": "run emit",
+            "cwd": "${workspaceFolder}",
+            "program": "${workspaceFolder}/target/debug/emit",
+            "environment": [
+                {
+                    "name": "RUST_BACKTRACE",
+                    "value": "short"
+                },
+                {
+                    "name": "RUSTC_TOOLCHAIN",
+                    "value": "/Users/pebaz/.rustup/toolchains/nightly-aarch64-apple-darwin"
+                }
+            ],
+            "args": [
+                "${workspaceFolder}/smol.json"
+            ],
+            "sourceFileMap": {},
+            "osx": {
+                "MIMode": "lldb"
+            }
+        }
+    ]
+}

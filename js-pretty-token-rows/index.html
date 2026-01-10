@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JSON Tokenizer & Row Parser</title>
+    <link rel="stylesheet" href="css.css">
+</head>
+
+<body>
+    <h1>JSON Tokenizer & Row Parser</h1>
+    <textarea id="input" placeholder='Enter JSON here, e.g.: {"name": "John", "age": 30, "active": true}'></textarea>
+
+    <h2>Tokens</h2>
+    <div id="tokens"></div>
+
+    <h2>Rows</h2>
+    <table id="rows">
+        <thead>
+            <tr>
+                <th class="id-col">ID</th>
+                <th class="id-col">Parent</th>
+                <th class="type-col">Type</th>
+                <th class="key-col">Key</th>
+                <th class="value-col">Value</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+
+    <script>
+        function tokenize(json) {
+            const tokens = [];
+            let i = 0;
+            let inKey = false;
+            let depth = 0;
+            let inArray = false;
+            let arrayDepth = 0;
+
+            while (i < json.length) {
+                const ch = json[i];
+
+                if (/\s/.test(ch)) {
+                    i++;
+                    continue;
+                }
+
+                if (ch === '[') {
+                    tokens.push({ type: 'new-arr', value: '[' });
+                    inArray = true;
+                    arrayDepth++;
+                    i++;
+                }
+                else if (ch === ']') {
+                    tokens.push({ type: 'end-arr', value: ']' });
+                    arrayDepth--;
+                    if (arrayDepth === 0) inArray = false;
+                    i++;
+                }
+                else if (ch === '{') {
+                    tokens.push({ type: 'new-obj', value: '{' });
+                    if (!inArray) inKey = true;
+                    depth++;
+                    i++;
+                }
+                else if (ch === '}') {
+                    tokens.push({ type: 'end-obj', value: '}' });
+                    depth--;
+                    i++;
+                }
+                else if (ch === ':') {
+                    tokens.push({ type: 'colon', value: ':' });
+                    inKey = false;
+                    i++;
+                }
+                else if (ch === ',') {
+                    tokens.push({ type: 'comma', value: ',' });
+                    if (!inArray) inKey = true;
+                    i++;
+                }
+                else if (ch === '"') {
+                    let str = '';
+                    i++;
+                    while (i < json.length && json[i] !== '"') {
+                        if (json[i] === '\\') {
+                            i++;
+                            if (i < json.length) str += json[i];
+                        } else {
+                            str += json[i];
+                        }
+                        i++;
+                    }
+                    i++;
+                    tokens.push({
+                        type: (inKey && !inArray) ? 'txt-key' : 'txt',
+                        value: str
+                    });
+                }
+                else if (/[-0-9]/.test(ch)) {
+                    let num = '';
+                    while (i < json.length && /[0-9.eE+-]/.test(json[i])) {
+                        num += json[i];
+                        i++;
+                    }
+                    tokens.push({ type: 'num', value: num });
+                }
+                else if (json.slice(i, i + 4) === 'true') {
+                    tokens.push({ type: 'bit', value: 'true' });
+                    i += 4;
+                }
+                else if (json.slice(i, i + 5) === 'false') {
+                    tokens.push({ type: 'bit', value: 'false' });
+                    i += 5;
+                }
+                else if (json.slice(i, i + 4) === 'null') {
+                    tokens.push({ type: 'nil', value: 'null' });
+                    i += 4;
+                }
+                else {
+                    i++;
+                }
+            }
+
+            return tokens;
+        }
+
+        function tokensToRows(tokens) {
+            const rows = [];
+            let id = 0;
+            let currentKey = '';
+            let parentStack = [null];
+            let containerStack = [];
+            let arrayIndexStack = [];
+
+            for (let i = 0; i < tokens.length; i++) {
+                const token = tokens[i];
+                const parentId = parentStack[parentStack.length - 1];
+
+                if (token.type === 'txt-key') {
+                    currentKey = token.value;
+                }
+                else if (token.type === 'colon') {
+                    continue;
+                }
+                else if (token.type === 'comma') {
+                    // Only increment array index, don't reset currentKey for objects
+                    if (containerStack[containerStack.length - 1] === 'array') {
+                        arrayIndexStack[arrayIndexStack.length - 1]++;
+                    }
+                    continue;
+                }
+                else if (token.type === 'new-obj') {
+                    const rowId = id++;
+                    rows.push({
+                        id: rowId,
+                        parentId: parentId,
+                        type: 'new-obj',
+                        key: currentKey,
+                        value: '{'
+                    });
+                    parentStack.push(rowId);
+                    containerStack.push('object');
+                    currentKey = '';
+                }
+                else if (token.type === 'end-obj') {
+                    const closingParent = parentStack[parentStack.length - 2] ?? null;
+
+                    rows.push({
+                        id: id++,
+                        parentId: closingParent,
+                        type: 'end-obj',
+                        key: '',
+                        value: '}'
+                    });
+
+                    parentStack.pop();
+                    containerStack.pop();
+                }
+
+                else if (token.type === 'new-arr') {
+                    const rowId = id++;
+                    rows.push({
+                        id: rowId,
+                        parentId: parentId,
+                        type: 'new-arr',
+                        key: currentKey,
+                        value: '['
+                    });
+                    parentStack.push(rowId);
+                    containerStack.push('array');
+                    arrayIndexStack.push(0);
+                    currentKey = '';
+                }
+                else if (token.type === 'end-arr') {
+                    const closingParent = parentStack[parentStack.length - 2] ?? null;
+
+                    rows.push({
+                        id: id++,
+                        parentId: closingParent,
+                        type: 'end-arr',
+                        key: '',
+                        value: ']'
+                    });
+
+                    parentStack.pop();
+                    containerStack.pop();
+                    arrayIndexStack.pop();
+                }
+
+                else if (token.type === 'txt') {
+                    if (containerStack[containerStack.length - 1] === 'array') {
+                        currentKey = String(arrayIndexStack[arrayIndexStack.length - 1]);
+                    }
+                    rows.push({
+                        id: id++,
+                        parentId: parentId,
+                        type: 'txt',
+                        key: currentKey,
+                        value: token.value
+                    });
+                    if (containerStack[containerStack.length - 1] !== 'array') {
+                        currentKey = '';
+                    }
+                }
+                else if (token.type === 'num') {
+                    if (containerStack[containerStack.length - 1] === 'array') {
+                        currentKey = String(arrayIndexStack[arrayIndexStack.length - 1]);
+                    }
+                    rows.push({
+                        id: id++,
+                        parentId: parentId,
+                        type: 'num',
+                        key: currentKey,
+                        value: token.value
+                    });
+                    if (containerStack[containerStack.length - 1] !== 'array') {
+                        currentKey = '';
+                    }
+                }
+                else if (token.type === 'bit' || token.type === 'nil') {
+                    if (containerStack[containerStack.length - 1] === 'array') {
+                        currentKey = String(arrayIndexStack[arrayIndexStack.length - 1]);
+                    }
+                    rows.push({
+                        id: id++,
+                        parentId: parentId,
+                        type: token.type,
+                        key: currentKey,
+                        value: token.value
+                    });
+                    if (containerStack[containerStack.length - 1] !== 'array') {
+                        currentKey = '';
+                    }
+                }
+            }
+
+            return rows;
+        }
+
+        function renderTokens(tokens) {
+            const output = document.getElementById('tokens');
+            output.innerHTML = tokens.map(t =>
+                `<span class="token ${t.type}">${t.type}: ${t.value}</span>`
+            ).join('');
+        }
+
+        function renderRows(rows) {
+            const tbody = document.querySelector('#rows tbody');
+            tbody.innerHTML = rows.map(r =>
+                `<tr>
+                <td class="id-col">${r.id}</td>
+                <td class="id-col">${r.parentId !== null ? r.parentId : ''}</td>
+                <td class="type-col">${r.type}</td>
+                <td class="key-col">${r.key}</td>
+                <td class="value-col">${r.value}</td>
+            </tr>`
+            ).join('');
+        }
+
+        document.getElementById('input').addEventListener('input', (e) => {
+            const tokens = tokenize(e.target.value);
+            renderTokens(tokens);
+
+            const rows = tokensToRows(tokens);
+            renderRows(rows);
+        });
+
+        // Initial example
+        const example = '{"name": "John", "age": 30, "active": true, "tags": ["a", "b"]}';
+        document.getElementById('input').value = example;
+        const tokens = tokenize(example);
+        renderTokens(tokens);
+        renderRows(tokensToRows(tokens));
+    </script>
+
+</body>
+
+</html>

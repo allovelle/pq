@@ -1,31 +1,16 @@
 #![allow(clippy::unit_arg)]
 
 use crossterm::style::{Color, Stylize};
+use pq::tok::{Tok, tokenize};
 use serde_json::{Number, Value};
 use std::{
     convert::From,
-    env, fmt,
+    env, fmt, fs,
     io::{self, IsTerminal},
 };
+use strum::VariantNames;
 
 const DEBUG_TAGS: bool = true;
-
-fn main() -> Result<(), io::Error>
-{
-    let stdin = io::stdin();
-    if stdin.is_terminal() && env::args().len() == 1
-    {
-        return Ok(println!("Usage: bat json.json | emit"));
-    }
-
-    let value: serde_json::Value = serde_json::from_reader(stdin)?;
-
-    let mut table = Vec::new();
-    traverse(&mut table, String::new(), value, 0);
-    view_table(&table);
-
-    Ok(())
-}
 
 fn udx<T>(val: T) -> usize
 where
@@ -403,3 +388,83 @@ impl Row
         indents
     }
 }
+
+fn main() -> Result<(), io::Error>
+{
+    let value: Value;
+    let stdin = io::stdin();
+
+    if stdin.is_terminal() && env::args().len() == 1
+    {
+        return Ok(println!("Usage: bat json.json | emit\n    emit json.json"));
+    }
+    else if !stdin.is_terminal()
+    {
+        value = serde_json::from_reader(stdin)?;
+    }
+    else if let Some(path) = env::args().nth(1)
+    {
+        value = serde_json::from_str(&fs::read_to_string(path)?)?;
+    }
+    else
+    {
+        return Ok(println!("Usage: bat json.json | emit\n    emit json.json"));
+    }
+
+    let mut table = Vec::new();
+    traverse(&mut table, String::new(), value.clone(), 0);
+    // ! view_table(&table);
+    println!("{:#?}", table);
+
+    let tokens = tokenize(&value.to_string());
+
+    println!("{:?}", tokens);
+
+    Ok(())
+}
+
+fn tokens_to_rows(tokens: Vec<Tok>) -> io::Result<Vec<Row>>
+{
+    let mut id_stack: Vec<usize> = vec![0];
+
+    use State::*;
+    use TokTy::*;
+    let table = [(BEG, NEW_OBJ)];
+
+    Ok(vec![])
+}
+
+#[rustfmt::skip]
+#[allow(non_camel_case_types, clippy::upper_case_acronyms)]
+#[derive(VariantNames, Debug, Clone, Copy, PartialEq, PartialOrd, Hash)]
+#[repr(u8)]
+enum TokTy
+{
+    TRU = 1, FAL, NUL, TXT, ESC, HEX, NUM, NEW_ARR, END_ARR, NEW_OBJ, END_OBJ,
+    COM, COL,
+}
+
+#[rustfmt::skip]
+#[allow(non_camel_case_types, clippy::upper_case_acronyms)]
+#[derive(VariantNames, Debug, Clone, Copy, PartialEq, PartialOrd, Hash)]
+#[repr(u8)]
+pub enum State
+{
+    BEG = 1, END, OBJ, ARR, TXT,
+}
+
+#[rustfmt::skip]
+#[allow(non_camel_case_types, clippy::upper_case_acronyms)]
+#[derive(VariantNames, Debug, Clone, Copy, PartialEq, PartialOrd, Hash)]
+#[repr(u8)]
+pub enum Action
+{
+    FIN = 1,
+    KEY,
+}
+
+// Expect/Accept
+// Tab/Nest record parent ID, clip/take astnode id
+// [ID][PARENT][KEY][VALUE][TYPE]
+struct AstRow(usize, usize, String, String, TokTy);
+struct Transition(State, TokTy, State, Action);
