@@ -253,27 +253,26 @@ fn view_table(table: &[Row])
 
 fn traverse(table: &mut Vec<Row>, key: String, value: Value, parent: u32)
 {
+    use RowType::*;
+
     let new_id = table.len() as u32;
-    let indent = table.get(parent as usize).map_or(0, |row| row.indent + 1);
 
     match value
     {
-        Value::Null => table.push(Row::nil(new_id, parent, key, indent)),
-        Value::Bool(tf) =>
-        {
-            table.push(Row::bit(new_id, parent, key, tf, indent))
-        }
+        Value::Null => table.push(Row::new(new_id, parent, key, "", Nil)),
+        Value::Bool(tf) => table.push(Row::new(new_id, parent, key, tf, Bit)),
         Value::Number(num) =>
         {
-            table.push(Row::num(new_id, parent, key, num, indent))
+            table.push(Row::new(new_id, parent, key, num, Num))
         }
         Value::String(txt) =>
         {
-            table.push(Row::txt(new_id, parent, key, txt, indent))
+            table.push(Row::new(new_id, parent, key, txt, Txt))
         }
         Value::Array(arr) =>
         {
-            table.push(Row::arr(new_id, parent, key.clone(), indent));
+            table.push(Row::new(new_id, parent, key.clone(), "[", Arr));
+
             for (i, element) in arr.into_iter().enumerate()
             {
                 traverse(table, i.to_string(), element, new_id);
@@ -281,7 +280,8 @@ fn traverse(table: &mut Vec<Row>, key: String, value: Value, parent: u32)
         }
         Value::Object(map) =>
         {
-            table.push(Row::obj(new_id, parent, key, indent));
+            table.push(Row::new(new_id, parent, key, "{", Obj));
+
             for (name, element) in map
             {
                 traverse(table, name, element, new_id);
@@ -304,7 +304,6 @@ struct Row
     key: String,
     value: String,
     ty: RowType,
-    indent: u32,
 }
 
 impl Row
@@ -315,169 +314,228 @@ impl Row
         key: K,
         value: V,
         ty: RowType,
-        indent: u32,
     ) -> Self
     {
         let key = key.to_string();
         let value = value.to_string();
-        Self { id, parent, key, value, ty, indent }
+        Self { id, parent, key, value, ty }
     }
-
-    fn nil<K: ToString>(id: u32, parent: u32, key: K, indent: u32) -> Self
-    {
-        Self::new(id, parent, key.to_string(), "null", RowType::Nil, indent)
-    }
-
-    fn txt<K: ToString, V: ToString>(
-        id: u32,
-        parent: u32,
-        key: K,
-        val: V,
-        indent: u32,
-    ) -> Self
-    {
-        Self::new(id, parent, key, val, RowType::Txt, indent)
-    }
-
-    fn bit<K: ToString>(
-        id: u32,
-        parent: u32,
-        key: K,
-        val: bool,
-        indent: u32,
-    ) -> Self
-    {
-        Self::new(id, parent, key, val.to_string(), RowType::Bit, indent)
-    }
-
-    fn num<K: ToString, V>(
-        id: u32,
-        parent: u32,
-        key: K,
-        val: V,
-        indent: u32,
-    ) -> Self
-    where
-        Number: From<V>,
-    {
-        let val = Number::from(val).to_string();
-        Self::new(id, parent, key, val, RowType::Num, indent)
-    }
-
-    fn arr<K: ToString>(id: u32, parent: u32, key: K, indent: u32) -> Self
-    {
-        Self::new(id, parent, key, "[", RowType::Arr, indent)
-    }
-
-    fn obj<K: ToString>(id: u32, parent: u32, key: K, indent: u32) -> Self
-    {
-        Self::new(id, parent, key, "{", RowType::Obj, indent)
-    }
-
-    fn indent_level(&self, table: &[Row]) -> usize
-    {
-        let (mut indents, mut row) = (0, self);
-
-        while let Some(next) = table.get(row.parent as usize)
-            && row.id != 0
-        {
-            row = next;
-            indents += 1;
-        }
-
-        indents
-    }
-}
-
-fn main() -> Result<(), io::Error>
-{
-    let value: Value;
-    let stdin = io::stdin();
-
-    if stdin.is_terminal() && env::args().len() == 1
-    {
-        return Ok(println!("Usage: bat json.json | emit\n    emit json.json"));
-    }
-    else if !stdin.is_terminal()
-    {
-        value = serde_json::from_reader(stdin)?;
-    }
-    else if let Some(path) = env::args().nth(1)
-    {
-        value = serde_json::from_str(&fs::read_to_string(path)?)?;
-    }
-    else
-    {
-        return Ok(println!("Usage: bat json.json | emit\n    emit json.json"));
-    }
-
-    let mut table = Vec::new();
-    traverse(&mut table, String::new(), value.clone(), 0);
-    // ! view_table(&table);
-    println!("{:#?}", table);
-
-    let tokens = tokenize(&value.to_string());
-
-    println!("{:?}", tokens);
-
-    Ok(())
 }
 
 fn tokens_to_rows(tokens: Vec<Tok>) -> io::Result<Vec<Row>>
 {
-    let mut id_stack: Vec<usize> = vec![0];
-    let mut id = 0;
+    use RowType::*;
+    use Tok::*;
+    use TokTy::*;
 
-    use Action::{KEY as ActKEY, *};
-    use State::{ARR, BEG, COL, END, KEY, OBJ, TXT, VAL};
-    use TokTy::{COL as TyCOL, TXT as TyTXT, *};
-    let table = [
-        (BEG, NEW_OBJ, KEY, FIN),
-        (KEY, TyTXT, COL, FIN),
-        (COL, TyCOL, VAL, FIN),
-        (VAL, TyTXT, END, FIN),
-        (END, END_OBJ, BEG, FIN),
-    ];
+    let mut rows = Vec::new();
 
-    let mut state = BEG;
+    let mut container_stack: Vec<RowType> = Vec::new();
+    let mut parent_stack: Vec<u32> = vec![u32::MAX]; // root sentinel
+    let mut index_stack: Vec<u32> = vec![0];
+
+    let mut current_key = String::new();
+
+    let mut state = State::BEG;
+
     let mut i = 0;
-    '_process_token: while i < tokens.len()
+    while i < tokens.len()
     {
         let tok = &tokens[i];
-        let ty: TokTy = tok.clone().into();
-        let mut transition = None;
-        '_find_transition: for trans @ (from, tok, to, act) in table.iter()
-        {
-            if *from == state && *tok == ty
-            {
-                transition = Some(trans);
-                break;
-            }
-        }
 
-        let Some((from, tok, to, act)) = transition
-        else
+        match tok
         {
-            return Err(io::Error::other("no state transition exists"));
-        };
-
-        state = *to;
-        match act
-        {
-            FIN =>
+            ObjectOpen =>
             {
-                // [ID][PARENT][KEY][VALUE][TYPE]
-                let parent_id = *id_stack.get(id_stack.len()).unwrap();
-                let row =
-                    AstRow(id, parent_id, String::new(), String::new(), ty);
+                let key = if matches!(container_stack.last(), Some(Obj))
+                {
+                    std::mem::take(&mut current_key)
+                }
+                else
+                {
+                    index_stack.last().unwrap().to_string()
+                };
+
+                let parent = *parent_stack.last().unwrap();
+
+                let row_id = rows.len() as u32;
+                rows.push(Row::new(
+                    *index_stack.last().unwrap(),
+                    parent,
+                    key,
+                    "{",
+                    RowType::Obj,
+                ));
+
+                *index_stack.last_mut().unwrap() += 1;
+
+                container_stack.push(Obj);
+                parent_stack.push(row_id);
+                index_stack.push(0);
+
+                state = State::KEY;
             }
-            ActKEY => (),
+
+            ArrayOpen =>
+            {
+                let key = index_stack.last().unwrap().to_string();
+                let parent = *parent_stack.last().unwrap();
+
+                let row_id = rows.len() as u32;
+                rows.push(Row::new(
+                    *index_stack.last().unwrap(),
+                    parent,
+                    key,
+                    "[",
+                    RowType::Arr,
+                ));
+
+                *index_stack.last_mut().unwrap() += 1;
+
+                container_stack.push(Arr);
+                parent_stack.push(row_id);
+                index_stack.push(0);
+
+                state = State::VAL;
+            }
+
+            ObjectClose | ArrayClose =>
+            {
+                container_stack.pop();
+                parent_stack.pop();
+                index_stack.pop();
+                state = State::END;
+            }
+
+            Text(s) =>
+            {
+                if state == State::KEY
+                {
+                    current_key = s.clone();
+                    state = State::COL;
+                }
+                else
+                {
+                    let key = if matches!(container_stack.last(), Some(Obj))
+                    {
+                        std::mem::take(&mut current_key)
+                    }
+                    else
+                    {
+                        index_stack.last().unwrap().to_string()
+                    };
+
+                    let parent = *parent_stack.last().unwrap();
+
+                    rows.push(Row::new(
+                        *index_stack.last().unwrap(),
+                        parent,
+                        key,
+                        s,
+                        RowType::Obj,
+                    ));
+
+                    *index_stack.last_mut().unwrap() += 1;
+                    state = State::END;
+                }
+            }
+
+            Number(n) =>
+            {
+                let key = if matches!(container_stack.last(), Some(Obj))
+                {
+                    std::mem::take(&mut current_key)
+                }
+                else
+                {
+                    index_stack.last().unwrap().to_string()
+                };
+
+                let parent = *parent_stack.last().unwrap();
+
+                rows.push(Row::new(
+                    *index_stack.last().unwrap(),
+                    parent,
+                    key,
+                    n.to_string(),
+                    RowType::Obj,
+                ));
+
+                *index_stack.last_mut().unwrap() += 1;
+                state = State::END;
+            }
+
+            True | False =>
+            {
+                let key = if matches!(container_stack.last(), Some(Obj))
+                {
+                    std::mem::take(&mut current_key)
+                }
+                else
+                {
+                    index_stack.last().unwrap().to_string()
+                };
+
+                let parent = *parent_stack.last().unwrap();
+
+                rows.push(Row::new(
+                    *index_stack.last().unwrap(),
+                    parent,
+                    key,
+                    matches!(tok, Tok::True),
+                    RowType::Obj,
+                ));
+
+                *index_stack.last_mut().unwrap() += 1;
+                state = State::END;
+            }
+
+            Null =>
+            {
+                let key = if matches!(container_stack.last(), Some(Obj))
+                {
+                    std::mem::take(&mut current_key)
+                }
+                else
+                {
+                    index_stack.last().unwrap().to_string()
+                };
+
+                let parent = *parent_stack.last().unwrap();
+
+                rows.push(Row::new(
+                    *index_stack.last().unwrap(),
+                    parent,
+                    key,
+                    "null",
+                    RowType::Obj,
+                ));
+
+                *index_stack.last_mut().unwrap() += 1;
+                state = State::END;
+            }
+
+            Colon => state = State::VAL,
+            Comma =>
+            {
+                state = if matches!(container_stack.last(), Some(Obj))
+                {
+                    State::KEY
+                }
+                else
+                {
+                    State::VAL
+                }
+            }
+
+            _ =>
+            {}
         }
 
         i += 1;
     }
 
-    Ok(vec![])
+    Ok(rows)
 }
 
 #[rustfmt::skip]
@@ -537,4 +595,48 @@ impl From<Tok> for TokTy
             Tok::Colon => COL,
         }
     }
+}
+
+fn main() -> Result<(), io::Error>
+{
+    let value: Value;
+    let stdin = io::stdin();
+
+    let interactive_session = stdin.is_terminal();
+    let filename = env::args().nth(1);
+
+    match (interactive_session, filename)
+    {
+        // Interactive no filename, nothing to read from
+        (true, None) =>
+        {
+            return Ok(println!("Usage: bat json.json | emit\nemit json.json"));
+        }
+        // Interactive with filename, read from file
+        (true, Some(path)) =>
+        {
+            value = serde_json::from_str(&fs::read_to_string(path)?)?;
+        }
+        // Piped, no filename, read from stdin
+        (false, None) =>
+        {
+            value = serde_json::from_reader(stdin)?;
+        }
+        // Piped, filename given, have to choose just one
+        (false, Some(_)) =>
+        {
+            return Ok(println!("Usage: bat json.json | emit\nemit json.json"));
+        }
+    }
+
+    let mut table = Vec::new();
+    traverse(&mut table, String::new(), value.clone(), 0);
+    // ! view_table(&table);
+    println!("{:#?}", table);
+
+    // let tokens = tokenize(&value.to_string());
+
+    // println!("{:?}", tokens);
+
+    Ok(())
 }
