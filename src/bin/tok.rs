@@ -24,7 +24,6 @@
 // ! The goal is to not need serde_json for input or output
 
 use crossterm::style::Stylize;
-use pq::PqResult;
 use pq::iter::Replayable;
 use std::collections::{HashMap, HashSet};
 use std::ops::{Deref, RangeInclusive};
@@ -32,6 +31,31 @@ use std::{fmt, hash};
 use strum::*;
 use thiserror::Error;
 use {Act::*, CharMatch::*, State::*};
+
+#[derive(Debug, Error)]
+#[error("Pique Error")]
+pub enum PqErr
+{
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+
+    #[error(transparent)]
+    Json(#[from] serde_json::Error),
+
+    #[error(transparent)]
+    LexErr(#[from] LexErr),
+
+    #[error(transparent)]
+    ParseIntErr(#[from] std::num::ParseIntError),
+
+    #[error(transparent)]
+    ParseFloatErr(#[from] std::num::ParseFloatError),
+
+    #[error(transparent)]
+    CliErr(#[from] clap::Error),
+}
+
+pub type PqResult<T> = Result<T, PqErr>;
 
 fn longest_variant_name<E: VariantNames>() -> usize
 {

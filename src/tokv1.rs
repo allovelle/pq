@@ -2,7 +2,7 @@
 
 use std::ops::Deref;
 
-use crate::{PqResult, brk_if, iter::Replayable, ret_if};
+use crate::{brk_if, iter::Replayable, ret_if};
 use crossterm::style::Stylize;
 use strum::VariantNames;
 use thiserror::Error;
@@ -121,6 +121,31 @@ ws
 // TODO: Bring-Your-Own const State Transition Table
 // TODO: Bring-Your-Own States enum
 // TODO: Bring-Your-Own State Buffer-To-Token Converter
+
+#[derive(Debug, Error)]
+#[error("Pique Error")]
+pub enum PqErr
+{
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+
+    #[error(transparent)]
+    Json(#[from] serde_json::Error),
+
+    #[error(transparent)]
+    LexErr(#[from] LexErr),
+
+    #[error(transparent)]
+    ParseIntErr(#[from] std::num::ParseIntError),
+
+    #[error(transparent)]
+    ParseFloatErr(#[from] std::num::ParseFloatError),
+
+    #[error(transparent)]
+    CliErr(#[from] clap::Error),
+}
+
+pub type PqResult<T> = Result<T, PqErr>;
 
 #[derive(Debug, Error)]
 pub enum LexErr
