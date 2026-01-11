@@ -7,6 +7,7 @@ use pq::{
     tok::{Tok, tokenize},
 };
 use serde_json::{Number, Value};
+use std::fmt::Display;
 use std::{
     convert::From,
     env, fmt, fs,
@@ -298,6 +299,14 @@ fn traverse(table: &mut Vec<Row>, key: String, value: Value, parent: u32)
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(u8)]
 enum RowType { Arr, Obj, Nil, Bit, Txt, Num, }
+
+impl Display for RowType
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
+    {
+        write!(f, "{:?}", self)
+    }
+}
 
 /// Invariant: Self::Id is the index within it's container.
 #[derive(Debug, Clone)]
@@ -748,5 +757,77 @@ fn main() -> PqResult<()>
     println!("{YELLOW}{:#?}{RESET}", tokens);
     println!("{BLUE}{:#?}{RESET}", rows);
 
+    print!("|{:<3}|", "Id");
+    print!("|{:<5}|", "Parent");
+    print!("|{:<8}|", "Key");
+    print!("|{:<8}|", "Value");
+    println!("|{:<3}|", "Ty");
+
+    for row in rows.iter()
+    {
+        print!("|{:<3}|", row.id);
+        print!("|{:<6}|", row.parent);
+        print!("|{:<8}|", row.key);
+        print!("|{:<8}|", row.value);
+        println!("|{:<3}|", row.ty);
+    }
+
+    println!("\n{RED}Transform Rows Into Json:{RESET}");
+    let json: String = transform(&rows);
+    println!("{json}");
+
     Ok(())
+}
+
+fn transform(rows: &[Row]) -> String
+{
+    let mut string = String::new();
+    let mut is_array = true; // * All other values print their keys
+    for row in rows
+    {
+        match row.ty
+        {
+            RowType::Arr =>
+            {
+                is_array = true;
+                string.push_str(&row.value)
+            }
+            RowType::Obj =>
+            {
+                is_array = false;
+                string.push_str(&row.value)
+            }
+            RowType::Nil | RowType::Bit | RowType::Txt | RowType::Num =>
+            {
+                if !is_array
+                {
+                    string.push_str(format!("{:?}", row.key).as_str());
+                    string.push_str(": ");
+                }
+                string.push_str(format!("{:?}", row.value).as_str());
+            }
+        }
+    }
+
+    let mut next = rows.last();
+    while let Some(node) = next
+    {
+        let closing = match node.ty
+        {
+            RowType::Arr => "]",
+            RowType::Obj => "}",
+            _ => "",
+        };
+
+        string.push_str(closing);
+
+        if node.id == 0 && node.parent == 0
+        {
+            break;
+        }
+
+        next = rows.get(udx(node.parent));
+    }
+
+    string
 }
