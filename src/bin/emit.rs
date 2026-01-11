@@ -490,6 +490,7 @@ fn tokens_to_rows(tokens: &[Tok]) -> io::Result<Vec<Row>>
     use TokTy as Tyk;
 
     // TODO: Make this HashMap by ensuring no duplicate from state & tok exist
+    // Each row is a 32-bit word. Amazingly compact.
     let table = [
         /*  */
         (Stt::BEG, Tyk::TXT, Stt::END, Act::FIN),
