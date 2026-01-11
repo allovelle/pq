@@ -335,21 +335,188 @@ impl Row
     }
 }
 
+#[rustfmt::skip]
+#[allow(non_camel_case_types, clippy::upper_case_acronyms)]
+#[derive(VariantNames, Debug, Clone, Copy, PartialEq, PartialOrd, Hash)]
+#[repr(u8)]
+enum TokTy
+{
+    NUL = 1, BIT, TXT, ESC, HEX, NUM, NEW_ARR, END_ARR, NEW_OBJ, END_OBJ,
+    COM, COL,
+}
+
+#[rustfmt::skip]
+#[allow(non_camel_case_types, clippy::upper_case_acronyms)]
+#[derive(VariantNames, Debug, Clone, Copy, PartialEq, PartialOrd, Hash)]
+#[repr(u8)]
+pub enum State
+{
+    BEG = 1, END, OBJ, ARR, TXT, KEY, COL, COM, VAL
+}
+
+#[rustfmt::skip]
+#[allow(non_camel_case_types, clippy::upper_case_acronyms)]
+#[derive(VariantNames, Debug, Clone, Copy, PartialEq, PartialOrd, Hash)]
+#[repr(u8)]
+pub enum Action
+{
+    FIN = 1, ACC, KEY, IGN, END,
+}
+
+// Expect/Accept
+// Tab/Nest record parent ID, clip/take astnode id
+// [ID][PARENT][KEY][VALUE][TYPE]
+struct AstRow(usize, usize, String, String, TokTy);
+struct Transition(State, TokTy, State, Action);
+
+impl From<Tok> for TokTy
+{
+    fn from(value: Tok) -> Self
+    {
+        match value
+        {
+            Tok::True => Self::BIT,
+            Tok::False => Self::BIT,
+            Tok::Null => Self::NUL,
+            Tok::Text(_) => Self::TXT,
+            Tok::Escape(_) => Self::ESC,
+            Tok::EscapeHex(_) => Self::HEX,
+            Tok::Number(_) => Self::NUM,
+            Tok::ArrayOpen => Self::NEW_ARR,
+            Tok::ArrayClose => Self::END_ARR,
+            Tok::ObjectOpen => Self::NEW_OBJ,
+            Tok::ObjectClose => Self::END_OBJ,
+            Tok::Comma => Self::COM,
+            Tok::Colon => Self::COL,
+        }
+    }
+}
+
+impl From<Tok> for RowType
+{
+    fn from(value: Tok) -> Self
+    {
+        match value
+        {
+            Tok::True => RowType::Bit,
+            Tok::False => RowType::Bit,
+            Tok::Null => RowType::Nil,
+            Tok::Text(_) => RowType::Txt,
+            Tok::Escape(_) => RowType::Txt,
+            Tok::EscapeHex(_) => RowType::Txt,
+            Tok::Number(_) => RowType::Num,
+            Tok::ArrayOpen => RowType::Arr,
+            Tok::ArrayClose => RowType::Arr,
+            Tok::ObjectOpen => RowType::Obj,
+            Tok::ObjectClose => RowType::Obj,
+            Tok::Comma | Tok::Colon => panic!("nonsensical row type"),
+        }
+    }
+}
+
+fn main() -> PqResult<()>
+{
+    let value: Value;
+    let stdin = io::stdin();
+
+    let interactive_session = stdin.is_terminal();
+    let filename = env::args().nth(1);
+
+    match (interactive_session, filename)
+    {
+        // Interactive no filename, nothing to read from
+        (true, None) =>
+        {
+            print!("{BLUE}> ");
+            io::stdout().flush()?;
+            let mut input = String::new();
+            let _ = stdin.read_line(&mut input)?;
+            value = serde_json::from_str(input.trim())?;
+        }
+        // Interactive with filename, read from file
+        (true, Some(path)) =>
+        {
+            value = serde_json::from_str(&fs::read_to_string(path)?)?;
+        }
+        // Piped, no filename, read from stdin
+        (false, None) =>
+        {
+            value = serde_json::from_reader(stdin)?;
+        }
+        // Piped, filename given, have to choose just one
+        (false, Some(_)) =>
+        {
+            return Ok(println!("Usage: bat json.json | emit\nemit json.json"));
+        }
+    }
+
+    let mut table = Vec::new();
+    traverse(&mut table, String::new(), value.clone(), 0);
+    // ! view_table(&table);
+
+    let tokens = tokenize(&value.to_string())?;
+    let rows = tokens_to_rows(&tokens)?;
+
+    println!("{GREEN}{:#?}{RESET}", table);
+    println!("{YELLOW}{:#?}{RESET}", tokens);
+    println!("{BLUE}{:#?}{RESET}", rows);
+
+    print!("|{:<3}|", "Id");
+    print!("|{:<5}|", "Parent");
+    print!("|{:<8}|", "Key");
+    print!("|{:<8}|", "Value");
+    println!("|{:<3}|", "Ty");
+
+    for row in rows.iter()
+    {
+        print!("|{:<3}|", row.id);
+        print!("|{:<6}|", row.parent);
+        print!("|{:<8}|", row.key);
+        print!("|{:<8}|", row.value);
+        println!("|{:<3}|", row.ty);
+    }
+
+    println!("\n{RED}Transform Rows Into Json:{RESET}");
+    let json: String = rows_to_json(&rows);
+    println!("{json}");
+
+    Ok(())
+}
+
 fn tokens_to_rows(tokens: &[Tok]) -> io::Result<Vec<Row>>
 {
-    use RowType::*;
-    use Tok::*;
-    use TokTy::*;
+    use Action as Act;
+    use State as Stt;
+    use TokTy as Tyk;
 
-    use Action::{END as ActEND, KEY as ActKEY, *};
-    use State::{ARR, BEG, COL, END, KEY, OBJ, TXT, VAL};
-    use TokTy::{COL as TyCOL, TXT as TyTXT, *};
+    // TODO: Make this HashMap by ensuring no duplicate from state & tok exist
     let table = [
-        (BEG, NEW_OBJ, KEY, FIN),
-        (KEY, TyTXT, COL, ActKEY),
-        (COL, TyCOL, VAL, IGN),
-        (VAL, TyTXT, END, FIN),
-        (END, END_OBJ, BEG, IGN),
+        /*  */
+        (Stt::BEG, Tyk::TXT, Stt::END, Act::FIN),
+        (Stt::BEG, Tyk::NUM, Stt::END, Act::FIN),
+        (Stt::BEG, Tyk::BIT, Stt::END, Act::FIN),
+        (Stt::BEG, Tyk::NUL, Stt::END, Act::FIN),
+        /*  */
+        (Stt::BEG, Tyk::NEW_OBJ, Stt::KEY, Act::FIN),
+        (Stt::KEY, Tyk::TXT, Stt::COL, Act::KEY),
+        (Stt::COL, Tyk::COL, Stt::VAL, Act::IGN),
+        (Stt::VAL, Tyk::TXT, Stt::END, Act::FIN), // ! Do the rest of these
+        (Stt::END, Tyk::END_OBJ, Stt::BEG, Act::IGN),
+        /*  */
+        (Stt::BEG, Tyk::NEW_ARR, Stt::VAL, Act::FIN),
+        (Stt::VAL, Tyk::TXT, Stt::COM, Act::FIN),
+        (Stt::VAL, Tyk::NUM, Stt::COM, Act::FIN),
+        (Stt::VAL, Tyk::BIT, Stt::COM, Act::FIN),
+        (Stt::VAL, Tyk::NUL, Stt::COM, Act::FIN),
+        /*  */
+        // (Stt::VAL, Tyk::TXT, Stt::COM, Act::FIN),
+        // (Stt::COL, Tyk::COL, Stt::VAL, Act::IGN),
+        // (Stt::VAL, Tyk::TXT, Stt::END, Act::FIN),
+        // (Stt::END, Tyk::END_ARR, Stt::BEG, Act::IGN),
+        /*  */
+        (Stt::KEY, Tyk::END_OBJ, Stt::END, Act::END),
+        (Stt::VAL, Tyk::END_OBJ, Stt::END, Act::END),
+        (Stt::VAL, Tyk::END_ARR, Stt::END, Act::END),
     ];
 
     let mut container_stack: Vec<RowType> = Vec::new();
@@ -362,7 +529,7 @@ fn tokens_to_rows(tokens: &[Tok]) -> io::Result<Vec<Row>>
     let mut id_counter = 0;
 
     let mut i = 0;
-    while i < tokens.len()
+    'build_rows: while i < tokens.len()
     {
         let token = &tokens[i];
         i += 1;
@@ -370,7 +537,7 @@ fn tokens_to_rows(tokens: &[Tok]) -> io::Result<Vec<Row>>
         // curr state, curr char, onto state, buffer action
         let ty: TokTy = token.clone().into();
         let mut transition = None;
-        '_find_transition: for trans @ (from, tok, to, act) in table.iter()
+        'find_transition: for trans @ (from, tok, to, act) in table.iter()
         {
             if *from == state && *tok == ty
             {
@@ -391,7 +558,7 @@ fn tokens_to_rows(tokens: &[Tok]) -> io::Result<Vec<Row>>
                 // No need to iterate through all once one is found
                 if !cfg!(debug_assertions)
                 {
-                    break;
+                    break 'find_transition;
                 }
             }
         }
@@ -399,21 +566,28 @@ fn tokens_to_rows(tokens: &[Tok]) -> io::Result<Vec<Row>>
         let Some((from, tok, to, act)) = transition
         else
         {
-            return Err(io::Error::other("no state transition exists"));
+            return Err(io::Error::other(format!(
+                "no transition exists for state `{state:?}` & token `{token}`",
+            )));
         };
 
         println!("{BLUE}{from:?}, {tok:?}, {to:?}, {act:?}{RESET}");
 
-        state = *to;
         match act
         {
-            ActKEY =>
+            Act::KEY =>
             {
                 #[rustfmt::skip]
                 let Tok::Text(txt) = token else { unreachable!() };
                 buffer.push(txt.clone());
             }
-            FIN =>
+            // TODO: Act::IDX => (),
+            // {
+            //     #[rustfmt::skip]
+            //     let Tok::Text(txt) = token else { unreachable!() };
+            //     buffer.push(txt.clone());
+            // }
+            Act::FIN =>
             {
                 let id = id_counter;
                 id_counter += 1;
@@ -424,12 +598,19 @@ fn tokens_to_rows(tokens: &[Tok]) -> io::Result<Vec<Row>>
 
                 rows.push(Row::new(id, parent, key, value, row_type));
             }
-            ActEND =>
+            Act::END =>
             {
                 break;
             }
-            IGN => (),
-            ACC => todo!(),
+            Act::IGN => (),
+            // TODO: For text, escapes, and hex escapes (accumulate)
+            Act::ACC => todo!(),
+        }
+
+        state = *to;
+        if state == Stt::END
+        {
+            break 'build_rows;
         }
 
         /*         match tok
@@ -626,160 +807,7 @@ fn tokens_to_rows(tokens: &[Tok]) -> io::Result<Vec<Row>>
     Ok(rows)
 }
 
-#[rustfmt::skip]
-#[allow(non_camel_case_types, clippy::upper_case_acronyms)]
-#[derive(VariantNames, Debug, Clone, Copy, PartialEq, PartialOrd, Hash)]
-#[repr(u8)]
-enum TokTy
-{
-    TRU = 1, FAL, NUL, TXT, ESC, HEX, NUM, NEW_ARR, END_ARR, NEW_OBJ, END_OBJ,
-    COM, COL,
-}
-
-#[rustfmt::skip]
-#[allow(non_camel_case_types, clippy::upper_case_acronyms)]
-#[derive(VariantNames, Debug, Clone, Copy, PartialEq, PartialOrd, Hash)]
-#[repr(u8)]
-pub enum State
-{
-    BEG = 1, END, OBJ, ARR, TXT, KEY, COL, VAL
-}
-
-#[rustfmt::skip]
-#[allow(non_camel_case_types, clippy::upper_case_acronyms)]
-#[derive(VariantNames, Debug, Clone, Copy, PartialEq, PartialOrd, Hash)]
-#[repr(u8)]
-pub enum Action
-{
-    FIN = 1,
-    ACC,
-    KEY,
-    IGN,
-    END,
-}
-
-// Expect/Accept
-// Tab/Nest record parent ID, clip/take astnode id
-// [ID][PARENT][KEY][VALUE][TYPE]
-struct AstRow(usize, usize, String, String, TokTy);
-struct Transition(State, TokTy, State, Action);
-
-impl From<Tok> for TokTy
-{
-    fn from(value: Tok) -> Self
-    {
-        use TokTy::*;
-        match value
-        {
-            Tok::True => TRU,
-            Tok::False => FAL,
-            Tok::Null => NUL,
-            Tok::Text(_) => TXT,
-            Tok::Escape(_) => ESC,
-            Tok::EscapeHex(_) => HEX,
-            Tok::Number(_) => NUM,
-            Tok::ArrayOpen => NEW_ARR,
-            Tok::ArrayClose => END_ARR,
-            Tok::ObjectOpen => NEW_OBJ,
-            Tok::ObjectClose => END_OBJ,
-            Tok::Comma => COM,
-            Tok::Colon => COL,
-        }
-    }
-}
-
-impl From<Tok> for RowType
-{
-    fn from(value: Tok) -> Self
-    {
-        match value
-        {
-            Tok::True => RowType::Bit,
-            Tok::False => RowType::Bit,
-            Tok::Null => RowType::Nil,
-            Tok::Text(_) => RowType::Txt,
-            Tok::Escape(_) => RowType::Txt,
-            Tok::EscapeHex(_) => RowType::Txt,
-            Tok::Number(_) => RowType::Num,
-            Tok::ArrayOpen => RowType::Arr,
-            Tok::ArrayClose => RowType::Arr,
-            Tok::ObjectOpen => RowType::Obj,
-            Tok::ObjectClose => RowType::Obj,
-            Tok::Comma | Tok::Colon => panic!("nonsensical row type"),
-        }
-    }
-}
-
-fn main() -> PqResult<()>
-{
-    let value: Value;
-    let stdin = io::stdin();
-
-    let interactive_session = stdin.is_terminal();
-    let filename = env::args().nth(1);
-
-    match (interactive_session, filename)
-    {
-        // Interactive no filename, nothing to read from
-        (true, None) =>
-        {
-            print!("{BLUE}> ");
-            io::stdout().flush()?;
-            let mut input = String::new();
-            let _ = stdin.read_line(&mut input)?;
-            value = serde_json::from_str(input.trim())?;
-        }
-        // Interactive with filename, read from file
-        (true, Some(path)) =>
-        {
-            value = serde_json::from_str(&fs::read_to_string(path)?)?;
-        }
-        // Piped, no filename, read from stdin
-        (false, None) =>
-        {
-            value = serde_json::from_reader(stdin)?;
-        }
-        // Piped, filename given, have to choose just one
-        (false, Some(_)) =>
-        {
-            return Ok(println!("Usage: bat json.json | emit\nemit json.json"));
-        }
-    }
-
-    let mut table = Vec::new();
-    traverse(&mut table, String::new(), value.clone(), 0);
-    // ! view_table(&table);
-
-    let tokens = tokenize(&value.to_string())?;
-    let rows = tokens_to_rows(&tokens)?;
-
-    println!("{GREEN}{:#?}{RESET}", table);
-    println!("{YELLOW}{:#?}{RESET}", tokens);
-    println!("{BLUE}{:#?}{RESET}", rows);
-
-    print!("|{:<3}|", "Id");
-    print!("|{:<5}|", "Parent");
-    print!("|{:<8}|", "Key");
-    print!("|{:<8}|", "Value");
-    println!("|{:<3}|", "Ty");
-
-    for row in rows.iter()
-    {
-        print!("|{:<3}|", row.id);
-        print!("|{:<6}|", row.parent);
-        print!("|{:<8}|", row.key);
-        print!("|{:<8}|", row.value);
-        println!("|{:<3}|", row.ty);
-    }
-
-    println!("\n{RED}Transform Rows Into Json:{RESET}");
-    let json: String = transform(&rows);
-    println!("{json}");
-
-    Ok(())
-}
-
-fn transform(rows: &[Row]) -> String
+fn rows_to_json(rows: &[Row]) -> String
 {
     let mut string = String::new();
     let mut is_array = true; // * All other values print their keys
@@ -801,10 +829,22 @@ fn transform(rows: &[Row]) -> String
             {
                 if !is_array
                 {
-                    string.push_str(format!("{:?}", row.key).as_str());
+                    let key = match row.ty
+                    {
+                        RowType::Txt => format!("\"{}\"", row.key),
+                        _ => row.key.clone(),
+                    };
+                    string.push_str(&key);
+
                     string.push_str(": ");
                 }
-                string.push_str(format!("{:?}", row.value).as_str());
+
+                let val = match row.ty
+                {
+                    RowType::Txt => format!("\"{}\"", row.value),
+                    _ => row.value.clone(),
+                };
+                string.push_str(&val);
             }
         }
     }
