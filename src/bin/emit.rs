@@ -341,7 +341,7 @@ impl Row
 #[repr(u8)]
 enum TokTy
 {
-    NUL = 1, BIT, TXT, ESC, HEX, NUM, NEW_ARR, END_ARR, NEW_OBJ, END_OBJ,
+    NIL = 1, BIT, TXT, ESC, HEX, NUM, NEW_ARR, END_ARR, NEW_OBJ, END_OBJ,
     COM, COL,
 }
 
@@ -360,7 +360,7 @@ pub enum State
 #[repr(u8)]
 pub enum Action
 {
-    FIN = 1, ACC, KEY, IGN, END,
+    FIN = 1, ACC, KEY, IDX, IGN, END,
 }
 
 // Expect/Accept
@@ -377,7 +377,7 @@ impl From<Tok> for TokTy
         {
             Tok::True => Self::BIT,
             Tok::False => Self::BIT,
-            Tok::Null => Self::NUL,
+            Tok::Null => Self::NIL,
             Tok::Text(_) => Self::TXT,
             Tok::Escape(_) => Self::ESC,
             Tok::EscapeHex(_) => Self::HEX,
@@ -489,6 +489,11 @@ fn tokens_to_rows(tokens: &[Tok]) -> io::Result<Vec<Row>>
     use State as Stt;
     use TokTy as Tyk;
 
+    const BUF_MOD: &str = "misaligned parent indicies: buffer was \
+        modified during row creation";
+    const MISS_KEY: &str = "value within object missing key: invalid action \
+        sequence during row creation";
+
     // TODO: Make this HashMap by ensuring no duplicate from state & tok exist
     // Each row is a 32-bit word. Amazingly compact.
     let table = [
@@ -496,7 +501,7 @@ fn tokens_to_rows(tokens: &[Tok]) -> io::Result<Vec<Row>>
         (Stt::BEG, Tyk::TXT, Stt::END, Act::FIN),
         (Stt::BEG, Tyk::NUM, Stt::END, Act::FIN),
         (Stt::BEG, Tyk::BIT, Stt::END, Act::FIN),
-        (Stt::BEG, Tyk::NUL, Stt::END, Act::FIN),
+        (Stt::BEG, Tyk::NIL, Stt::END, Act::FIN),
         /*  */
         (Stt::BEG, Tyk::NEW_OBJ, Stt::KEY, Act::FIN),
         (Stt::KEY, Tyk::TXT, Stt::COL, Act::KEY),
@@ -508,7 +513,7 @@ fn tokens_to_rows(tokens: &[Tok]) -> io::Result<Vec<Row>>
         (Stt::VAL, Tyk::TXT, Stt::COM, Act::FIN),
         (Stt::VAL, Tyk::NUM, Stt::COM, Act::FIN),
         (Stt::VAL, Tyk::BIT, Stt::COM, Act::FIN),
-        (Stt::VAL, Tyk::NUL, Stt::COM, Act::FIN),
+        (Stt::VAL, Tyk::NIL, Stt::COM, Act::FIN),
         /*  */
         // (Stt::VAL, Tyk::TXT, Stt::COM, Act::FIN),
         // (Stt::COL, Tyk::COL, Stt::VAL, Act::IGN),
@@ -520,8 +525,6 @@ fn tokens_to_rows(tokens: &[Tok]) -> io::Result<Vec<Row>>
         (Stt::VAL, Tyk::END_ARR, Stt::END, Act::END),
     ];
 
-    let mut container_stack: Vec<RowType> = Vec::new();
-    let mut current_key = String::new();
     let mut state = State::BEG;
 
     let mut rows = Vec::new();
@@ -574,6 +577,28 @@ fn tokens_to_rows(tokens: &[Tok]) -> io::Result<Vec<Row>>
 
         println!("{BLUE}{from:?}, {tok:?}, {to:?}, {act:?}{RESET}");
 
+        match tok
+        {
+            // Tyk::NUL => todo!(),
+            // Tyk::BIT => todo!(),
+            // Tyk::TXT => todo!(),
+            // Tyk::ESC => todo!(),
+            // Tyk::HEX => todo!(),
+            // Tyk::NUM => todo!(),
+            // Tyk::COM => todo!(),
+            // Tyk::COL => todo!(),
+            Tyk::NEW_ARR | Tyk::NEW_OBJ =>
+            {
+                id_stack.push(id_counter);
+                id_counter += 1;
+            }
+            Tyk::END_ARR | Tyk::END_OBJ =>
+            {
+                id_stack.pop();
+            }
+            _ => (),
+        }
+
         match act
         {
             Act::KEY =>
@@ -582,18 +607,28 @@ fn tokens_to_rows(tokens: &[Tok]) -> io::Result<Vec<Row>>
                 let Tok::Text(txt) = token else { unreachable!() };
                 buffer.push(txt.clone());
             }
-            // TODO: Act::IDX => (),
-            // {
-            //     #[rustfmt::skip]
-            //     let Tok::Text(txt) = token else { unreachable!() };
-            //     buffer.push(txt.clone());
-            // }
+            Act::IDX =>
+            {
+                let parent = id_stack[id_stack.len() - 1];
+                let arr_index = id_counter - parent - 1;
+                buffer.push(arr_index.to_string());
+            }
+            // TODO: FIN assumes obj-key-val and excludes arr-idx-val
             Act::FIN =>
             {
                 let id = id_counter;
                 id_counter += 1;
                 let parent = id_stack[id_stack.len() - 1];
-                let key = buffer.pop().unwrap();
+
+                let parent_node: &Row =
+                    rows.get(parent as usize).expect(BUF_MOD);
+
+                let mut key = String::new();
+                if let RowType::Obj = parent_node.ty
+                {
+                    key = buffer.pop().expect(MISS_KEY).to_string();
+                }
+
                 let value = token.to_string();
                 let row_type = RowType::from(token.clone());
 
