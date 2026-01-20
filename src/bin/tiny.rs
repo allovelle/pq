@@ -36,7 +36,7 @@ mod streaming
                 let n = match self.reader.read(&mut self.buf)
                 {
                     Ok(0) => return None,
-                    Ok(n) => n,
+                    Ok(num) => num,
                     Err(e) => return Some(Err(e)),
                 };
 
@@ -452,8 +452,7 @@ mod lexer
 mod parser
 {
     use crate::lexer::{
-        TokVal, TokenKind, classify_token, json_tokens_from_file,
-        json_tokens_from_reader, json_tokens_from_str, token_value,
+        TokVal, TokenKind, classify_token, json_tokens_from_reader, token_value,
     };
 
     use std::fs::File;
@@ -523,7 +522,13 @@ mod parser
                 0
             };
 
-            self.rows.push(Row { id: idx, par, key, val: String::new(), ty });
+            let val = match ty
+            {
+                RowType::Obj => "{".to_string(),
+                RowType::Arr => "[".to_string(),
+                _ => String::new(),
+            };
+            self.rows.push(Row { id: idx, par, key, val, ty });
 
             self.stack.push(id);
             self.next_index_in_parent.push(0);
@@ -535,8 +540,50 @@ mod parser
             self.next_index_in_parent.pop();
         }
 
-        fn add_value(&mut self, key: String, val: TokVal)
-        {
+fn add_value(&mut self, key: String, val: TokVal)
+{
+    let par = self.stack.last().copied().unwrap_or(u32::MAX);
+    let id = self.next_row_id;
+    self.next_row_id += 1;
+
+    let idx = if let Some(last) = self.next_index_in_parent.last_mut() {
+        let v = *last;
+        *last += 1;
+        v
+    } else {
+        0
+    };
+
+    // Determine parent type so we know whether to override the key
+    let parent_ty = self.rows
+        .iter()
+        .find(|r| r.par == u32::MAX || r.id == par)
+        .map(|r| r.ty.clone());
+
+    // If parent is array → key = idx.to_string()
+    let final_key = match parent_ty {
+        Some(RowType::Arr) => idx.to_string(),
+        _ => key,
+    };
+
+    let (ty, val_str) = match val {
+        TokVal::Txt(s) => (RowType::Str, s.to_string()),
+        TokVal::Num(s) => (RowType::Num, s.to_string()),
+        TokVal::Bit(b) => (RowType::Bit, if b { "true" } else { "false" }.to_string()),
+        TokVal::Nil => (RowType::Null, "null".to_string()),
+        _ => (RowType::Null, String::new()),
+    };
+
+    self.rows.push(Row {
+        id: idx,
+        par,
+        key: final_key,
+        val: val_str,
+        ty,
+    });
+}
+
+
             let par = self.stack.last().copied().unwrap_or(u32::MAX);
             let id = self.next_row_id;
             self.next_row_id += 1;
@@ -554,13 +601,13 @@ mod parser
 
             let (ty, val_str) = match val
             {
-                TokVal::String(s) => (RowType::Str, s.to_string()),
-                TokVal::Number(s) => (RowType::Num, s.to_string()),
+                TokVal::Txt(s) => (RowType::Str, s.to_string()),
+                TokVal::Num(s) => (RowType::Num, s.to_string()),
                 TokVal::Bit(b) =>
                 {
                     (RowType::Bit, if b { "true" } else { "false" }.to_string())
                 }
-                TokVal::Null => (RowType::Null, "null".to_string()),
+                TokVal::Nil => (RowType::Null, "null".to_string()),
                 _ => (RowType::Null, String::new()),
             };
 
@@ -597,7 +644,7 @@ mod parser
                         let val = token_value(self.src, start);
                         match val
                         {
-                            TokVal::String(s) =>
+                            TokVal::Txt(s) =>
                             {
                                 if pending_key.is_none()
                                 {
@@ -606,7 +653,7 @@ mod parser
                                 else
                                 {
                                     let key = pending_key.take().unwrap();
-                                    self.add_value(key, TokVal::String(s));
+                                    self.add_value(key, TokVal::Txt(s));
                                 }
                             }
                             _ =>
@@ -677,7 +724,10 @@ fn main()
         }
     }
 
-    let code = r#"{"a":1,"b":{"c":2},"d":[3,4]}"#;
+    println!();
+
+    let code = r#"{"a":1,"b":{"c":3.14},"d":[true,null]}"#;
+    println!("Input JSON: {}", code);
     let rows = parser::parse_from_str(code).unwrap();
     for r in rows
     {
