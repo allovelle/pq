@@ -449,6 +449,216 @@ mod lexer
     }
 }
 
+mod parser
+{
+    use crate::lexer::{
+        TokVal, TokenKind, classify_token, json_tokens_from_file,
+        json_tokens_from_reader, json_tokens_from_str, token_value,
+    };
+
+    use std::fs::File;
+    use std::io::{self, Read};
+
+    #[derive(Debug, Clone)]
+    pub enum RowType
+    {
+        Obj,
+        Arr,
+        Str,
+        Num,
+        Bit,
+        Null,
+    }
+
+    /// Invariant: id is the index within its container.
+    #[derive(Debug, Clone)]
+    pub struct Row
+    {
+        pub id: u32,     // index within parent container
+        pub par: u32,    // parent row ID
+        pub key: String, // empty for array elements
+        pub val: String, // empty for objects/arrays
+        pub ty: RowType,
+    }
+
+    /// Parser state for building the row table incrementally.
+    pub struct Parser<'a, R: Read>
+    {
+        src: &'a str,
+        tokens: crate::lexer::JsonTokens<R>,
+        rows: Vec<Row>,
+        stack: Vec<u32>, // stack of parent row IDs
+        next_row_id: u32,
+        next_index_in_parent: Vec<u32>, // parallel to stack
+    }
+
+    impl<'a, R: Read> Parser<'a, R>
+    {
+        pub fn new(src: &'a str, reader: R) -> Self
+        {
+            Self {
+                src,
+                tokens: json_tokens_from_reader(reader),
+                rows: Vec::new(),
+                stack: Vec::new(),
+                next_row_id: 0,
+                next_index_in_parent: Vec::new(),
+            }
+        }
+
+        fn push_container(&mut self, ty: RowType, key: String)
+        {
+            let par = self.stack.last().copied().unwrap_or(u32::MAX);
+            let id = self.next_row_id;
+            self.next_row_id += 1;
+
+            let idx = if let Some(last) = self.next_index_in_parent.last_mut()
+            {
+                let v = *last;
+                *last += 1;
+                v
+            }
+            else
+            {
+                0
+            };
+
+            self.rows.push(Row { id: idx, par, key, val: String::new(), ty });
+
+            self.stack.push(id);
+            self.next_index_in_parent.push(0);
+        }
+
+        fn pop_container(&mut self)
+        {
+            self.stack.pop();
+            self.next_index_in_parent.pop();
+        }
+
+        fn add_value(&mut self, key: String, val: TokVal)
+        {
+            let par = self.stack.last().copied().unwrap_or(u32::MAX);
+            let id = self.next_row_id;
+            self.next_row_id += 1;
+
+            let idx = if let Some(last) = self.next_index_in_parent.last_mut()
+            {
+                let v = *last;
+                *last += 1;
+                v
+            }
+            else
+            {
+                0
+            };
+
+            let (ty, val_str) = match val
+            {
+                TokVal::String(s) => (RowType::Str, s.to_string()),
+                TokVal::Number(s) => (RowType::Num, s.to_string()),
+                TokVal::Bit(b) =>
+                {
+                    (RowType::Bit, if b { "true" } else { "false" }.to_string())
+                }
+                TokVal::Null => (RowType::Null, "null".to_string()),
+                _ => (RowType::Null, String::new()),
+            };
+
+            self.rows.push(Row { id: idx, par, key, val: val_str, ty });
+        }
+
+        pub fn parse(mut self) -> io::Result<Vec<Row>>
+        {
+            let mut pending_key: Option<String> = None;
+
+            while let Some(tok) = self.tokens.next()
+            {
+                let start = tok?;
+                let kind = classify_token(self.src, start);
+
+                match kind
+                {
+                    TokenKind::LBrace =>
+                    {
+                        let key = pending_key.take().unwrap_or_default();
+                        self.push_container(RowType::Obj, key);
+                    }
+                    TokenKind::LBracket =>
+                    {
+                        let key = pending_key.take().unwrap_or_default();
+                        self.push_container(RowType::Arr, key);
+                    }
+                    TokenKind::RBrace | TokenKind::RBracket =>
+                    {
+                        self.pop_container();
+                    }
+                    TokenKind::String =>
+                    {
+                        let val = token_value(self.src, start);
+                        match val
+                        {
+                            TokVal::String(s) =>
+                            {
+                                if pending_key.is_none()
+                                {
+                                    pending_key = Some(s.to_string());
+                                }
+                                else
+                                {
+                                    let key = pending_key.take().unwrap();
+                                    self.add_value(key, TokVal::String(s));
+                                }
+                            }
+                            _ =>
+                            {}
+                        }
+                    }
+                    TokenKind::Number =>
+                    {
+                        let key = pending_key.take().unwrap_or_default();
+                        let val = token_value(self.src, start);
+                        self.add_value(key, val);
+                    }
+                    TokenKind::True | TokenKind::False | TokenKind::Null =>
+                    {
+                        let key = pending_key.take().unwrap_or_default();
+                        let val = token_value(self.src, start);
+                        self.add_value(key, val);
+                    }
+                    TokenKind::Colon | TokenKind::Comma =>
+                    {}
+                    TokenKind::Unknown =>
+                    {}
+                }
+            }
+
+            Ok(self.rows)
+        }
+    }
+
+    // Entry points
+    pub fn parse_from_str(src: &str) -> io::Result<Vec<Row>>
+    {
+        let reader = std::io::Cursor::new(src.as_bytes());
+        Parser::new(src, reader).parse()
+    }
+
+    pub fn parse_from_file(path: &str) -> io::Result<Vec<Row>>
+    {
+        let src = std::fs::read_to_string(path)?;
+        let file = File::open(path)?;
+        Parser::new(&src, file).parse()
+    }
+
+    pub fn parse_from_reader<'a, R: Read>(
+        src: &'a str,
+        reader: R,
+    ) -> io::Result<Vec<Row>>
+    {
+        Parser::new(src, reader).parse()
+    }
+}
+
 fn main()
 {
     let code = r#"{"key": "value", "number": 123, "bool": true, "null": null}"#;
@@ -465,5 +675,12 @@ fn main()
             }
             Err(e) => eprintln!("Error: {}", e),
         }
+    }
+
+    let code = r#"{"a":1,"b":{"c":2},"d":[3,4]}"#;
+    let rows = parser::parse_from_str(code).unwrap();
+    for r in rows
+    {
+        println!("{:?}", r);
     }
 }
