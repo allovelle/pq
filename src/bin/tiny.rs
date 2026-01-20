@@ -708,8 +708,6 @@ fn main()
 
     println!();
 
-    let code = r#"{"a":[10,20,30]}
-"#;
     println!("Input JSON: {}", code);
     let rows = parser::parse_from_str(code).unwrap();
     for r in rows
