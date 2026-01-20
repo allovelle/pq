@@ -1,4 +1,4 @@
-use crate::lexer::json_tokens_from_str;
+use crate::lexer::{classify_token, json_tokens_from_str, token_value};
 
 mod streaming
 {
@@ -112,19 +112,13 @@ mod streaming
 
 mod lexer
 {
-    // ============================================================
-    //  JSON TOKEN STREAMING STATE MACHINE (LEXER ONLY)
-    // ============================================================
-
-    use std::{
-        fs::File,
-        io::{self, Read},
-    };
+    use std::fs::File;
+    use std::io::{self, Read};
 
     use crate::streaming::Utf8Codepoints;
 
-    #[derive(Debug, Clone, PartialEq)]
-    pub enum JsonToken
+    #[derive(Debug, Clone, Copy, PartialEq)]
+    pub enum TokenKind
     {
         LBrace,
         RBrace,
@@ -135,21 +129,29 @@ mod lexer
         True,
         False,
         Null,
-        Number(String),
-        String(String),
+        Number,
+        String,
+        Unknown,
     }
 
     pub struct JsonTokens<R: Read>
     {
         chars: Utf8Codepoints<R>,
         buf: Option<char>,
+        byte_offset: usize, // running byte offset
+        token_start: usize, // start offset of current token
     }
 
     impl<R: Read> JsonTokens<R>
     {
         pub fn new(reader: R) -> Self
         {
-            Self { chars: Utf8Codepoints::new(reader), buf: None }
+            Self {
+                chars: Utf8Codepoints::new(reader),
+                buf: None,
+                byte_offset: 0,
+                token_start: 0,
+            }
         }
 
         fn next_char(&mut self) -> Option<io::Result<char>>
@@ -169,7 +171,9 @@ mod lexer
 
     impl<R: Read> Iterator for JsonTokens<R>
     {
-        type Item = io::Result<JsonToken>;
+        type Item = io::Result<usize>;
+
+        // ONLY BYTE OFFSET
 
         fn next(&mut self) -> Option<Self::Item>
         {
@@ -181,105 +185,141 @@ mod lexer
                     Err(e) => return Some(Err(e)),
                 };
 
+                let ch_len = ch.len_utf8();
+                let start = self.byte_offset;
+                self.byte_offset += ch_len;
+
                 match ch
                 {
-                    '{' => return Some(Ok(JsonToken::LBrace)),
-                    '}' => return Some(Ok(JsonToken::RBrace)),
-                    '[' => return Some(Ok(JsonToken::LBracket)),
-                    ']' => return Some(Ok(JsonToken::RBracket)),
-                    ':' => return Some(Ok(JsonToken::Colon)),
-                    ',' => return Some(Ok(JsonToken::Comma)),
+                    '{' | '}' | '[' | ']' | ':' | ',' =>
+                    {
+                        return Some(Ok(start));
+                    }
 
-                    // Skip whitespace
                     c if c.is_whitespace() => continue,
 
-                    // String
                     '"' =>
                     {
-                        let mut s = String::new();
-                        while let Some(Ok(ch)) = self.next_char()
+                        // string token
+                        loop
                         {
-                            let c = ch;
-                            if c == '"'
+                            match self.next_char()?
                             {
-                                break;
+                                Ok(inner) =>
+                                {
+                                    self.byte_offset += inner.len_utf8();
+                                    if inner == '"'
+                                    {
+                                        break;
+                                    }
+                                }
+                                Err(e) => return Some(Err(e)),
                             }
-                            s.push(c);
                         }
-                        return Some(Ok(JsonToken::String(s)));
+                        return Some(Ok(start));
                     }
 
-                    // Number (very loose for now)
                     c if c.is_ascii_digit() || c == '-' =>
                     {
-                        let mut s = String::new();
-                        s.push(c);
-                        while let Some(Ok(ch)) = self.next_char()
+                        // number token
+                        loop
                         {
-                            let c = ch;
-                            if c.is_ascii_digit()
-                                || c == '.'
-                                || c == 'e'
-                                || c == 'E'
-                                || c == '+'
-                                || c == '-'
+                            match self.next_char()
                             {
-                                s.push(c);
-                            }
-                            else
-                            {
-                                self.unread(c);
-                                break;
+                                Some(Ok(inner)) =>
+                                {
+                                    if inner.is_ascii_digit()
+                                        || inner == '.'
+                                        || inner == 'e'
+                                        || inner == 'E'
+                                        || inner == '+'
+                                        || inner == '-'
+                                    {
+                                        self.byte_offset += inner.len_utf8();
+                                    }
+                                    else
+                                    {
+                                        self.unread(inner);
+                                        break;
+                                    }
+                                }
+                                Some(Err(e)) => return Some(Err(e)),
+                                None => break,
                             }
                         }
-                        return Some(Ok(JsonToken::Number(s)));
+                        return Some(Ok(start));
                     }
 
-                    // true / false / null
                     't' =>
                     {
+                        // true
                         for expected in ['r', 'u', 'e']
                         {
-                            let c = self.next_char()?;
-                            if !matches!(c, Ok(expected))
+                            match self.next_char()?
                             {
-                                return Some(Err(io::Error::new(
-                                    io::ErrorKind::InvalidData,
-                                    "invalid token",
-                                )));
+                                Ok(c) =>
+                                {
+                                    self.byte_offset += c.len_utf8();
+                                    if c != expected
+                                    {
+                                        return Some(Err(io::Error::new(
+                                            io::ErrorKind::InvalidData,
+                                            "invalid token",
+                                        )));
+                                    }
+                                }
+                                Err(e) => return Some(Err(e)),
                             }
                         }
-                        return Some(Ok(JsonToken::True));
+                        return Some(Ok(start));
                     }
+
                     'f' =>
                     {
+                        // false
                         for expected in ['a', 'l', 's', 'e']
                         {
-                            let c = self.next_char()?;
-                            if !matches!(c, Ok(expected))
+                            match self.next_char()?
                             {
-                                return Some(Err(io::Error::new(
-                                    io::ErrorKind::InvalidData,
-                                    "invalid token",
-                                )));
+                                Ok(c) =>
+                                {
+                                    self.byte_offset += c.len_utf8();
+                                    if c != expected
+                                    {
+                                        return Some(Err(io::Error::new(
+                                            io::ErrorKind::InvalidData,
+                                            "invalid token",
+                                        )));
+                                    }
+                                }
+                                Err(e) => return Some(Err(e)),
                             }
                         }
-                        return Some(Ok(JsonToken::False));
+                        return Some(Ok(start));
                     }
+
                     'n' =>
                     {
+                        // null
                         for expected in ['u', 'l', 'l']
                         {
-                            let c = self.next_char()?;
-                            if !matches!(c, Ok(expected))
+                            match self.next_char()?
                             {
-                                return Some(Err(io::Error::new(
-                                    io::ErrorKind::InvalidData,
-                                    "invalid token",
-                                )));
+                                Ok(c) =>
+                                {
+                                    self.byte_offset += c.len_utf8();
+                                    if c != expected
+                                    {
+                                        return Some(Err(io::Error::new(
+                                            io::ErrorKind::InvalidData,
+                                            "invalid token",
+                                        )));
+                                    }
+                                }
+                                Err(e) => return Some(Err(e)),
                             }
                         }
-                        return Some(Ok(JsonToken::Null));
+                        return Some(Ok(start));
                     }
 
                     _ =>
@@ -296,7 +336,7 @@ mod lexer
         }
     }
 
-    // Entry points for JSON tokens
+    // Entry points
     pub fn json_tokens_from_reader<R: Read>(reader: R) -> JsonTokens<R>
     {
         JsonTokens::new(reader)
@@ -311,6 +351,102 @@ mod lexer
     {
         JsonTokens::new(io::Cursor::new(s.as_bytes()))
     }
+
+    // ------------------------------------------------------------
+    // RETOKENIZER: classify token by re-reading source
+    // ------------------------------------------------------------
+    pub fn classify_token(src: &str, start: usize) -> TokenKind
+    {
+        let b = src.as_bytes()[start];
+        match b
+        {
+            b'{' => TokenKind::LBrace,
+            b'}' => TokenKind::RBrace,
+            b'[' => TokenKind::LBracket,
+            b']' => TokenKind::RBracket,
+            b':' => TokenKind::Colon,
+            b',' => TokenKind::Comma,
+            b'"' => TokenKind::String,
+            b'-' | b'0' ..= b'9' => TokenKind::Number,
+            b't' => TokenKind::True,
+            b'f' => TokenKind::False,
+            b'n' => TokenKind::Null,
+            _ => TokenKind::Unknown,
+        }
+    }
+
+    #[derive(Debug, PartialEq)]
+    pub enum TokVal<'a>
+    {
+        NewObj,
+        EndObj,
+        NewArr,
+        EndArr,
+        Col,
+        Com,
+        Bit(bool),
+        Nil,
+        Num(&'a str),
+        Txt(&'a str),
+        Unknown,
+    }
+
+    pub fn token_value<'a>(src: &'a str, start: usize) -> TokVal<'a>
+    {
+        match classify_token(src, start)
+        {
+            TokenKind::LBrace => TokVal::NewObj,
+            TokenKind::RBrace => TokVal::EndObj,
+            TokenKind::LBracket => TokVal::NewArr,
+            TokenKind::RBracket => TokVal::EndArr,
+            TokenKind::Colon => TokVal::Col,
+            TokenKind::Comma => TokVal::Com,
+
+            TokenKind::True => TokVal::Bit(true),
+            TokenKind::False => TokVal::Bit(false),
+            TokenKind::Null => TokVal::Nil,
+
+            TokenKind::String => TokVal::Txt(slice_string(src, start)),
+            TokenKind::Number => TokVal::Num(slice_number(src, start)),
+
+            TokenKind::Unknown => TokVal::Unknown,
+        }
+    }
+
+    pub fn slice_string(src: &str, start: usize) -> &str
+    {
+        let s = &src[start ..];
+        let bytes = s.as_bytes();
+
+        let mut i = 1; // skip initial quote
+        while i < bytes.len()
+        {
+            if bytes[i] == b'"'
+            {
+                break;
+            }
+            i += 1;
+        }
+
+        &s[1 .. i] // inner contents only
+    }
+
+    pub fn slice_number(src: &str, start: usize) -> &str
+    {
+        let bytes = src.as_bytes();
+        let mut end = start;
+
+        while end < bytes.len()
+        {
+            match bytes[end]
+            {
+                b'0' ..= b'9' | b'.' | b'e' | b'E' | b'+' | b'-' => end += 1,
+                _ => break,
+            }
+        }
+
+        &src[start .. end]
+    }
 }
 
 fn main()
@@ -321,7 +457,12 @@ fn main()
     {
         match token
         {
-            Ok(t) => println!("{:?}", t),
+            Ok(at) =>
+            {
+                let ty = classify_token(code, at);
+                let val = token_value(code, at);
+                println!("{:<3?} {:<6} {:?}", at, format!("{ty:?}"), val);
+            }
             Err(e) => eprintln!("Error: {}", e),
         }
     }
