@@ -458,7 +458,8 @@ mod parser
     use std::fs::File;
     use std::io::{self, Read};
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Copy, PartialEq)]
+    #[repr(u8)]
     pub enum RowType
     {
         Obj,
@@ -486,9 +487,10 @@ mod parser
         src: &'a str,
         tokens: crate::lexer::JsonTokens<R>,
         rows: Vec<Row>,
-        stack: Vec<u32>, // stack of parent row IDs
+        stack: Vec<u32>,        // parent row IDs
+        stack_ty: Vec<RowType>, // parent types (NEW)
         next_row_id: u32,
-        next_index_in_parent: Vec<u32>, // parallel to stack
+        next_index_in_parent: Vec<u32>,
     }
 
     impl<'a, R: Read> Parser<'a, R>
@@ -500,6 +502,7 @@ mod parser
                 tokens: json_tokens_from_reader(reader),
                 rows: Vec::new(),
                 stack: Vec::new(),
+                stack_ty: Vec::new(), // NEW
                 next_row_id: 0,
                 next_index_in_parent: Vec::new(),
             }
@@ -507,7 +510,8 @@ mod parser
 
         fn push_container(&mut self, ty: RowType, key: String)
         {
-            let par = self.stack.last().copied().unwrap_or(u32::MAX);
+            let par =
+                self.stack.last().copied().unwrap_or(0 /* u32::max */);
             let id = self.next_row_id;
             self.next_row_id += 1;
 
@@ -528,63 +532,25 @@ mod parser
                 RowType::Arr => "[".to_string(),
                 _ => String::new(),
             };
+
             self.rows.push(Row { id: idx, par, key, val, ty });
 
             self.stack.push(id);
+            self.stack_ty.push(ty); // NEW
             self.next_index_in_parent.push(0);
         }
 
         fn pop_container(&mut self)
         {
             self.stack.pop();
+            self.stack_ty.pop(); // NEW
             self.next_index_in_parent.pop();
         }
 
-fn add_value(&mut self, key: String, val: TokVal)
-{
-    let par = self.stack.last().copied().unwrap_or(u32::MAX);
-    let id = self.next_row_id;
-    self.next_row_id += 1;
-
-    let idx = if let Some(last) = self.next_index_in_parent.last_mut() {
-        let v = *last;
-        *last += 1;
-        v
-    } else {
-        0
-    };
-
-    // Determine parent type so we know whether to override the key
-    let parent_ty = self.rows
-        .iter()
-        .find(|r| r.par == u32::MAX || r.id == par)
-        .map(|r| r.ty.clone());
-
-    // If parent is array → key = idx.to_string()
-    let final_key = match parent_ty {
-        Some(RowType::Arr) => idx.to_string(),
-        _ => key,
-    };
-
-    let (ty, val_str) = match val {
-        TokVal::Txt(s) => (RowType::Str, s.to_string()),
-        TokVal::Num(s) => (RowType::Num, s.to_string()),
-        TokVal::Bit(b) => (RowType::Bit, if b { "true" } else { "false" }.to_string()),
-        TokVal::Nil => (RowType::Null, "null".to_string()),
-        _ => (RowType::Null, String::new()),
-    };
-
-    self.rows.push(Row {
-        id: idx,
-        par,
-        key: final_key,
-        val: val_str,
-        ty,
-    });
-}
-
-
-            let par = self.stack.last().copied().unwrap_or(u32::MAX);
+        fn add_value(&mut self, key: String, val: TokVal)
+        {
+            let par =
+                self.stack.last().copied().unwrap_or(0 /* u32::max */);
             let id = self.next_row_id;
             self.next_row_id += 1;
 
@@ -599,6 +565,16 @@ fn add_value(&mut self, key: String, val: TokVal)
                 0
             };
 
+            // O(1) parent type lookup
+            let parent_ty = self.stack_ty.last().copied();
+
+            // Arrays override the key with the index
+            let final_key = match parent_ty
+            {
+                Some(RowType::Arr) => idx.to_string(),
+                _ => key,
+            };
+
             let (ty, val_str) = match val
             {
                 TokVal::Txt(s) => (RowType::Str, s.to_string()),
@@ -611,7 +587,13 @@ fn add_value(&mut self, key: String, val: TokVal)
                 _ => (RowType::Null, String::new()),
             };
 
-            self.rows.push(Row { id: idx, par, key, val: val_str, ty });
+            self.rows.push(Row {
+                id: idx,
+                par,
+                key: final_key,
+                val: val_str,
+                ty,
+            });
         }
 
         pub fn parse(mut self) -> io::Result<Vec<Row>>
@@ -726,7 +708,8 @@ fn main()
 
     println!();
 
-    let code = r#"{"a":1,"b":{"c":3.14},"d":[true,null]}"#;
+    let code = r#"{"a":[10,20,30]}
+"#;
     println!("Input JSON: {}", code);
     let rows = parser::parse_from_str(code).unwrap();
     for r in rows
