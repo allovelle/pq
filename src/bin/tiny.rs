@@ -690,7 +690,12 @@ mod parser
 
 fn main()
 {
-    let code = r#"{"key": "value", "number": 123, "bool": true, "null": null}"#;
+    let code = r#"{
+        "k": "v", "num": 123, "bit": true, "nil": null,
+        "arr": [1, 2, 3],
+        "obj": { "a": "b", "c": "d" }
+    }"#;
+
     println!("Input JSON: {}", code);
     for token in json_tokens_from_str(code)
     {
