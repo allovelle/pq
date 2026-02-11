@@ -720,3 +720,12 @@ fn main()
         println!("{:?}", r);
     }
 }
+
+mod format
+{
+    // TODO: If atomic (not structural), return only width of self and indent
+    // TODO: If structural, return vec of logical indents (nests) and max
+    // TODO: minimum width of each nest level so an outer formatter can decide
+    // Layout::Structure(vec![(indent_level, min_width), ...])
+    // Layout::Atomic(min_width)
+}
