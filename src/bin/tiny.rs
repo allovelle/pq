@@ -481,6 +481,20 @@ mod parser
         pub ty: RowType,
     }
 
+    impl Row
+    {
+        pub fn subnodes<'row>(
+            &'row self,
+            table: &'row [Row],
+        ) -> impl Iterator<Item = &'row Row>
+        {
+            /* table
+            .iter()
+            .filter(|r| r.id != 0 && self.id == r.par && r.id > self.id) */
+            table.iter().filter(|r| r.id > self.id && self.id == r.par)
+        }
+    }
+
     /// Parser state for building the row table incrementally.
     pub struct Parser<'a, R: Read>
     {
@@ -515,16 +529,17 @@ mod parser
             let id = self.next_row_id;
             self.next_row_id += 1;
 
-            let idx = if let Some(last) = self.next_index_in_parent.last_mut()
-            {
-                let v = *last;
-                *last += 1;
-                v
-            }
-            else
-            {
-                0
-            };
+            // let idx = if let Some(last) = self.next_index_in_parent.last_mut()
+            // {
+            //     let v = *last;
+            //     *last += 1;
+            //     v
+            // }
+            // else
+            // {
+            //     0
+            // };
+            let idx = self.rows.len() as u32;
 
             let val = match ty
             {
@@ -554,16 +569,17 @@ mod parser
             let id = self.next_row_id;
             self.next_row_id += 1;
 
-            let idx = if let Some(last) = self.next_index_in_parent.last_mut()
-            {
-                let v = *last;
-                *last += 1;
-                v
-            }
-            else
-            {
-                0
-            };
+            // let idx = if let Some(last) = self.next_index_in_parent.last_mut()
+            // {
+            //     let v = *last;
+            //     *last += 1;
+            //     v
+            // }
+            // else
+            // {
+            //     0
+            // };
+            let idx = self.rows.len() as u32;
 
             // O(1) parent type lookup
             let parent_ty = self.stack_ty.last().copied();
@@ -728,4 +744,95 @@ mod format
     // TODO: minimum width of each nest level so an outer formatter can decide
     // Layout::Structure(vec![(indent_level, min_width), ...])
     // Layout::Atomic(min_width)
+    use super::parser::{Row, RowType};
+
+    fn compute_width(row: &Row, table: &[Row]) -> usize
+    {
+        match row.ty
+        {
+            RowType::Obj | RowType::Arr => 2, // for {} or []
+            RowType::Str => row.val.len() + 2, // for quotes
+            RowType::Num | RowType::Bit | RowType::Null => row.val.len(),
+        }
+    }
+
+    /// Rows already store values as strings so their literal width is just the
+    /// length of the string plus any necessary punctuation.
+    fn inline_width(row: &Row, table: &[Row]) -> usize
+    {
+        let key_val_sep = 2; // for ": "
+        let quotes = 2; // for quotes around strings
+        let key_width = row.key.len() + quotes + key_val_sep;
+
+        match row.ty
+        {
+            RowType::Str => return key_width + row.val.len() + quotes,
+            RowType::Num | RowType::Bit | RowType::Null =>
+            {
+                return key_width + row.val.len();
+            }
+            _ => (), // Obj & Arr is handled below
+        }
+
+        // Structural nodes sum the widths of their subnodes plus punctuation
+
+        let braces = 4; // for { _ } or [ _ ]
+        let comma = 2; // for ", "
+
+        let mut total_width = if row.id == 0
+        {
+            0 // root has no key and no braces
+        }
+        else
+        {
+            braces + key_width
+        };
+
+        let mut nodes = row.subnodes(table).peekable();
+
+        while let Some(subnode) = nodes.next()
+        {
+            total_width += inline_width(subnode, table);
+
+            if nodes.peek().is_some()
+            {
+                total_width += comma;
+            }
+        }
+
+        total_width
+    }
+
+    fn outline_width(row: &Row, table: &[Row]) -> usize
+    {
+        match row.ty
+        {
+            RowType::Obj | RowType::Arr =>
+            {
+                // For containers, we consider the width of the opening and closing brackets
+                2 // for {} or []
+            }
+            RowType::Str | RowType::Num | RowType::Bit | RowType::Null =>
+            {
+                inline_width(row, table)
+            }
+        }
+    }
+
+    #[cfg(test)]
+    mod tests
+    {
+        use super::*;
+        use crate::parser::parse_from_str;
+
+        #[test]
+        fn test_inline_width()
+        {
+            let code = r#"{ "k": "v" }"#;
+            let rows = parse_from_str(code).unwrap();
+            assert_eq!(rows.len(), 2); // Implicit root + 1 object
+            let width = inline_width(&rows[0], &rows);
+            assert_eq!(width, 9);
+        }
+    }
 }

@@ -20,25 +20,6 @@ structure of the formatting commands.
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 # Prompts
 
 A JSON formatter built on **your row‑table model** can be *astonishingly configurable*—far more than typical pretty‑printers—because the formatter walks a **structural table**, not a tree. That means every formatting decision can be driven by a single configuration struct, exactly like `rustfmt.toml`.
