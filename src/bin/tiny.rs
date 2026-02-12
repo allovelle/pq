@@ -834,5 +834,17 @@ mod format
             let width = inline_width(&rows[0], &rows);
             assert_eq!(width, 9);
         }
+
+        #[test]
+        fn test_subnodes()
+        {
+            let code = r#"[1, 2, [3, 4], 5, 6"#;
+            let table = parse_from_str(code).unwrap();
+            println!("Rows: {:#?}", table);
+            assert_eq!(table.len(), 8);
+
+            assert_eq!(table[0].subnodes(&table).count(), 5);
+            assert_eq!(table[3].subnodes(&table).count(), 2);
+        }
     }
 }
