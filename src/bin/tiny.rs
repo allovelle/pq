@@ -447,6 +447,89 @@ mod lexer
     }
 }
 
+mod format
+{
+    // TODO: If atomic (not structural), return only width of self and indent
+    // TODO: If structural, return vec of logical indents (nests) and max
+    // TODO: minimum width of each nest level so an outer formatter can decide
+    // Layout::Structure(vec![(indent_level, min_width), ...])
+    // Layout::Atomic(min_width)
+    use super::parser::{Row, RowType};
+
+    fn compute_width(row: &Row, table: &[Row]) -> usize
+    {
+        match row.ty
+        {
+            RowType::Obj | RowType::Arr => 2, // for {} or []
+            RowType::Str => row.val.len() + 2, // for quotes
+            RowType::Num | RowType::Bit | RowType::Null => row.val.len(),
+        }
+    }
+
+    /// Rows already store values as strings so their literal width is just the
+    /// length of the string plus any necessary punctuation.
+    fn inline_width(row: &Row, table: &[Row]) -> usize
+    {
+        let key_val_sep = 2; // for ": "
+        let quotes = 2; // for quotes around strings
+        let key_width = row.key.len() + quotes + key_val_sep;
+
+        match row.ty
+        {
+            RowType::Str => return key_width + row.val.len() + quotes,
+            RowType::Num | RowType::Bit | RowType::Null =>
+            {
+                return key_width + row.val.len();
+            }
+            _ => (), // Obj & Arr is handled below
+        }
+
+        // Structural nodes sum the widths of their subnodes plus punctuation
+
+        let braces = 4; // for { _ } or [ _ ]
+        let comma = 2; // for ", "
+
+        let mut total_width = if row.id == 0
+        {
+            0 // root has no key and no braces
+        }
+        else
+        {
+            braces + key_width
+        };
+
+        let mut nodes = row.subnodes(table).peekable();
+
+        while let Some(subnode) = nodes.next()
+        {
+            total_width += inline_width(subnode, table);
+
+            if nodes.peek().is_some()
+            {
+                total_width += comma;
+            }
+        }
+
+        total_width
+    }
+
+    fn outline_width(row: &Row, table: &[Row]) -> usize
+    {
+        match row.ty
+        {
+            RowType::Obj | RowType::Arr =>
+            {
+                // For containers, we consider the width of the opening and closing brackets
+                2 // for {} or []
+            }
+            RowType::Str | RowType::Num | RowType::Bit | RowType::Null =>
+            {
+                inline_width(row, table)
+            }
+        }
+    }
+}
+
 mod parser
 {
     use crate::lexer::{
@@ -806,23 +889,46 @@ mod format
         {
             RowType::Obj | RowType::Arr =>
             {
-                // For containers, we consider the width of the opening and closing brackets
-                2 // for {} or []
-            }
-            RowType::Str | RowType::Num | RowType::Bit | RowType::Null =>
+
+fn main()
+{
+    let code = r#"{
+        "k": "v", "num": 123, "bit": true, "nil": null,
+        "arr": [1, 2, 3],
+        "obj": { "a": "b", "c": "d" }
+    }"#;
+
+    println!("Input JSON: {}", code);
+    for token in json_tokens_from_str(code)
+    {
+        match token
+        {
+            Ok(at) =>
             {
-                inline_width(row, table)
+                let ty = classify_token(code, at);
+                let val = token_value(code, at);
+                println!("{:<3?} {:<6} {:?}", at, format!("{ty:?}"), val);
             }
+            Err(e) => eprintln!("Error: {}", e),
         }
     }
-}
-#[cfg(test)]
 
+    println!();
+
+    println!("Input JSON: {}", code);
+    let rows = parser::parse_from_str(code).unwrap();
+    for r in rows
+    {
+        println!("{:?}", r);
+    }
+}
+
+#[cfg(test)]
 mod tests
 {
-    use super::lexer::{TokVal, TokenKind, json_tokens_from_str};
-    use super::parser::parse_from_str;
-    use super::{classify_token, token_value};
+    use super::*;
+    use crate::lexer::*;
+    use crate::parser::*;
 
     /// Tests [json_tokens_from_str], [classify_token], and [token_value]
     /// together to verify individual tokens are in the right order and
@@ -844,7 +950,6 @@ mod tests
                 Err(e) => eprintln!("Error: {}", e),
             }
         }
-
         let expected = [
             (0, TokenKind::LBracket, TokVal::NewArr),
             (1, TokenKind::Number, TokVal::Num("1")),
@@ -862,43 +967,16 @@ mod tests
             (18, TokenKind::Number, TokVal::Num("6")),
             (19, TokenKind::RBracket, TokVal::EndArr),
         ];
-
         let token_stream =
             json_tokens_from_str(code).filter_map(|t| t.ok()).map(|at| {
                 let ty = classify_token(code, at);
                 let val = token_value(code, at);
                 (at, ty, val)
             });
-
         for (resulted, expected) in token_stream.zip(expected.iter())
         {
             assert_eq!(resulted, *expected);
         }
-    }
-
-    #[test]
-    fn test_inline_width()
-    {
-        // let code = r#"{ "k": "v" }"#;
-        // let table = parse_from_str(code).unwrap();
-        // assert_eq!(table.len(), 2); // Implicit root + 1 object
-        // let width = inline_width(&table[0], &table);
-        // assert_eq!(width, 9);
-    }
-
-    /// Verifies that structured values correctly return their direct subnodes.
-    #[test]
-    fn test_subnodes()
-    {
-        // ! This should crash the parser, the missing end array brace:
-        let code = r#"[1, 2, [3, 4], 5, 6"#;
-        assert!(parse_from_str(code).is_err());
-        // let table = parse_from_str(code).unwrap();
-        // println!("Rows: {:#?}", table);
-        // assert_eq!(table.len(), 8);
-
-        // assert_eq!(table[0].subnodes(&table).count(), 5);
-        // assert_eq!(table[3].subnodes(&table).count(), 2);
     }
 
     #[test]
@@ -909,5 +987,13 @@ mod tests
             json_tokens_from_str(code).map(|row| row.unwrap()).collect();
         let msg = "Missing end arr is an error for the parser, not the lexer";
         assert_eq!(tokens.len(), 14, "{}", msg);
+    }
+
+    /// Verifies that structured values correctly return their direct subnodes.
+    #[test]
+    fn test_subnodes()
+    {
+        let code = r#"[1, 2, [3, 4], 5, 6"#;
+        assert!(parse_from_str(code).is_err());
     }
 }
