@@ -941,7 +941,8 @@ mod parser
                     let obj_row_id = self.add_row(
                         self.current_parent,
                         key,
-                        String::new(),
+                        // String::new(),
+                        '{'.to_string(),
                         RowType::Obj,
                     );
 
@@ -1007,7 +1008,8 @@ mod parser
                     let arr_row_id = self.add_row(
                         self.current_parent,
                         key,
-                        String::new(),
+                        // String::new(),
+                        '['.to_string(),
                         RowType::Arr,
                     );
 
@@ -1397,21 +1399,114 @@ mod tests
     fn test_subnodes()
     {
         let code = r#"[1, 2, [3, 4], 5, 6]"#;
-        let subnodes = parse_from_str(code).unwrap();
-        println!("Subnodes: {:#?}", subnodes);
-        assert_eq!(subnodes.len(), 8);
-        assert_eq!(subnodes[0].val, "[");
-        assert_eq!(subnodes[1].val, "1");
-        assert_eq!(subnodes[2].val, "2");
-        assert_eq!(subnodes[3].ty, RowType::Arr);
-        assert_eq!(subnodes[3].key, "4"); // Array indices have numeric keys
-        assert_eq!(subnodes[3].val, "[");
-        assert_eq!(subnodes[4].val, "3");
-        assert_eq!(subnodes[5].val, "4");
-        assert_eq!(subnodes[6].val, "5");
-        assert_eq!(subnodes[7].val, "6");
+        let table = parser::parse_from_str(code).unwrap();
+        assert_eq!(table[0].ty, RowType::Arr);
+        assert_eq!(table[3].ty, RowType::Arr);
+        let subnodes = table[3].subnodes(&table).collect::<Vec<_>>();
+        assert_eq!(subnodes.len(), 2);
+        assert_eq!(subnodes[0].val, "3");
+        assert_eq!(subnodes[1].val, "4");
+    }
+
+    #[test]
+    fn test_parser_json_structure()
+    {
+        let code = r#"[1, 2, [3, 4], 5, 6]"#;
+        let table = parse_from_str(code).unwrap();
+
+        assert_eq!(table.len(), 8);
+        assert_eq!(table[0].val, "[");
+        assert_eq!(table[1].val, "1");
+        assert_eq!(table[2].val, "2");
+        assert_eq!(table[3].ty, RowType::Arr);
+        assert_eq!(table[3].key, "4"); // Array indices have numeric keys
+        assert_eq!(table[3].val, "[");
+        assert_eq!(table[4].val, "3");
+        assert_eq!(table[5].val, "4");
+        assert_eq!(table[6].val, "5");
+        assert_eq!(table[7].val, "6");
 
         let code = r#"[1, 2, [3, 4], 5, 6"#;
         assert!(parse_from_str(code).is_err());
+
+        // let code = r#"{ "k": "v", "num": 123, "bit": true, "nil": null, "arr": [1, 2, 3], "obj": { "a": "b", "c": "d" }"#;
+        let code = r#"{
+            "k": "v", "num": 123, "bit": true, "nil": null,
+            "arr": [1, 2, 3],
+            "obj": { "a": "b", "c": ["d"] }
+        }"#;
+        let table = parse_from_str(code).unwrap();
+
+        assert_eq!(table.len(), 13);
+        assert_eq!(
+            (table[0].ty, table[0].key.as_str(), table[0].val.as_str()),
+            (RowType::Obj, "", "{")
+        );
+        assert_eq!(
+            (table[1].ty, table[1].key.as_str(), table[1].val.as_str()),
+            (RowType::Str, "k", "v")
+        );
+        assert_eq!(
+            (table[2].ty, table[2].key.as_str(), table[2].val.as_str()),
+            (RowType::Num, "num", "123")
+        );
+        assert_eq!(
+            (table[3].ty, table[3].key.as_str(), table[3].val.as_str()),
+            (RowType::Bit, "bit", "true")
+        );
+        assert_eq!(
+            (table[4].ty, table[4].key.as_str(), table[4].val.as_str()),
+            (RowType::Null, "nil", "null")
+        );
+        assert_eq!(
+            (table[5].ty, table[5].key.as_str(), table[5].val.as_str()),
+            (RowType::Arr, "arr", "[")
+        );
+        assert_eq!(
+            (table[6].ty, table[6].key.as_str(), table[6].val.as_str()),
+            (RowType::Num, "0", "1")
+        );
+        assert_eq!(
+            (table[7].ty, table[7].key.as_str(), table[7].val.as_str()),
+            (RowType::Num, "2", "2")
+        );
+        assert_eq!(
+            (table[8].ty, table[8].key.as_str(), table[8].val.as_str()),
+            (RowType::Num, "4", "3")
+        );
+        assert_eq!(
+            (table[9].ty, table[9].key.as_str(), table[9].val.as_str()),
+            (RowType::Obj, "obj", "{")
+        );
+        assert_eq!(
+            (table[10].ty, table[10].key.as_str(), table[10].val.as_str()),
+            (RowType::Str, "a", "b")
+        );
+        assert_eq!(
+            (table[11].ty, table[11].key.as_str(), table[11].val.as_str()),
+            (RowType::Arr, "c", "[")
+        );
+        assert_eq!(
+            (table[12].ty, table[12].key.as_str(), table[12].val.as_str()),
+            (RowType::Str, "0", "d")
+        );
+
+        // Row { id: 0, par: 0, key: "", val: "{", ty: Obj }
+        // Row { id: 1, par: 0, key: "k", val: "v", ty: Str }
+        // Row { id: 2, par: 0, key: "num", val: "123", ty: Num }
+        // Row { id: 3, par: 0, key: "bit", val: "true", ty: Bit }
+        // Row { id: 4, par: 0, key: "nil", val: "null", ty: Null }
+        // Row { id: 5, par: 0, key: "arr", val: "[", ty: Arr }
+        // Row { id: 6, par: 5, key: "0", val: "1", ty: Num }
+        // Row { id: 7, par: 5, key: "2", val: "2", ty: Num }
+        // Row { id: 8, par: 5, key: "4", val: "3", ty: Num }
+        // Row { id: 9, par: 0, key: "obj", val: "{", ty: Obj }
+        // Row { id: 10, par: 9, key: "a", val: "b", ty: Str }
+        // Row { id: 11, par: 9, key: "c", val: "[", ty: Arr }
+        // Row { id: 12, par: 11, key: "0", val: "d", ty: Str }
+        for row in &table
+        {
+            println!("{:?}", row);
+        }
     }
 }
