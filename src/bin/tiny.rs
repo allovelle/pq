@@ -535,7 +535,6 @@ mod parser
     use crate::lexer::{
         TokVal, TokenKind, classify_token, json_tokens_from_reader, token_value,
     };
-    use std::fs::File;
     use std::io::{self, Read};
     use thiserror::Error;
 
@@ -610,7 +609,6 @@ mod parser
 
     pub fn parse_from_str(src: &str) -> io::Result<Vec<Row>>
     {
-        let reader = std::io::Cursor::new(src.as_bytes());
         Parser::new(src).parse().map_err(|e| match e
         {
             ParseError::Io(io_err) => io_err,
@@ -624,7 +622,6 @@ mod parser
     pub fn parse_from_file(path: &str) -> io::Result<Vec<Row>>
     {
         let src = std::fs::read_to_string(path)?;
-        let file = File::open(path)?;
         Parser::new(&src).parse().map_err(|e| match e
         {
             ParseError::Io(io_err) => io_err,
@@ -637,9 +634,10 @@ mod parser
 
     pub fn parse_from_reader<R: Read>(
         src: &str,
-        reader: R,
+        _reader: R,
     ) -> io::Result<Vec<Row>>
     {
+        // Note: we only use src since we re-tokenize from it
         Parser::new(src).parse().map_err(|e| match e
         {
             ParseError::Io(io_err) => io_err,
@@ -702,7 +700,6 @@ mod parser
                 self.tokens.push(token_result?);
             }
 
-            // TODO: Should not add root node, do not assume obj vs arr
             // Add root node (id=0, parent=0)
             // self.add_row(0, String::new(), String::new(), RowType::Obj);
             // self.add_row(0, String::new(), '{'.to_string(), RowType::Obj);
