@@ -452,7 +452,7 @@ mod parser
     use crate::lexer::{
         TokVal, TokenKind, classify_token, json_tokens_from_reader, token_value,
     };
-    use std::io::{self, Read};
+    use std::io;
     use thiserror::Error;
 
     #[derive(Error, Debug)]
@@ -540,22 +540,6 @@ mod parser
     {
         let src = std::fs::read_to_string(path)?;
         Parser::new(&src).parse().map_err(|e| match e
-        {
-            ParseError::Io(io_err) => io_err,
-            other =>
-            {
-                io::Error::new(io::ErrorKind::InvalidData, other.to_string())
-            }
-        })
-    }
-
-    pub fn parse_from_reader<R: Read>(
-        src: &str,
-        _reader: R,
-    ) -> io::Result<Vec<Row>>
-    {
-        // Note: we only use src since we re-tokenize from it
-        Parser::new(src).parse().map_err(|e| match e
         {
             ParseError::Io(io_err) => io_err,
             other =>
