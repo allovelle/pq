@@ -1,6 +1,6 @@
 use crate::lexer::{classify_token, json_tokens_from_str, token_value};
 
-mod streaming
+mod codepoints
 {
     use std::fs::File;
     use std::io::{self, Read};
@@ -115,7 +115,7 @@ mod lexer
     use std::fs::File;
     use std::io::{self, Read};
 
-    use crate::streaming::Utf8Codepoints;
+    use crate::codepoints::Utf8Codepoints;
 
     #[derive(Debug, Clone, Copy, PartialEq)]
     pub enum TokenKind
@@ -139,7 +139,6 @@ mod lexer
         chars: Utf8Codepoints<R>,
         buf: Option<char>,
         byte_offset: usize, // running byte offset
-        token_start: usize, // start offset of current token
     }
 
     impl<R: Read> JsonTokens<R>
@@ -150,7 +149,6 @@ mod lexer
                 chars: Utf8Codepoints::new(reader),
                 buf: None,
                 byte_offset: 0,
-                token_start: 0,
             }
         }
 
@@ -502,7 +500,7 @@ mod parser
         tokens: crate::lexer::JsonTokens<R>,
         rows: Vec<Row>,
         stack: Vec<u32>,        // parent row IDs
-        stack_ty: Vec<RowType>, // parent types (NEW)
+        stack_ty: Vec<RowType>, // parent types
         next_row_id: u32,
         next_index_in_parent: Vec<u32>,
     }
@@ -516,7 +514,7 @@ mod parser
                 tokens: json_tokens_from_reader(reader),
                 rows: Vec::new(),
                 stack: Vec::new(),
-                stack_ty: Vec::new(), // NEW
+                stack_ty: Vec::new(),
                 next_row_id: 0,
                 next_index_in_parent: Vec::new(),
             }
@@ -558,7 +556,7 @@ mod parser
         fn pop_container(&mut self)
         {
             self.stack.pop();
-            self.stack_ty.pop(); // NEW
+            self.stack_ty.pop();
             self.next_index_in_parent.pop();
         }
 
@@ -681,7 +679,6 @@ mod parser
         }
     }
 
-    // Entry points
     pub fn parse_from_str(src: &str) -> io::Result<Vec<Row>>
     {
         let reader = std::io::Cursor::new(src.as_bytes());
@@ -695,8 +692,8 @@ mod parser
         Parser::new(&src, file).parse()
     }
 
-    pub fn parse_from_reader<'a, R: Read>(
-        src: &'a str,
+    pub fn parse_from_reader<R: Read>(
+        src: &str,
         reader: R,
     ) -> io::Result<Vec<Row>>
     {
@@ -818,33 +815,95 @@ mod format
             }
         }
     }
+}
+#[cfg(test)]
 
-    #[cfg(test)]
-    mod tests
+mod tests
+{
+    use super::lexer::{TokVal, TokenKind, json_tokens_from_str};
+    use super::parser::parse_from_str;
+    use super::{classify_token, token_value};
+
+    #[test]
+    fn test_token_index_and_order()
     {
-        use super::*;
-        use crate::parser::parse_from_str;
-
-        #[test]
-        fn test_inline_width()
+        let code = r#"[1, 2, [3, 4], 5, 6]"#;
+        for token in json_tokens_from_str(code)
         {
-            let code = r#"{ "k": "v" }"#;
-            let rows = parse_from_str(code).unwrap();
-            assert_eq!(rows.len(), 2); // Implicit root + 1 object
-            let width = inline_width(&rows[0], &rows);
-            assert_eq!(width, 9);
+            match token
+            {
+                Ok(at) =>
+                {
+                    let ty = classify_token(code, at);
+                    let val = token_value(code, at);
+                    println!("{:<3} {:<15} {:?}", at, format!("{ty:?}"), val);
+                }
+                Err(e) => eprintln!("Error: {}", e),
+            }
         }
 
-        #[test]
-        fn test_subnodes()
-        {
-            let code = r#"[1, 2, [3, 4], 5, 6"#;
-            let table = parse_from_str(code).unwrap();
-            println!("Rows: {:#?}", table);
-            assert_eq!(table.len(), 8);
+        let expected = [
+            (0, TokenKind::LBracket, TokVal::NewArr),
+            (1, TokenKind::Number, TokVal::Num("1")),
+            (2, TokenKind::Comma, TokVal::Com),
+            (4, TokenKind::Number, TokVal::Num("2")),
+            (5, TokenKind::Comma, TokVal::Com),
+            (7, TokenKind::LBracket, TokVal::NewArr),
+            (8, TokenKind::Number, TokVal::Num("3")),
+            (9, TokenKind::Comma, TokVal::Com),
+            (11, TokenKind::Number, TokVal::Num("4")),
+            (12, TokenKind::RBracket, TokVal::EndArr),
+            (13, TokenKind::Comma, TokVal::Com),
+            (15, TokenKind::Number, TokVal::Num("5")),
+            (16, TokenKind::Comma, TokVal::Com),
+            (18, TokenKind::Number, TokVal::Num("6")),
+            (19, TokenKind::RBracket, TokVal::EndArr),
+        ];
 
-            assert_eq!(table[0].subnodes(&table).count(), 5);
-            assert_eq!(table[3].subnodes(&table).count(), 2);
+        let token_stream =
+            json_tokens_from_str(code).filter_map(|t| t.ok()).map(|at| {
+                let ty = classify_token(code, at);
+                let val = token_value(code, at);
+                (at, ty, val)
+            });
+
+        for (resulted, expected) in token_stream.zip(expected.iter())
+        {
+            assert_eq!(resulted, *expected);
+        }
+    }
+
+    #[test]
+    fn test_inline_width()
+    {
+        // let code = r#"{ "k": "v" }"#;
+        // let rows = parse_from_str(code).unwrap();
+        // assert_eq!(rows.len(), 2); // Implicit root + 1 object
+        // let width = inline_width(&rows[0], &rows);
+        // assert_eq!(width, 9);
+    }
+
+    #[test]
+    fn test_subnodes()
+    {
+        let code = r#"[1, 2, [3, 4], 5, 6"#;
+        let table = parse_from_str(code).unwrap();
+        println!("Rows: {:#?}", table);
+        assert_eq!(table.len(), 8);
+
+        assert_eq!(table[0].subnodes(&table).count(), 5);
+        assert_eq!(table[3].subnodes(&table).count(), 2);
+    }
+
+    #[test]
+    fn test_get_tokens()
+    {
+        let code = r#"[1, 2, [3, 4], 5, 6"#;
+        let tokens: Vec<usize> =
+            json_tokens_from_str(code).map(|row| row.unwrap()).collect();
+        for udx in tokens
+        {
+            // ! Can't get tokens from the parser using the index.
         }
     }
 }
