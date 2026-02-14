@@ -1188,6 +1188,51 @@ mod parser
     }
 }
 
+mod query
+{
+    use super::parser::*;
+
+    #[rustfmt::skip]
+    #[derive(Debug)]
+    enum Query
+    {
+        SelectKey { key: String, },
+        Index { query: isize, },
+        Expression { query: String, },
+        BuildObject { query: Vec<BuildObjectQuery>, },
+        _Fanout,
+        _Join,
+        _Select,
+    }
+
+    #[rustfmt::skip]
+    #[derive(Debug)]
+    enum BuildObjectQuery
+    {
+        Select(Query),
+        Map(Query, Query),
+    }
+
+    enum QueryOutputs
+    {
+        Rows(Vec<Row>),
+        Value(String),
+    }
+
+    enum QueryInputs
+    {
+        Rows(Vec<Row>),
+        Value(String),
+    }
+
+    fn query_pipeline(table: &[Row], query: &Query) -> Vec<Row>
+    {
+        // Placeholder for query execution logic
+        // This is where we would implement the actual querying based on the Query enum
+        table.to_vec() // For now, just return the input table
+    }
+}
+
 mod formatter
 {
     use crate::parser::{Row, RowType};
