@@ -8,21 +8,82 @@
 
 // TODO: Live queries allow TTY input to type the query
 
-/// | Input side        | Output side     | Notes                                      |
-/// |------------------:|:----------------|-------------------------------------------:|
-/// | stdin = TTY       | stdout = TTY    | interactive mode, colors ok                |
+/// | Input side        | Output side     | Notes                                                 |
+/// |------------------:|:----------------|------------------------------------------------------:|
+/// | stdin = TTY       | stdout = TTY    | interactive mode, colors ok                           |
 /// | stdin = TTY       | stdout = pipe   | interactive input, output consumed by another process |
-/// | stdin = TTY       | stdout = file   | interactive input, output redirected to file |
-/// | stdin = pipe      | stdout = TTY    | pipeline input, pretty/color output        |
-/// | stdin = pipe      | stdout = pipe   | pipeline both ways, no colors              |
-/// | stdin = pipe      | stdout = file   | pipeline input, file output                |
-/// | stdin = file      | stdout = TTY    | file input, pretty/color output            |
-/// | stdin = file      | stdout = pipe   | file input, output consumed                |
-/// | stdin = file      | stdout = file   | file input, file output                    |
-/// | no stdin/file     | stdout = TTY    | show usage/help or REPL                    |
-/// | multiple files    | any stdout      | sequential or merged processing            |
-/// | stderr = TTY/pipe | -               | decide on colored error messages           |
+/// | stdin = TTY       | stdout = file   | interactive input, output redirected to file          |
+/// | stdin = pipe      | stdout = TTY    | pipeline input, pretty/color output                   |
+/// | stdin = pipe      | stdout = pipe   | pipeline both ways, no colors                         |
+/// | stdin = pipe      | stdout = file   | pipeline input, file output                           |
+/// | stdin = file      | stdout = TTY    | file input, pretty/color output                       |
+/// | stdin = file      | stdout = pipe   | file input, output consumed                           |
+/// | stdin = file      | stdout = file   | file input, file output                               |
+/// | no stdin/file     | stdout = TTY    | show usage/help or REPL                               |
+/// | multiple files    | any stdout      | sequential or merged processing                       |
+/// | stderr = TTY/pipe | -               | decide on colored error messages                      |
 fn main() {}
+
+enum JsonInputType
+{
+    /// Typed from TTY with enter to submit, or piped in from another process
+    Stdin,
+
+    /// Path with `.json` extension, validate pure JSON, no JSONC, etc.
+    Json(String),
+
+    /// [JSON With comments](https://jsonc.org). Mode line: breaks JSONL compat.
+    /// Path with `.jsonc` extension, validate to be pure JSONC, no JSONL, etc.
+    Jsonc(String),
+
+    /// [JSON Lines](https://jsonlines.org). Does not overlap with JSONC.
+    /// Path with `.jsonl` extension, validate to be pure JSONL, no JSONC, etc.
+    Jsonl(String),
+
+    /// [JSON for humans](https://json5.org). Overlaps with JSONC (commas, etc.)
+    /// Path with `.json5` extension, validate to be pure JSON5, no JSONL.
+    Json5(String),
+}
+
+/// ----------------------------------------------------------------------------
+enum InputSource
+{
+    StdinPipe,
+    StdinTTY,
+    StdinFile,
+    NoInput,
+    MultipleFiles(Vec<String>),
+    StdinAndFile(String), // ambiguous case
+}
+
+enum OutputDestination
+{
+    StdoutPipe,
+    StdoutTTY,
+    StdoutFile(String),
+}
+
+enum StderrDestination
+{
+    StderrTTY,
+    StderrPipe,
+    StderrFile(String),
+}
+enum InOutErrContext
+{
+    StdinPipeStdoutTTY,
+    StdinPipeStdoutPipe,
+    StdinPipeStdoutFile(String),
+    StdinTTYStdoutTTY,
+    StdinTTYStdoutPipe,
+    StdinTTYStdoutFile(String),
+    StdinFileStdoutTTY(String),
+    StdinFileStdoutPipe(String),
+    StdinFileStdoutFile(String, String),
+    NoInputStdoutTTY,
+    MultipleFilesAnyOutput(Vec<String>, OutputDestination),
+    StderrContext(StderrDestination),
+}
 
 /*
 • Input side
