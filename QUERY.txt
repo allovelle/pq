@@ -1,10 +1,9 @@
-TODO: Make sure to handle the array of objects json format (from docker)
-
-
+-- Example query line by line
 pq 'key1.-key2.{name,phone}'
-    {key1: {key2: {}, name: "", addr: "", phone: +1}}
-    {name: "", addr: "", phone: +1}
-    {name: "", phone: +1}
+                 -> {..}
+            key1 -> {key1: {key2: {}, name: "", addr: "", phone: +1}}
+           -key2 -> {name: "", addr: "", phone: +1}
+    {name,phone} -> {name: "", phone: +1}
 
 the ui allows the user to use arrow-keys to select the next key (row) like a
     tree in a file manager. this is easier than typing the name of each key when
@@ -32,15 +31,16 @@ cursor: traverse the tree using arrow keys. cursor commands are special commands
 
 sigils?
 [?][*][-][!]
-<?><*><-><!>
 
-[] always builds arrays
-[2:4]
-(IT * 3) maps
-(* 3) implicit input?  (if failed to parse, add `(IT)` in front?)
-(IT > 7) filters?
-(> 7) filters?  (if failed to parse, add `(IT)` in front?)
-(age >= 18)  <- this wasn't supported in pique
+-- The power of having expr filter syntax like (* 3.14) or (>= 818) is that they
+-- become a standalone filter-map command on their own, possibly able to elide
+-- the script runtime entirely in some cases.
+[] <- always builds arrays
+(IT * 3) <- maps
+(* 3) <- implicit input?  (if failed to parse, add `(IT)` in front?)
+(IT > 7) <- filters?
+(> 7) <- filters?  (if failed to parse, add `(IT)` in front?)
+(age >= 21)  <- this wasn't supported in pique and would mean filter-map :D
 (== 'what?')
 
 commands:
@@ -186,28 +186,6 @@ Operation Logging:
         value negated (__neg__)
 
 
-Implementation Paths:
-    SerdeJson -> Starlark
-    SerdeJson -> Sql -> CustomExprLang
-    SerdeJson -> Sql -> Starlark
-
-    PiqueJson -> SerdeJson
-
-    PiqueJson -> Sql; Starlark -> SQL
-    PiqueJson -> Starlark
-
-    ExprLang
-    Starlark
-    Custom -> Sql
-
-    Starlark -> ToSerdeJson
-
-
-Json Outputing Rules
-    recurse into lower layers to find minimal width
-        rule: space before `{` and `}`
-        rule: fit [...] on one line if sum is less than terminal width
-        rule: fit {...} on one line if sum is less than terminal width
 
 pq-python:
     solve the json.keys() error by making a custom serializer for types that should work but don't: DictKeys(), Set(), etc.
