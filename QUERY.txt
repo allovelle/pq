@@ -1,3 +1,21 @@
+
+
+Array Brace Syntax Is Coherent And Consistent With Array Semantics:
+[*] fanout splats the arr or obj into json lines!
+[-] join creates an array from each value stream
+
+
+      ->
+-> [*] ->
+      ->
+
+--\
+---> [-] ->
+--/
+
+
+
+
 -- Example query line by line
 pq 'key1.-key2.{name,phone}'
                  -> {..}
@@ -42,6 +60,14 @@ sigils?
 (> 7) <- filters?  (if failed to parse, add `(IT)` in front?)
 (age >= 21)  <- this wasn't supported in pique and would mean filter-map :D
 (== 'what?')
+(.a0 != .b1)
+(.name != "admin")
+name.(str) <- converts value to string
+altitude.(int)
+name.(print) <- arbitrary fn call
+
+Adding a . to the key can help differentiate Pique queries from Starlark queries
+    .name, .numbers[8], .kv["val"]
 
 commands:
     pick, drop (select, filter)
@@ -90,6 +116,33 @@ $ stdout | pq -f json.json 'query'
     what does this do? should it search multiple files? no. json doesn't do that
 
 
+
+Fzf fuzzy find key or value! <- include features for the tui users
+Sorting
+Grouping
+Flatten
+Unique
+Reduce
+Filter
+Map
+Pick & Drop keys/indices
+
+JsonL transform into Json array of objects
+JsonL open N files and pipe to those json files
+
+
+
+TUI-Oriented Query Features:
+    fzf key1.key2..key3.*key4
+        fuzzy fid is inherently a selection concept
+    ..
+        fzf key or index
+    .*  a.*b.*c
+        fuzzy find a key or value with a possibly incomplete path (recurse)
+    b./.b                                   rel sel
+        goto parent
+    \                                       rel sel
+        goto child
 
 
 Referent Commands & Relative Commands:

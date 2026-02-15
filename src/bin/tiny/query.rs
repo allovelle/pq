@@ -3,6 +3,17 @@ use super::parser::*;
 #[derive(Debug)]
 pub enum Cmd
 {
+    /// Selects a key from an object like `key1.key2` where obj[key1][key2] is
+    /// the result. This syntax is supported in other context such as building
+    /// new objects. `{key1, "new": key2, key3: key3.key4}`
+    /// "Pick Key"
+    SelectKey,
+    SelectIndex,
+
+    /// "Drop Key""
+    FilterKey,
+    FilterIndex,
+
     /// Every array index and element range is a lookup into the JSON value,
     /// and no object keys are supported since arrays do not have keys.
     /// [0 .. 4][0, 1, 2:4] results in: [0, 1, 2, 3]. Works with [::] also.
@@ -44,10 +55,6 @@ pub enum Cmd
     _Fanout,
     _Join,
     _Select,
-    /// PickKey
-    SelectKey,
-    /// Drop Key
-    FilterKey,
 
     /// Can filter, select, build, and anything else in the script runtime.
     /// `(i for i in range(10) if i % 2 == 0)`
