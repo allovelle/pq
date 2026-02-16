@@ -1,4 +1,3 @@
-
 use super::*;
 use crate::formatter::FormatConfig;
 use crate::formatter::format_table;
@@ -131,7 +130,7 @@ fn test_parser_json_structure()
     );
     assert_eq!(
         (table[4].ty, table[4].key.as_str(), table[4].val.as_str()),
-        (RowType::Null, "nil", "null")
+        (RowType::Nil, "nil", "null")
     );
     assert_eq!(
         (table[5].ty, table[5].key.as_str(), table[5].val.as_str()),

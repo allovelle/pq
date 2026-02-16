@@ -185,7 +185,7 @@ pub fn format_table(table: &[Row], config: &FormatConfig) -> Vec<String>
                 )
             }
             RowType::Obj => (config.theme.style_open)("{"),
-            RowType::Null => (config.theme.style_nil)(&row.val),
+            RowType::Nil => (config.theme.style_nil)(&row.val),
             RowType::Bit => (config.theme.style_bit)(&row.val),
             RowType::Str =>
             {
@@ -218,7 +218,7 @@ pub fn format_table(table: &[Row], config: &FormatConfig) -> Vec<String>
         }
         else if last
         {
-            accumulate_indent -= 1;
+            accumulate_indent = accumulate_indent.saturating_sub(1);
         }
 
         // Emit closing brackets by walking up the tree
@@ -270,7 +270,7 @@ pub fn format_table(table: &[Row], config: &FormatConfig) -> Vec<String>
         // Adjust accumulate_indent if needed
         if accumulate_indent > increment_dedent + 1
         {
-            accumulate_indent -= 1;
+            accumulate_indent = accumulate_indent.saturating_sub(1);
         }
 
         // Handle the final root closing bracket
@@ -338,7 +338,7 @@ fn calculate_inline_length(table: &[Row], row_idx: usize) -> usize
         match child.ty
         {
             RowType::Str => length += child.val.len() + 2, // "value"
-            RowType::Num | RowType::Bit | RowType::Null =>
+            RowType::Num | RowType::Bit | RowType::Nil =>
             {
                 length += child.val.len()
             }
@@ -384,4 +384,75 @@ pub fn print_formatted(table: &[Row], config: &FormatConfig)
 pub fn format_to_string(table: &[Row], config: &FormatConfig) -> String
 {
     format_table(table, config).join("\n")
+}
+
+#[cfg(test)]
+mod tests
+{
+    use super::*;
+    use crate::parser::*;
+
+    #[test]
+    fn test_format_simple_array()
+    {
+        let json = r#"[1, 2, 3]"#;
+        let table = parse_from_str(json).unwrap();
+        let config = FormatConfig::new().with_colors(false);
+        let lines = format_table(&table, &config);
+
+        // Should produce formatted output
+        assert!(!lines.is_empty());
+        println!("Formatted array:");
+        for line in &lines
+        {
+            println!("{}", line);
+        }
+    }
+
+    #[test]
+    fn test_format_nested_object()
+    {
+        let json = r#"{"name": "test", "nested": {"key": "value"}}"#;
+        let table = parse_from_str(json).unwrap();
+        let config = FormatConfig::new().with_colors(false);
+        let lines = format_table(&table, &config);
+
+        assert!(!lines.is_empty());
+        println!("Formatted object:");
+        for line in &lines
+        {
+            println!("{}", line);
+        }
+    }
+
+    #[test]
+    fn test_format_complex()
+    {
+        let json = r#"[1, 2, [3, 4], 5, 6]"#;
+        let table = parse_from_str(json).unwrap();
+        let config = FormatConfig::new().with_colors(false);
+        let lines = format_table(&table, &config);
+
+        assert!(!lines.is_empty());
+        println!("Formatted complex:");
+        for line in &lines
+        {
+            println!("{}", line);
+        }
+    }
+
+    #[test]
+    fn test_format_with_colors()
+    {
+        let json = r#"{"key": "value", "num": 42}"#;
+        let table = parse_from_str(json).unwrap();
+        let config = FormatConfig::new().with_colors(true);
+        let lines = format_table(&table, &config);
+
+        println!("Formatted with colors:");
+        for line in &lines
+        {
+            println!("{}", line);
+        }
+    }
 }

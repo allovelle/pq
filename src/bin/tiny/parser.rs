@@ -46,7 +46,7 @@ pub enum RowType
     Str,
     Num,
     Bit,
-    Null,
+    Nil,
 }
 
 /// Invariant: id is the index within its container.
@@ -698,8 +698,8 @@ impl<'src> Parser<'src>
             TokenKind::String => RowType::Str,
             TokenKind::Number => RowType::Num,
             TokenKind::True | TokenKind::False => RowType::Bit,
-            TokenKind::Null => RowType::Null,
-            _ => RowType::Null,
+            TokenKind::Null => RowType::Nil,
+            _ => RowType::Nil,
         }
     }
 
