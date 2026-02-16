@@ -185,22 +185,17 @@ mod v2
 {
     #[derive(Debug, Clone, Copy, PartialEq)]
     #[repr(u8)]
+    #[rustfmt::skip]
     pub enum RowType
-    {
-        Obj,
-        Arr,
-        Str,
-        Num,
-        Bit,
-        Nil,
-    }
+    { Obj, Arr, Str, Num, Bit, Nil, }
 
     #[derive(Debug, Clone)]
     pub struct Row
     {
         /// Document root in the table. Multiple roots are JSON Lines documents.
-        pub root: u32,
+        pub id: u32,
         pub par: u32,
+        pub root: u32,
         pub key: String,
         pub val: String,
         pub ty: RowType,
@@ -209,36 +204,24 @@ mod v2
     /// id == row index
     /// par == parent row index
     /// root iff id == par
-    impl Row
-    {
-        #[inline(always)]
-        pub const fn is_root(&self, id: u32, table: &[Row]) -> bool
-        {
-            id == table[id as usize].par
-        }
+    impl Row {}
 
-        #[inline(always)]
-        pub const fn is_sibling(&self, table: &[Row]) -> bool
-        {
-            false
-        }
-    }
-
-    /// Tradeoff: not storing row type or row id.
-    /// Tradeoff: storing root allows reference to whole documents in the table
-    /// id == row index
-    /// par == parent row index
-    /// is_root iff: node par == node id
-    /// Benefits:
-    ///   append-only
-    ///   O(1) parent lookup
-    ///   O(1) node lookup
-    ///   O(1) append
-    ///   no rebasing
-    ///   no ambiguity
-    ///   perfect JSON Lines support
-    ///   perfect subtree referencing
-    ///   memory efficiency
+    /// - Tradeoff: not storing **row type *or* row id**.
+    /// - Tradeoff: storing root allows reference to whole documents in the table
+    /// - id == row index
+    /// - par == parent row index
+    /// - is_root iff: node par == node id
+    ///
+    /// **Benefits:**
+    /// - append-only
+    /// - O(1) parent lookup
+    /// - O(1) node lookup
+    /// - O(1) append
+    /// - no rebasing
+    /// - no ambiguity
+    /// - perfect JSON Lines support
+    /// - perfect subtree referencing
+    /// - memory efficiency
     pub struct RowMini
     {
         /// Document root in the table. Multiple roots are JSON Lines documents.
@@ -252,6 +235,19 @@ mod v2
 
     impl RowMini
     {
+        /// Doesn't store row ID so must provide it here.
+        #[inline(always)]
+        pub const fn is_root(&self, id: u32, table: &[Row]) -> bool
+        {
+            id == table[id as usize].par
+        }
+
+        #[inline(always)]
+        pub const fn is_sibling(&self, table: &[Row]) -> bool
+        {
+            false
+        }
+
         // TODO: This cannot classify strings unless the `"` are stored for each.
         // TODO: This is much more expensive than storing a byte for the token type.
         // * Solution: store first `"` for strings: no larger than RowType as u8
