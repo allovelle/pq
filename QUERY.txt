@@ -1,16 +1,48 @@
 
 
+
+While appending rows that traverse more than one tree, create a
+scratch space to append the nodes and then append onto the main
+table after.
+
+Every query separated by a dot is a new JSON lines document with it's own id as
+the parent id.
+
+New queries are new document roots: create visualizer that shows
+all of the JSON documents being transformed with the query type
+to another JSON document and then in the terminal you'll be able
+to visualize all the transformations!
+
+If a node has subnodes, transform the parent and just append the
+child nodes in line to bring them with the new tree!
+
+For example, filtering out a key means keeping some keys that
+have possibly very nested subnodes. You can just iterate through
+them in line without breaking anything just write them to the
+same scratch space or directly to the tree if that begins to
+work.
+
+BuildObj has mistake: {key: 123} should take the name of the
+key, yet: {"a0": key} doesn't treat key as the val key points to. Instead key as
+{"a0": {key: val}}. {"a1": .key} seems to fix it.
+
+Selection queries do not allow arbitrary expressions because it's not their job:
+use the expression query to compute and build rows.
+
+
 Array Brace Syntax Is Coherent And Consistent With Array Semantics:
 [*] fanout splats the arr or obj into json lines!
 [-] join creates an array from each value stream
 
 
-      ->
--> [*] ->
-      ->
+Fanout into multiple docs
+      /-->
+--> [*] --->
+      \-->
 
+Faninto single document
 --\
----> [-] ->
+---> [-] -->
 --/
 
 

@@ -60,14 +60,48 @@ pub struct Row
     pub ty: RowType,
 }
 
-impl Row
+impl<'row> Row
 {
-    pub fn subnodes<'row>(
+    pub fn subnodes(
         &'row self,
         table: &'row [Row],
     ) -> impl Iterator<Item = &'row Row>
     {
-        table.iter().filter(|r| r.id > self.id && self.id == r.par)
+        table[self.id as usize ..]
+            .iter()
+            .filter(|row| row.id > self.id && self.id == row.par)
+    }
+
+    pub fn child(&'row self, table: &'row [Row]) -> Option<&'row Row>
+    {
+        table.get(self.id as usize + 1).filter(|row| row.par == self.id)
+    }
+
+    pub fn sibling(&'row self, table: &'row [Row]) -> Option<&'row Row>
+    {
+        table.get(self.id as usize + 1).filter(|row| row.par == self.par)
+    }
+
+    pub fn parent(&'row self, table: &'row [Row]) -> Option<&'row Row>
+    {
+        table.get(self.par as usize)
+    }
+}
+
+pub trait RowTree
+{
+    fn child(&self, id: usize) -> Option<&Row>;
+}
+
+impl RowTree for &mut Vec<Row>
+{
+    fn child(&self, id: usize) -> Option<&Row>
+    {
+        match self.get(id)
+        {
+            Some(row) => row.child(self),
+            None => None,
+        }
     }
 }
 
