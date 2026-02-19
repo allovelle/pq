@@ -73,30 +73,45 @@ pub enum Query
     Filter,
 }
 
-pub enum QueryOutputs
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+#[error("Pique Error")]
+pub enum PqErr
 {
-    Rows(Vec<Row>),
-    Value(String),
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+
+    #[error(transparent)]
+    Json(#[from] serde_json::Error),
+
+    #[error("error during tokenization")]
+    LexErr,
+
+    #[error(transparent)]
+    ParseIntErr(#[from] std::num::ParseIntError),
+
+    #[error(transparent)]
+    ParseFloatErr(#[from] std::num::ParseFloatError),
+
+    #[error(transparent)]
+    CliErr(#[from] clap::Error),
+
+    #[error("query failed: {0}")]
+    QueryErr(&'static str),
 }
 
-pub enum QueryInputs
-{
-    Rows(Vec<Row>),
-    Value(String),
-}
-
-pub fn query_pipeline(table: &[Row], pipeline: Vec<Query>) -> Vec<Row>
-{
-    // Placeholder for query execution logic
-    // This is where we would implement the actual querying based on the Query enum
-    table.to_vec() // For now, just return the input table
-}
+pub type PqResult<T> = Result<T, PqErr>;
 
 // ! The table is append-only. Use scratch space for intermediary row results.
 // ! Every query in the pipeline represents a new json lines document
 
+// TODO: make this use [table::JsonTable] instead of solution in parser.rs
 /// Input table is modified by appending resulting rows onto it.
-fn execute_pipeline(table: &mut Vec<Row>, pipeline: &[Query])
+pub fn execute_pipeline(
+    table: &mut Vec<Row>,
+    pipeline: &[Query],
+) -> PqResult<usize>
 {
     let mut queries = pipeline.iter();
     let mut scratch: Vec<Row> = vec![];
@@ -115,21 +130,41 @@ fn execute_pipeline(table: &mut Vec<Row>, pipeline: &[Query])
                 // Set next id to key's value (whole document becomes that val)
                 // Create new doc by assinging val.par = val.id
 
-                debug_assert_eq!(table[id].ty, RowType::Obj, "not obj");
+                if table[id].ty != RowType::Obj
+                {
+                    let err =
+                        PqErr::QueryErr("cannot select key from non-object");
+                    return Err(err);
+                }
 
                 let row =
                     table[id].subnodes(table).find(|row| row.key == *select);
 
-                match row
+                if let Some(selected) = row.cloned()
                 {
-                    Some(selected) =>
-                    {
-                        let mut selected = selected.clone();
-                        selected.par = selected.id;
-                        table.push(selected);
-                    }
-                    None => todo!(),
+                    id = selected.id as usize;
+
+                    // TODO: When new nodes are pushed, their id's no longer
+                    // TODO: equal their index in the overal tree. This is way
+                    // TODO: bad for subsequent queries.
+                    // TODO: Idea: graft the scratch buf into the existing tree
+                    table.push(selected.make_root());
+
+                    // ! 1
+                    // table.reserve(selected.slice_tree(table).len());
+                    // scratch.extend_from_slice(selected.slice_tree(table));
+                    // table.extend_from_slice(&scratch[..]);
+                    // scratch.clear();
+
+                    // ! 2
+                    table.extend_from_within(
+                        id .. id + selected.slice_tree(table).len(),
+                    );
                 }
+                else
+                {
+                    return Err(PqErr::QueryErr("selected key not found"));
+                };
             }
             Query::FilterKey(filter) => todo!(),
             // Query::SelectIndex => todo!(),
@@ -149,4 +184,6 @@ fn execute_pipeline(table: &mut Vec<Row>, pipeline: &[Query])
             _ => todo!("query handler not implemented yet"),
         }
     }
+
+    Ok(id)
 }

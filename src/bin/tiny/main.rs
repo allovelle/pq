@@ -49,46 +49,16 @@ fn main()
 
     print_formatted(&table, &FormatConfig::new());
 
-    enum Query
-    {
-        SelectKey(&'static str),
-    }
+    println!("\nQuery Pipeline:");
+    let pipeline = vec![Query::SelectKey("obj".to_string())];
+    let last_root_doc_index =
+        query::execute_pipeline(&mut table, &pipeline).unwrap();
+    let final_value = &table[last_root_doc_index ..];
 
-    let mut id = 0;
-    let queries = vec![Query::SelectKey("obj"), Query::SelectKey("c")];
-
-    let mut current_value = 0u32;
-    for que in queries
-    {
-        match que
-        {
-            Query::SelectKey(key) =>
-            {
-                if table[current_value as usize].ty != RowType::Obj
-                {
-                    panic!("Cannot select key from non-object value");
-                }
-
-                // Parent, sibling, next node
-                for node in table[current_value as usize].subnodes(&table)
-                {
-                    if node.key == key
-                    {
-                        println!("Found key: {}", key);
-                        current_value = node.id;
-                        break;
-                    }
-                }
-            }
-        }
-    }
-
-    let final_value = &table[current_value as usize ..];
-    for row in final_value.iter()
-    {
-        println!("{:?}", row);
-    }
-
-    // Whatever is leftover from the query process is the JSON to format
     print_formatted(final_value, &FormatConfig::new());
+
+    for r in &final_value[last_root_doc_index ..]
+    {
+        println!("{:?}", r);
+    }
 }

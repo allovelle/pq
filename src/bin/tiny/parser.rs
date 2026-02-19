@@ -62,6 +62,15 @@ pub struct Row
 
 impl<'row> Row
 {
+    /// The root's parent points to itself `(self.par = self.id)`.
+    pub fn make_root(&self) -> Self
+    {
+        let mut row = self.clone();
+        row.par = row.id;
+        row
+    }
+
+    /// Iterates through the first level of subnodes.
     pub fn subnodes(
         &'row self,
         table: &'row [Row],
@@ -70,6 +79,71 @@ impl<'row> Row
         table[self.id as usize ..]
             .iter()
             .filter(|row| row.id > self.id && self.id == row.par)
+    }
+
+    /// Iterates through all subnodes in a depth-first traversal. Subnodes of
+    /// subnodes are included.
+    pub fn iter_tree(
+        &'row self,
+        table: &'row [Row],
+    ) -> impl Iterator<Item = &'row Row>
+    {
+        // * Example tree:
+        // 0; 0
+        // 1; 0
+        // 2; 1
+        // 3; 2
+        // 4; 3
+        // 5; 1
+        // 6; 0
+        // 7; 6
+        // 8; 6
+        // 9; 0
+
+        table[self.id as usize ..].iter().take_while(|row| row.par >= self.id)
+    }
+
+    /// Slices out the entire subnode tree using depth-first traversal. Subnodes
+    /// of subnodes are included.
+    pub fn slice_tree(&'row self, table: &'row [Row]) -> &'row [Row]
+    {
+        let mut curr = self;
+        while let Some(row) = table.get(curr.id as usize)
+            && row.par >= self.id
+        {
+            curr = row;
+        }
+
+        &table[self.id as usize ..= curr.id as usize]
+    }
+
+    /// Iterates through all subnodes using a depth-first search.
+    pub fn subnodes_dfs(
+        &'row self,
+        table: &'row [Row],
+    ) -> impl Iterator<Item = &'row Row>
+    {
+        table[self.id as usize ..]
+            .iter()
+            .filter(|row| row.id > self.id && self.is_ancestor_of(row, table))
+    }
+
+    fn is_ancestor_of(&self, row: &Row, table: &[Row]) -> bool
+    {
+        let mut current = row;
+        loop
+        {
+            if current.par == self.id
+            {
+                return true;
+            }
+            if current.par == current.id
+            {
+                // reached a root node without finding self
+                return false;
+            }
+            current = &table[current.par as usize];
+        }
     }
 
     pub fn child(&'row self, table: &'row [Row]) -> Option<&'row Row>
