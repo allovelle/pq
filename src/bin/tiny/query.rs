@@ -164,6 +164,19 @@ pub fn execute_pipeline(
                     table.extend_from_within(
                         id .. id + selected.slice_tree(table).len(),
                     );
+
+                    // ! 3
+                    // TODO: Just do Vec<Vec<Row>> and then row.id == table idx
+                    // TODO: Extend from within then recalculate indices. Iter
+                    // TODO: from range start, then use the loop index as offset
+
+                    // TODO: The prev nodes are not overwritten and available
+                    let root_start = id + selected.slice_tree(table).len();
+                    for i in id .. selected.slice_tree(table).len()
+                    {
+                        table[i].id += i as u32;
+                        table[i].par += i as u32;
+                    }
                 }
                 else
                 {
