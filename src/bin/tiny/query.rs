@@ -148,6 +148,10 @@ pub fn execute_pipeline(
                     // TODO: equal their index in the overal tree. This is way
                     // TODO: bad for subsequent queries.
                     // TODO: Idea: graft the scratch buf into the existing tree
+                    // TODO: and overwrite rows.
+                    // TODO: Idea: adjust each node's id with the last node's id
+                    // TODO: by plus-ing it and setting the correct parent id as
+                    // TODO: well. This requires some methods on the table.
                     table.push(selected.make_root());
 
                     // ! 1
