@@ -6,6 +6,7 @@ mod query;
 mod table;
 #[cfg(test)]
 mod tests;
+mod tok_str_buf;
 mod token_index;
 mod tree;
 
