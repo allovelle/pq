@@ -66,6 +66,7 @@ impl<'row> Row
     pub fn make_root(&self) -> Self
     {
         let mut row = self.clone();
+        row.id += 1;
         row.par = row.id;
         row
     }

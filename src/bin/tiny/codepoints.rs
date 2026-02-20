@@ -77,11 +77,9 @@ impl<R: Read> Iterator for Utf8Codepoints<R>
                 self.needed -= 1;
 
                 if self.needed == 0
+                    && let Some(ch) = char::from_u32(self.codepoint)
                 {
-                    if let Some(ch) = char::from_u32(self.codepoint)
-                    {
-                        return Some(Ok(ch));
-                    }
+                    return Some(Ok(ch));
                 }
             }
         }

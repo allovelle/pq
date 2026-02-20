@@ -155,15 +155,28 @@ pub fn execute_pipeline(
                     table.push(selected.make_root());
 
                     // ! 1
-                    // table.reserve(selected.slice_tree(table).len());
-                    // scratch.extend_from_slice(selected.slice_tree(table));
-                    // table.extend_from_slice(&scratch[..]);
-                    // scratch.clear();
+                    table.reserve(selected.slice_tree(table).len());
+                    scratch.extend_from_slice(selected.slice_tree(table));
+
+                    for row in scratch.iter_mut()
+                    {
+                        row.id += selected.slice_tree(table).len() as u32;
+                        row.par += selected.slice_tree(table).len() as u32;
+                    }
+
+                    table.extend_from_slice(&scratch[..]);
+                    scratch.clear();
 
                     // ! 2
-                    table.extend_from_within(
-                        id .. id + selected.slice_tree(table).len(),
-                    );
+                    // let mount_point = id + selected.slice_tree(table).len();
+                    // table.extend_from_within(id .. mount_point);
+                    // debug_assert_eq!(table.len(), mount_point);
+                    // id = mount_point;
+                    // for row in table.iter_mut().skip(mount_point)
+                    // {
+                    //     row.id += mount_point as u32;
+                    //     row.par += mount_point as u32;
+                    // }
 
                     // ! 3
                     // TODO: Just do Vec<Vec<Row>> and then row.id == table idx
@@ -171,12 +184,12 @@ pub fn execute_pipeline(
                     // TODO: from range start, then use the loop index as offset
 
                     // TODO: The prev nodes are not overwritten and available
-                    let root_start = id + selected.slice_tree(table).len();
-                    for i in id .. selected.slice_tree(table).len()
-                    {
-                        table[i].id += i as u32;
-                        table[i].par += i as u32;
-                    }
+                    // let root_start = id + selected.slice_tree(table).len();
+                    // for i in id .. selected.slice_tree(table).len()
+                    // {
+                    //     table[i].id += i as u32;
+                    //     table[i].par += i as u32;
+                    // }
                 }
                 else
                 {

@@ -42,8 +42,9 @@ features = [
 
 [features]
 default = []
+implicit_row_ids = []
+store_heap_strs = []
+# log_n_indentation = []
 query-engine-pyo3 = ["pyo3"]
 query-parser-rustpython = ["rustpython-parser", "regex"]
 tokenizer-pom = ["pom"]
-# log_n_indentation = []
-# implicit_row_ids = []

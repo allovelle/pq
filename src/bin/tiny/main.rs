@@ -6,6 +6,8 @@ mod query;
 mod table;
 #[cfg(test)]
 mod tests;
+mod token_index;
+mod tree;
 
 use std::thread::current;
 
@@ -54,6 +56,7 @@ fn main()
     let last_root_doc_index =
         query::execute_pipeline(&mut table, &pipeline).unwrap();
     let final_value = &table[last_root_doc_index ..];
+    println!("\nCompleted");
 
     print_formatted(final_value, &FormatConfig::new());
 
