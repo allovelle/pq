@@ -31,9 +31,9 @@ use the expression query to compute and build rows.
 
 
 Array Brace Syntax Is Coherent And Consistent With Array Semantics:
-[*] fanout splats the arr or obj into json lines!
-[-] join creates an array from each value stream
-
+[*]  fanout splats the arr or obj into json lines!
+[-]  join creates an array from each value stream
+[""] read object key that contains special characters
 
 Fanout into multiple docs
       /-->

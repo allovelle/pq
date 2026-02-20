@@ -7,4 +7,13 @@
 // TODO: Append strings to buf[u8]. Hand out u32 offset token handles. Deref
 // TODO: token handles into token value (which denotes type automatically free)
 
+use crate::{TokVal, TokenKind};
+
+type TokId = u32;
 fn append_string(buf: &mut Vec<u8>, text: &[u8]) {}
+fn handle_type(buf: &mut Vec<u8>, handle: TokId) -> TokenKind {}
+fn ref_handle(buf: &mut Vec<u8>, offset: usize) -> TokId
+{
+    0
+}
+fn deref_handle(buf: &mut Vec<u8>, handle: TokId) -> TokVal {}

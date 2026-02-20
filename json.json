@@ -1,0 +1,53 @@
+{
+    "solar_system": {
+        "name": "Milky Way - Sol System",
+        "age_billion_years": 4.6,
+        "habitable_zone_au": [
+            0.95,
+            1.37
+        ],
+        "star": {
+            "name": "Sol",
+            "type": "G-type main-sequence",
+            "mass_kg": 1.989e30,
+            "is_active": true
+        },
+        "planets": [
+            {
+                "name": "Mercury",
+                "order": 1,
+                "radius_km": 2439.7,
+                "moons": [],
+                "has_rings": false,
+                "notes": null
+            },
+            {
+                "name": "Earth",
+                "order": 3,
+                "radius_km": 6371.0,
+                "moons": [
+                    "Luna"
+                ],
+                "has_rings": false,
+                "notes": "Only known planet to harbor life"
+            },
+            {
+                "name": "Saturn",
+                "order": 6,
+                "radius_km": 58232.0,
+                "moons": [
+                    "Titan",
+                    "Enceladus",
+                    "Mimas"
+                ],
+                "has_rings": true,
+                "notes": null
+            }
+        ],
+        "tags": [
+            "inner-system",
+            "outer-system",
+            "asteroid-belt"
+        ]
+    }
+}
