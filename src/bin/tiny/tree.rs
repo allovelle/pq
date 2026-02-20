@@ -4,13 +4,12 @@ use std::{
 };
 
 pub type NodeId = u32;
-pub const ROOT: NodeId = u32::MAX;
 
 // Only store copy types for string keys, use string interning
 #[cfg(not(feature = "store_heap_strs"))]
-pub trait Node: Debug + Clone + Copy {}
+pub trait Node: Debug + Clone + Copy + PartialEq {}
 #[cfg(not(feature = "store_heap_strs"))]
-impl<T: Debug + Clone + Copy> Node for T {}
+impl<T: Debug + Clone + Copy + PartialEq> Node for T {}
 
 // Don't store interned string, store String directly
 #[cfg(feature = "store_heap_strs")]
@@ -18,7 +17,7 @@ pub trait Node: Debug + Clone {}
 #[cfg(feature = "store_heap_strs")]
 impl<T: Debug + Clone> Node for T {}
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Row<T>
 {
     #[cfg(not(feature = "implicit_row_ids"))]
@@ -53,6 +52,7 @@ impl<T: Node> DerefMut for Row<T>
 /// zero extra memory
 /// no maps
 /// no child vectors
+/// Row ids are monotonic so later nodes always have greater id.
 pub struct RowTree<T>
 {
     rows: Vec<Row<T>>,
@@ -138,7 +138,7 @@ impl<'a, T: Node> Cursor<'a, T>
         let mut start = self.id as usize;
         let mut end = self.id as usize;
 
-        if parent != ROOT
+        if parent != self.id
         {
             while start > 0
             {
@@ -177,13 +177,13 @@ impl<'a, T: Node> Cursor<'a, T>
     {
         let parent = self.tree.row(self.id).parent;
 
-        if parent == ROOT
+        // Parent is a root → no parent siblings
+        if parent == self.tree.row(parent).id
         {
             return None;
         }
 
         let grandparent = self.tree.row(parent).parent;
-
         let mut next = parent + 1;
 
         while (next as usize) < self.tree.rows.len()
@@ -195,7 +195,7 @@ impl<'a, T: Node> Cursor<'a, T>
                 return Some(next);
             }
 
-            // stop if we leave parent's sibling block
+            // stop if we leave the parent's sibling block
             if row.parent < grandparent
             {
                 break;
@@ -245,7 +245,7 @@ mod tests
     fn sample_tree() -> RowTree<i32>
     {
         build_tree(vec![
-            (0, ROOT, 0),
+            (0, 0, 0), // root
             (1, 0, 1),
             (2, 1, 2),
             (3, 1, 3),
@@ -338,8 +338,7 @@ mod tests
     fn siblings_from_middle_child()
     {
         // Build: root -> 1, 2, 3 all children of 0
-        let tree =
-            build_tree(vec![(0, ROOT, 0), (1, 0, 1), (2, 0, 2), (3, 0, 3)]);
+        let tree = build_tree(vec![(0, 0, 0), (1, 0, 1), (2, 0, 2), (3, 0, 3)]);
         let mut sibs: Vec<NodeId> = tree.cursor(2).siblings().collect();
         sibs.sort();
         assert_eq!(sibs, vec![1, 3]);
@@ -371,7 +370,7 @@ mod tests
         let tree = sample_tree();
         // 4 has no next sibling, so a child of 4 has no parent_sibling
         let tree2 = build_tree(vec![
-            (0, ROOT, 0),
+            (0, 0, 0),
             (1, 0, 1),
             (2, 1, 2),
             (3, 0, 3),
@@ -385,10 +384,10 @@ mod tests
     #[test]
     fn graft_single_node()
     {
-        let mut tree = build_tree(vec![(0, ROOT, 42)]);
+        let mut tree = build_tree(vec![(0, 0, 42)]);
         let new_id = tree.graft(0);
         assert_eq!(new_id, 1);
-        assert_eq!(*tree.row(new_id), 42);
+        assert_eq!(**tree.row(new_id), 42);
         // Grafted root should be self-parented
         assert_eq!(tree.row(new_id).parent, new_id);
     }
@@ -409,9 +408,9 @@ mod tests
         assert_eq!(tree.row(7).parent, 5);
 
         // Values should be copied
-        assert_eq!(*tree.row(5), 1);
-        assert_eq!(*tree.row(6), 2);
-        assert_eq!(*tree.row(7), 3);
+        assert_eq!(**tree.row(5), 1);
+        assert_eq!(**tree.row(6), 2);
+        assert_eq!(**tree.row(7), 3);
     }
 
     #[test]
@@ -431,7 +430,7 @@ mod tests
     fn deref_accesses_value()
     {
         let tree = sample_tree();
-        assert_eq!(*tree.row(2), 2);
+        assert_eq!(**tree.row(2), 2);
     }
 
     #[test]
@@ -439,6 +438,6 @@ mod tests
     {
         let mut tree = sample_tree();
         *tree.rows[2] = 99;
-        assert_eq!(*tree.row(2), 99);
+        assert_eq!(**tree.row(2), 99);
     }
 }
