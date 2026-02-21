@@ -1,12 +1,12 @@
 #![allow(clippy::unit_arg)]
 
-use crossterm::style::{Color, Stylize};
+use crossterm::style::Stylize;
 use pq::cli::*;
 use pq::{
     PqResult,
     tok::{Tok, tokenize},
 };
-use serde_json::{Number, Value};
+use serde_json::Value;
 use std::fmt::Display;
 use std::{
     convert::From,
@@ -171,9 +171,9 @@ fn view_table(table: &[Row])
         }
 
         // End means end of collection (place end brackets all the way up)
-        let is_end = |node: &Row| {
-            let parent = table.get(node.parent as usize).unwrap_or(node);
-            let first = table.get(node.parent as usize + 1).unwrap_or(node);
+        let _is_end = |node: &Row| {
+            let _parent = table.get(node.parent as usize).unwrap_or(node);
+            let _first = table.get(node.parent as usize + 1).unwrap_or(node);
             let next = table.get(node.id as usize + 1).unwrap_or(node);
             next.id == node.id || next.parent < node.parent
         };
@@ -541,7 +541,7 @@ fn tokens_to_rows(tokens: &[Tok]) -> io::Result<Vec<Row>>
         // curr state, curr char, onto state, buffer action
         let ty: TokTy = token.clone().into();
         let mut transition = None;
-        'find_transition: for trans @ (from, tok, to, act) in table.iter()
+        'find_transition: for trans @ (from, tok, _to, _act) in table.iter()
         {
             if *from == state && *tok == ty
             {

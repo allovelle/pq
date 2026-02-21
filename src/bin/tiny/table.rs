@@ -142,7 +142,7 @@ impl JsonTable
         self.rows
             .iter()
             .enumerate()
-            .filter(|(i, r)| r.par == r.id)
+            .filter(|(_i, r)| r.par == r.id)
             .map(|(i, _)| i as u32)
     }
 
@@ -168,7 +168,7 @@ impl JsonTable
             {
                 let parent_offset = row.par as usize;
                 row.id = new_id;
-                row.par = (new_id - (id - parent_offset as u32)) as u32;
+                row.par = (new_id - (id - parent_offset as u32));
             }
 
             new_rows.push(row);
@@ -231,7 +231,7 @@ mod v2
         }
 
         #[inline(always)]
-        pub const fn is_sibling(&self, table: &[Row]) -> bool
+        pub const fn is_sibling(&self, _table: &[Row]) -> bool
         {
             false
         }
@@ -328,7 +328,7 @@ mod v2
                 .map(|(i, _)| i as u32)
         }
 
-        fn extract_subtree(&self, root_id: u32) -> Self
+        fn extract_subtree(&self, _root_id: u32) -> Self
         {
             unimplemented!()
         }

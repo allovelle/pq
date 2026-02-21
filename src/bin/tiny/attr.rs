@@ -1,7 +1,7 @@
 //! Row attributes to make editing, querying, and formatting easier.
 
 use crate::parser::Row;
-use smallvec::{SmallVec, smallvec};
+use smallvec::SmallVec;
 use strum::VariantNames;
 
 // TODO: Bitflags instead? Less convenient for formatting routines?
@@ -32,7 +32,7 @@ pub enum Attr
 // maybe: lone = very low cost to wrap (dynamic programming?)
 // quora: when is this *not* a sibling? lone?
 
-pub fn attributes(row: Row, table: &Vec<Row>) -> SmallVec<[Attr; 8]>
+pub fn attributes(row: Row, _table: &Vec<Row>) -> SmallVec<[Attr; 8]>
 {
     // smallvec![Attr::Sibling, Attr::Value];
     let mut attrs: SmallVec<[Attr; 8]> = SmallVec::new();

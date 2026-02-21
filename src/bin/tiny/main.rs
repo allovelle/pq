@@ -12,12 +12,9 @@ mod tree;
 #[cfg(test)]
 mod tests;
 
-use std::thread::current;
 
-use codepoints::*;
 use formatter::{FormatConfig, print_formatted};
 use lexer::*;
-use parser::*;
 use query::*;
 
 fn main()

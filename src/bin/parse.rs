@@ -1,5 +1,4 @@
 use pq::ast::ParseResult;
-use pq::tok::Tok;
 
 fn main() -> ParseResult<()>
 {

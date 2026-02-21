@@ -117,7 +117,7 @@ pub fn execute_pipeline(
     let mut scratch: Vec<Row> = vec![];
     let mut id = 0;
 
-    while let Some(query) = queries.next()
+    for query in queries
     {
         match query
         {
@@ -196,7 +196,7 @@ pub fn execute_pipeline(
                     return Err(PqErr::QueryErr("selected key not found"));
                 };
             }
-            Query::FilterKey(filter) => todo!(),
+            Query::FilterKey(_filter) => todo!(),
             // Query::SelectIndex => todo!(),
             // Query::FilterIndex => todo!(),
             // Query::NewArr => todo!(),

@@ -29,7 +29,7 @@ impl<R: Read> Iterator for Utf8Codepoints<R>
     {
         loop
         {
-            let n = match self.reader.read(&mut self.buf)
+            let _n = match self.reader.read(&mut self.buf)
             {
                 Ok(0) => return None,
                 Ok(num) => num,

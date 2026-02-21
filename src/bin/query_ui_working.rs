@@ -1,8 +1,7 @@
-use crossterm::event::{KeyEvent, KeyEventKind, KeyModifiers, ModifierKeyCode};
-use crossterm::style::{Attribute, Color, Stylize};
-use crossterm::{ExecutableCommand, QueueableCommand, cursor, style, terminal};
+use crossterm::event::{KeyEvent, KeyModifiers};
+use crossterm::{ExecutableCommand, cursor, terminal};
 use serde_json::Value;
-use std::io::{self, Write, stdout};
+use std::io::{Write, stdout};
 
 // fn main() -> Result<(), io::Error>
 // {
@@ -85,7 +84,7 @@ impl Query
 
     /// Needs the json to know the next keys/indices. Effectively updates the
     /// query by performing it.
-    fn push(&mut self, from: Value)
+    fn push(&mut self, _from: Value)
     {
         // TODO: Inc index if applicable
         // TODO: Find next key

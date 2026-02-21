@@ -1,6 +1,6 @@
 use std::{
     fmt::Debug,
-    ops::{Deref, DerefMut, RangeInclusive},
+    ops::{Deref, DerefMut},
 };
 
 // TODO: *Remove the .root field gradually using .root() instead until removed*
@@ -127,11 +127,7 @@ impl<T: Node> RowTree<T>
 
             let new_parent = if i == base { new_id } else { src.par + offset };
 
-            self.rows.push(Row {
-                id: new_id,
-                par: new_parent,
-                val: src.val.clone(),
-            });
+            self.rows.push(Row { id: new_id, par: new_parent, val: src.val });
         }
 
         new_base

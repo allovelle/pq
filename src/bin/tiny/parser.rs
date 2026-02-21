@@ -319,13 +319,11 @@ impl<'src> Parser<'src>
     fn accept_token(&mut self, kind: TokenKind) -> bool
     {
         if let Some((_, tk)) = self.peek_token()
-        {
-            if tk == kind
+            && tk == kind
             {
                 self.token_idx += 1;
                 return true;
             }
-        }
         false
     }
 
@@ -349,11 +347,11 @@ impl<'src> Parser<'src>
     {
         match self.peek_token()
         {
-            Some((offset, TokenKind::LBrace)) =>
+            Some((_offset, TokenKind::LBrace)) =>
             {
                 self.parse_object()?;
             }
-            Some((offset, TokenKind::LBracket)) =>
+            Some((_offset, TokenKind::LBracket)) =>
             {
                 self.parse_array()?;
             }
@@ -375,7 +373,7 @@ impl<'src> Parser<'src>
 
     fn parse_object(&mut self) -> Result<(), ParseError>
     {
-        let offset = self.expect_token(TokenKind::LBrace)?;
+        let _offset = self.expect_token(TokenKind::LBrace)?;
 
         // Get the key for this object from the current container
         let key = self.get_current_key();
@@ -474,13 +472,13 @@ impl<'src> Parser<'src>
     {
         match self.peek_token()
         {
-            Some((offset, TokenKind::LBrace)) =>
+            Some((_offset, TokenKind::LBrace)) =>
             {
                 // Nested object - key is stored before we recurse
                 let saved_parent = self.current_parent;
 
                 // Temporarily pop to add the object with correct key
-                let offset = self.expect_token(TokenKind::LBrace)?;
+                let _offset = self.expect_token(TokenKind::LBrace)?;
 
                 let obj_row_id = self.add_row(
                     self.current_parent,
@@ -541,12 +539,12 @@ impl<'src> Parser<'src>
                 self.container_stack.pop();
                 self.current_parent = saved_parent;
             }
-            Some((offset, TokenKind::LBracket)) =>
+            Some((_offset, TokenKind::LBracket)) =>
             {
                 // Nested array
                 let saved_parent = self.current_parent;
 
-                let offset = self.expect_token(TokenKind::LBracket)?;
+                let _offset = self.expect_token(TokenKind::LBracket)?;
 
                 let arr_row_id = self.add_row(
                     self.current_parent,
@@ -629,7 +627,7 @@ impl<'src> Parser<'src>
 
     fn parse_array(&mut self) -> Result<(), ParseError>
     {
-        let offset = self.expect_token(TokenKind::LBracket)?;
+        let _offset = self.expect_token(TokenKind::LBracket)?;
 
         // Get the key for this array from the current container
         let key = self.get_current_key();
@@ -711,7 +709,7 @@ impl<'src> Parser<'src>
 
         match self.peek_token()
         {
-            Some((offset, TokenKind::LBrace)) =>
+            Some((_offset, TokenKind::LBrace)) =>
             {
                 self.parse_object()?;
                 // Update the key of the last added row (the object)
@@ -720,7 +718,7 @@ impl<'src> Parser<'src>
                     row.key = key;
                 }
             }
-            Some((offset, TokenKind::LBracket)) =>
+            Some((_offset, TokenKind::LBracket)) =>
             {
                 self.parse_array()?;
                 // Update the key of the last added row (the array)
@@ -787,7 +785,7 @@ impl<'src> Parser<'src>
         }
     }
 
-    fn extract_value_string(&self, offset: usize, kind: TokenKind) -> String
+    fn extract_value_string(&self, offset: usize, _kind: TokenKind) -> String
     {
         let tok_val = token_value(self.src, offset);
         match tok_val
@@ -816,14 +814,12 @@ impl<'src> Parser<'src>
     {
         // If we have any containers left on the stack (except root), they're unclosed
         if self.container_stack.len() > 1
-        {
-            if let Some(unclosed) = self.container_stack.last()
+            && let Some(unclosed) = self.container_stack.last()
             {
                 return Err(ParseError::UnclosedContainer {
                     row_id: unclosed.row_id,
                 });
             }
-        }
 
         Ok(())
     }

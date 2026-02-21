@@ -1,4 +1,3 @@
-use pq::tokv1::{Act::*, CharMatch::*, State::*};
 use std::io::Read;
 use thiserror::Error;
 
@@ -42,6 +41,6 @@ fn process_chunk() {}
 
 pub async fn tokenize_stream(stream: &mut impl Iterator<Item = char>)
 {
-    if let Some(ch) = stream.next()
+    if let Some(_ch) = stream.next()
     {}
 }

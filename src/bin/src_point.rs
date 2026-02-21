@@ -18,8 +18,8 @@ use thiserror::Error;
 
 fn main()
 {
-    let source = "0\n1\n2\n3\n4\n";
-    let source = [
+    let _source = "0\n1\n2\n3\n4\n";
+    let _source = [
         "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12",
         "13",
     ]

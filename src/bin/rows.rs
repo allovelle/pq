@@ -20,12 +20,12 @@ fn view_table(table: &Vec<Row>)
 {
     use RowType::*;
 
-    let style_new_arr = <&str as Stylize>::red;
-    let style_new_obj = <&str as Stylize>::red;
-    let style_nil = <&str as Stylize>::red;
-    let style_bool = <&str as Stylize>::yellow;
-    let style_txt = <&str as Stylize>::blue;
-    let style_num = <&str as Stylize>::cyan;
+    let _style_new_arr = <&str as Stylize>::red;
+    let _style_new_obj = <&str as Stylize>::red;
+    let _style_nil = <&str as Stylize>::red;
+    let _style_bool = <&str as Stylize>::yellow;
+    let _style_txt = <&str as Stylize>::blue;
+    let _style_num = <&str as Stylize>::cyan;
 
     // let style_value = |val: &Row| match val.ty
     // {
@@ -47,8 +47,8 @@ fn view_table(table: &Vec<Row>)
 
         let _breadcrumbs = [Arr, Obj, Arr, Arr, Obj];
 
-        let key_style = <&str as Stylize>::green;
-        let val_style = match row.ty
+        let _key_style = <&str as Stylize>::green;
+        let _val_style = match row.ty
         {
             Nil => <&str as Stylize>::red,
             Bool => Stylize::yellow,
@@ -164,7 +164,7 @@ fn view_table(table: &Vec<Row>)
                 tab, row.key, colon, begin, row.value, comma
             );
 
-            let is_root = row.id == 0;
+            let _is_root = row.id == 0;
             // if last_sibling && !is_root
             // {
             //     // Root has indent level of 0 (underflow)
@@ -188,7 +188,7 @@ fn view_table(table: &Vec<Row>)
         // let last_sibling = row.parent != next.parent; // ************** ! wrong when it's first child node
         let last_sibling = next.parent < row.parent;
 
-        let is_dedenting_possibly_more_than_1 = row.id <= next.parent;
+        let _is_dedenting_possibly_more_than_1 = row.id <= next.parent;
         let is_parent = row.id == next.parent;
         // let is_empty = !is_parent && matches!(row.ty, Obj | Arr);
         let is_empty = matches!(row.ty, Obj | Arr if row.id != next.parent);
@@ -198,7 +198,7 @@ fn view_table(table: &Vec<Row>)
 
         // Doesn't work when it's a new arr or new obj
         // let place_comma = !last_sibling && !is_empty;
-        let place_comma = !last_sibling && !is_parent && !is_empty;
+        let _place_comma = !last_sibling && !is_parent && !is_empty;
 
         // ! This can be fixed by: storing { or {} during parsing (it's easy)
         // ? [is_parent as usize * 2 + (row.ty == Obj) as usize]
