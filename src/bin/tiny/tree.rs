@@ -3,6 +3,8 @@ use std::{
     ops::{Deref, DerefMut, RangeInclusive},
 };
 
+// TODO: *Remove the .root field gradually using .root() instead until removed*
+
 pub type NodeId = u32;
 
 // Only store copy types for string keys, use string interning
@@ -31,6 +33,11 @@ impl<T> Row<T>
     pub fn new(id: NodeId, par: NodeId, val: T) -> Self
     {
         Self { id, par, val }
+    }
+
+    pub fn is_doc(&self) -> bool
+    {
+        self.par == self.id
     }
 }
 
@@ -100,7 +107,9 @@ impl<T: Node> RowTree<T>
 
         let mut end = base + 1;
 
-        while end < self.rows.len() && self.rows[end].par >= base as NodeId
+        while end < self.rows.len()
+            && self.rows[end].par >= base as NodeId
+            && !self.rows[end].is_doc()
         {
             end += 1;
         }
@@ -164,6 +173,7 @@ impl<'a, T: Node> Cursor<'a, T>
             {
                 let prev = start - 1;
                 if self.tree.rows[prev].par == parent
+                    && self.tree.rows[prev].par != self.tree.rows[prev].id
                 {
                     start = prev;
                 }
@@ -198,7 +208,7 @@ impl<'a, T: Node> Cursor<'a, T>
         let parent = self.tree.row(self.id).par;
 
         // Parent is a root → no parent siblings
-        if parent == self.tree.row(parent).id
+        if parent == self.tree.row(parent).par
         {
             return None;
         }
@@ -247,7 +257,7 @@ mod tests
     use super::*;
 
     // Helper to build a RowTree from a list of (id, parent, value) tuples
-    fn build_tree(nodes: Vec<(NodeId, NodeId, i32)>) -> RowTree<i32>
+    fn build_tree(nodes: Vec<(NodeId, NodeId, char)>) -> RowTree<char>
     {
         let rows = nodes
             .into_iter()
@@ -264,15 +274,21 @@ mod tests
     /// │   └── 3
     /// └── 4 (par=4, new-doc, cannot have siblings)
     ///     └── 5
+    ///     │   └── 6
+    ///     └── 7
     /// ```
-    fn sample_tree() -> RowTree<i32>
+    fn sample_tree() -> RowTree<char>
     {
         build_tree(vec![
-            (0, 0, 0), // root
-            (1, 0, 1),
-            (2, 1, 2),
-            (3, 1, 3),
-            (4, 0, 4),
+            // id, par, VALUE, NOT doc root
+            (0, 0, '0'),
+            (1, 0, '0'),
+            (2, 0, '0'),
+            (3, 0, '0'),
+            (4, 4, '4'),
+            (5, 4, '4'),
+            (6, 5, '4'),
+            (7, 4, '4'),
         ])
     }
 
@@ -289,7 +305,7 @@ mod tests
     fn first_child_nested()
     {
         let tree = sample_tree();
-        assert_eq!(tree.cursor(1).first_child(), Some(2));
+        assert_eq!(tree.cursor(4).first_child(), Some(5));
     }
 
     #[test]
@@ -303,7 +319,7 @@ mod tests
     fn first_child_last_node_returns_none()
     {
         let tree = sample_tree();
-        assert_eq!(tree.cursor(4).first_child(), None);
+        assert_eq!(tree.cursor(6).first_child(), None);
     }
 
     // --- Cursor::next_sibling ---
@@ -338,7 +354,7 @@ mod tests
         let tree = sample_tree();
         let mut sibs: Vec<NodeId> = tree.cursor(2).siblings().collect();
         sibs.sort();
-        assert_eq!(sibs, vec![3]);
+        assert_eq!(sibs, vec![1, 3]);
     }
 
     #[test]
@@ -361,7 +377,12 @@ mod tests
     fn siblings_from_middle_child()
     {
         // Build: root -> 1, 2, 3 all children of 0
-        let tree = build_tree(vec![(0, 0, 0), (1, 0, 1), (2, 0, 2), (3, 0, 3)]);
+        let tree = build_tree(vec![
+            (0, 0, '0'),
+            (1, 0, '1'),
+            (2, 0, '2'),
+            (3, 0, '3'),
+        ]);
         let mut sibs: Vec<NodeId> = tree.cursor(2).siblings().collect();
         sibs.sort();
         assert_eq!(sibs, vec![1, 3]);
@@ -372,9 +393,9 @@ mod tests
     #[test]
     fn parent_sibling_exists()
     {
-        // Node 2's parent is 1, and 1's next sibling is 4
+        // Node 6's parent, 5, who's next sibling is 7
         let tree = sample_tree();
-        assert_eq!(tree.cursor(2).parent_sibling(), Some(4));
+        assert_eq!(tree.cursor(6).parent_sibling(), Some(7));
     }
 
     #[test]
@@ -393,11 +414,11 @@ mod tests
         let tree = sample_tree();
         // 4 has no next sibling, so a child of 4 has no parent_sibling
         let tree2 = build_tree(vec![
-            (0, 0, 0),
-            (1, 0, 1),
-            (2, 1, 2),
-            (3, 0, 3),
-            (4, 3, 4), // child of 3, which has no next sibling
+            (0, 0, '0'),
+            (1, 0, '1'),
+            (2, 1, '2'),
+            (3, 0, '3'),
+            (4, 3, '4'), // child of 3, which has no next sibling
         ]);
         assert_eq!(tree2.cursor(4).parent_sibling(), None);
     }
@@ -407,10 +428,10 @@ mod tests
     #[test]
     fn graft_single_node()
     {
-        let mut tree = build_tree(vec![(0, 0, 42)]);
+        let mut tree = build_tree(vec![(0, 0, '8')]);
         let new_id = tree.graft(0);
         assert_eq!(new_id, 1);
-        assert_eq!(**tree.row(new_id), 42);
+        assert_eq!(**tree.row(new_id), '8');
         // Grafted root should be self-parented
         assert_eq!(tree.row(new_id).par, new_id);
     }
@@ -418,22 +439,44 @@ mod tests
     #[test]
     fn graft_subtree_preserves_structure()
     {
+        // ! Graft node with no subnodes
         let mut tree = sample_tree();
-        // Graft subtree rooted at node 1 (contains 1, 2, 3)
         let new_base = tree.graft(1);
-        assert_eq!(new_base, 5);
+        assert_eq!(new_base, 8);
+        assert_eq!(tree.rows.len(), 9);
 
-        // New ids should be 5, 6, 7
-        // new_base (5) is self-parented
-        assert_eq!(tree.row(5).par, 5);
-        // 6 and 7 should be children of 5
-        assert_eq!(tree.row(6).par, 5);
-        assert_eq!(tree.row(7).par, 5);
+        // ! Graft entire root document with subnodes
+        let mut tree = sample_tree();
+        let new_base = tree.graft(0);
+        assert_eq!(new_base, 8);
+        assert_eq!(tree.row(8).par, 8);
+        assert_eq!(tree.row(9).par, 8);
+        assert_eq!(tree.row(10).par, 8);
+        assert_eq!(tree.row(11).par, 8);
 
         // Values should be copied
-        assert_eq!(**tree.row(5), 1);
-        assert_eq!(**tree.row(6), 2);
-        assert_eq!(**tree.row(7), 3);
+        assert_eq!(tree.row(8).val, '0');
+        assert_eq!(tree.row(9).val, '0');
+        assert_eq!(tree.row(10).val, '0');
+        assert_eq!(tree.row(11).val, '0');
+
+        // Should not have copied rows outside the current doc or tree
+        assert_eq!(tree.rows.len(), 12);
+
+        // ! Graft the second/other root document with subtree
+        let mut tree = sample_tree();
+        let new_base = tree.graft(4);
+        assert_eq!(new_base, 8);
+        assert_eq!(tree.row(8).par, 8);
+        assert_eq!(tree.row(9).par, 8);
+        assert_eq!(tree.row(10).par, 9);
+        assert_eq!(tree.row(11).par, 8);
+
+        // Values should be copied
+        assert_eq!(tree.row(8).val, '4');
+        assert_eq!(tree.row(9).val, '4');
+        assert_eq!(tree.row(10).val, '4');
+        assert_eq!(tree.row(11).val, '4');
     }
 
     #[test]
@@ -441,10 +484,15 @@ mod tests
     {
         let mut tree = sample_tree();
         let original_len = tree.rows.len();
-        // Graft node 1 subtree (nodes 1, 2, 3) — should NOT include node 4
-        tree.graft(1);
-        // 3 new nodes added (1, 2, 3)
-        assert_eq!(tree.rows.len(), original_len + 3);
+        let new_root = tree.graft(0);
+        let grafted_len = tree.rows.len();
+
+        // Seems as if there's no other nodes beyond last subnode of new_root
+        assert_eq!(tree.cursor(new_root).parent_sibling(), None);
+
+        // Yet actual grafted count can be higher if the algo overshot
+        assert_eq!(original_len, 8, "should be 2 root docs, 4 nodes each");
+        assert_eq!(grafted_len, 12, "should be 3 root docs, 4 nodes each");
     }
 
     // --- Deref / DerefMut ---
@@ -453,14 +501,14 @@ mod tests
     fn deref_accesses_value()
     {
         let tree = sample_tree();
-        assert_eq!(**tree.row(2), 2);
+        assert_eq!(**tree.row(2), '0');
     }
 
     #[test]
     fn deref_mut_modifies_value()
     {
         let mut tree = sample_tree();
-        *tree.rows[2] = 99;
-        assert_eq!(**tree.row(2), 99);
+        *tree.rows[2] = '9';
+        assert_eq!(**tree.row(2), '9');
     }
 }
