@@ -113,7 +113,7 @@ pub fn execute_pipeline(
     pipeline: &[Query],
 ) -> PqResult<usize>
 {
-    let mut queries = pipeline.iter();
+    let queries = pipeline.iter();
     let mut scratch: Vec<Row> = vec![];
     let mut id = 0;
 

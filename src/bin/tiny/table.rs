@@ -168,7 +168,7 @@ impl JsonTable
             {
                 let parent_offset = row.par as usize;
                 row.id = new_id;
-                row.par = (new_id - (id - parent_offset as u32));
+                row.par = new_id - (id - parent_offset as u32);
             }
 
             new_rows.push(row);
