@@ -1,9 +1,55 @@
 //! State transition table for the streaming JSON tokenizer
 
-use std::ops::Deref;
+/*
+Rough outline of what to expect from the tokenizer -> parser pipeline:
+
+Token Types:
+    Esc, Hex, Txt, Num, Bit, Nil, NewArr, NewObj, EndArr, EndObj, Com, Col
+
+States:
+    Beg, Eof, Txt, Str(Hex, Esc, Txt)
+
+Actions:
+    Fin: Finalize buffer into token
+
+Machine:
+    Token Buffer
+    Id Counter
+    Id Stack
+    State
+    Rows
+
+Row Types:
+    Obj, Arr, Num, Txt, Bit, Nil
+
+Row:
+    Id, Parent, Key, Val, Ty
+
+Examples:
+    NewArr, EndArr
+        Fin
+        Fin
+
+    Txt, Esc, Esc, Txt, Hex, Txt, Esc, Txt
+        Beg -> Txt
+
+    (Stt::BEG, Tyk::TXT, Stt::END, Act::FIN),
+
+
+From, Token, Next, Action:
+    Beg, Txt, EscHexOrEof, _
+    EscHexOrEof, Esc, TxtOrEof, _
+    EscHexOrEof, Hex, TxtOrEof, _
+
+From, Token, Next, Action:
+    Beg, NewArr, Idx, _
+    Idx, Txt, TxtEndOrEscHex, _
+    TxtEndOrEscHex, Esc, TxtOrEnd, _
+*/
 
 use crate::{brk_if, iter::Replayable, ret_if};
 use crossterm::style::Stylize;
+use std::ops::Deref;
 use strum::VariantNames;
 use thiserror::Error;
 use {Act::*, CharMatch::*, State::*};
