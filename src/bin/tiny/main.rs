@@ -1,3 +1,4 @@
+mod attr;
 mod codepoints;
 mod formatter;
 mod lexer;

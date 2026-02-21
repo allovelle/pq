@@ -59,5 +59,5 @@ integration-test:
     cargo test --test '*'
 
 
-test bin:
+test bin="pq":
     cargo test --bin {{bin}}

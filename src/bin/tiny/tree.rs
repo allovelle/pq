@@ -74,11 +74,13 @@ pub struct Cursor<'a, T>
 
 impl<T: Node> RowTree<T>
 {
+    /// New RowTree with backing table.
     pub fn new(rows: Vec<Row<T>>) -> Self
     {
         Self { rows }
     }
 
+    /// New cursor at node id (& offset)
     pub fn cursor(&self, id: NodeId) -> Cursor<'_, T>
     {
         Cursor { tree: self, id }
@@ -129,6 +131,12 @@ impl<T: Node> RowTree<T>
 
 impl<'a, T: Node> Cursor<'a, T>
 {
+    /// New cursor over provided tree at default node id (& offset 0)
+    pub fn new(tree: &'a RowTree<T>) -> Self
+    {
+        Self { tree, id: 0 }
+    }
+
     pub fn first_child(&self) -> Option<NodeId>
     {
         let start = self.id + 1;
@@ -248,12 +256,15 @@ mod tests
         RowTree { rows }
     }
 
-    // Build a simple tree:
-    //   0 (parent=ROOT)
-    //   ├── 1
-    //   │   ├── 2
-    //   │   └── 3
-    //   └── 4
+    /// Build a simple tree:
+    /// ```
+    /// ┌── 0 (par=0, new-doc, cannot have siblings)
+    /// │   ├── 1
+    /// │   ├── 2
+    /// │   └── 3
+    /// └── 4 (par=4, new-doc, cannot have siblings)
+    ///     └── 5
+    /// ```
     fn sample_tree() -> RowTree<i32>
     {
         build_tree(vec![

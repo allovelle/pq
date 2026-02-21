@@ -325,6 +325,7 @@ dependencies = [
  "clap",
  "crossterm",
  "serde_json",
+ "smallvec",
  "strum",
  "strum_macros",
  "thiserror",
