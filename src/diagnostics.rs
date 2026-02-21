@@ -15,8 +15,8 @@ use crate::tokv1;
 #[derive(Default, Clone)]
 pub struct UsageReport
 {
-    used_transitions: HashSet<Row>,
-    expect_transitions: HashSet<Row>,
+    used_transitions: HashSet<StateTransition>,
+    expect_transitions: HashSet<StateTransition>,
     errors: usize,
     documents_examined: usize,
     w_state: usize,
@@ -62,7 +62,7 @@ impl UsageReport
         &mut self,
         curr: State,
         ch: char,
-        next: Row,
+        next: StateTransition,
         buf: String,
     )
     {
@@ -106,7 +106,7 @@ impl UsageReport
         self.documents_examined += 1;
     }
 
-    pub fn log_row(&mut self, row: Row)
+    pub fn log_row(&mut self, row: StateTransition)
     {
         self.used_transitions.insert(row);
     }
@@ -152,7 +152,7 @@ impl UsageReport
         println!("Hit {} errors", self.errors.to_string().red());
     }
 
-    pub fn emit_state_transition_table(table: &[Row])
+    pub fn emit_state_transition_table(table: &[StateTransition])
     {
         let state = longest_variant_name::<State>();
         let tok_act = longest_variant_name::<Act>();
