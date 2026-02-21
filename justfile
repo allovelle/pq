@@ -49,3 +49,15 @@ stream_in:
         print(string, end='')
         if string.endswith('\0'):
             break
+
+
+unit-test:
+    cargo test --lib pq
+
+
+integration-test:
+    cargo test --test '*'
+
+
+test bin:
+    cargo test --bin {{bin}}

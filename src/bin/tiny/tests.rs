@@ -286,6 +286,12 @@ fn table_api()
 
     let next = table.next_sibling(first).unwrap();
     assert_eq!(next, 2);
+
+    let parent = table.parent(first).unwrap();
+    assert_eq!(parent, 0);
+
+    let parent = table.parent(next).unwrap();
+    assert_eq!(parent, 0);
 }
 
 #[test]

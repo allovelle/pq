@@ -8,6 +8,9 @@ pub mod tok;
 pub mod tokv1;
 pub mod txt;
 
+#[cfg(test)]
+mod tests;
+
 use thiserror::Error;
 
 #[derive(Debug, Error)]
