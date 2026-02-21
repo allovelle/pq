@@ -328,7 +328,7 @@ mod impl_char_range_inclusive
 /// A row in the state transition table mapping input characters to tokens or
 /// buffer accumulations.
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Hash)]
-struct Row
+struct StateTransition
 {
     /// The state performing an examination for transition determination
     from: State,
@@ -343,7 +343,7 @@ struct Row
     act: Act,
 }
 
-impl Row
+impl StateTransition
 {
     const fn zero() -> Self
     {
@@ -386,8 +386,8 @@ impl Row
 
 pub struct UsageReport
 {
-    used_transitions: HashSet<Row>,
-    expect_transitions: HashSet<Row>,
+    used_transitions: HashSet<StateTransition>,
+    expect_transitions: HashSet<StateTransition>,
     errors: usize,
     documents_examined: usize,
 }
@@ -412,7 +412,7 @@ impl UsageReport
         self.documents_examined += 1;
     }
 
-    fn log_row(&mut self, row: Row)
+    fn log_row(&mut self, row: StateTransition)
     {
         self.used_transitions.insert(row);
     }
@@ -461,7 +461,7 @@ impl UsageReport
 
 pub fn tokenize(source: &str) -> PqResult<Vec<Tok>>
 {
-    let transitions: [Row; _] = state_transition_table();
+    let transitions: [StateTransition; _] = state_transition_table();
     let mut curr = BEG;
     let mut buf = String::with_capacity(32);
     let mut toks: Vec<Tok> = Vec::with_capacity(source.len());
@@ -959,19 +959,20 @@ const fn max_state_transitions() -> usize
     transitions
 }
 
-const fn state_transition_table() -> [Row; STATE_TRANSITION_TABLE.len()]
+const fn state_transition_table()
+-> [StateTransition; STATE_TRANSITION_TABLE.len()]
 {
     #[cfg(false)]
     const EXPANDED_TABLE_LEN: usize = max_state_transitions();
     // let mut rows: [Row; EXPANDED_TABLE_LEN] = [Row::zero(); EXPANDED_TABLE_LEN];
-    let mut rows: [Row; STATE_TRANSITION_TABLE.len()] =
-        [Row::zero(); STATE_TRANSITION_TABLE.len()];
+    let mut rows: [StateTransition; STATE_TRANSITION_TABLE.len()] =
+        [StateTransition::zero(); STATE_TRANSITION_TABLE.len()];
 
     let mut row_udx = 0usize;
     while row_udx < rows.len()
     {
         let (from, accept, except, onto, act) = STATE_TRANSITION_TABLE[row_udx];
-        rows[row_udx] = Row { from, accept, except, onto, act };
+        rows[row_udx] = StateTransition { from, accept, except, onto, act };
         row_udx += 1;
     }
 
@@ -1000,7 +1001,8 @@ const fn state_transition_table() -> [Row; STATE_TRANSITION_TABLE.len()]
                     udx_ch += ch.len_utf8();
 
                     let empty = '\0' ..= '\0';
-                    let row = Row::new(from, ch ..= ch, empty, onto, act);
+                    let row =
+                        StateTransition::new(from, ch ..= ch, empty, onto, act);
 
                     rows[fast] = row;
                     fast += 1; // Outpace input table index
@@ -1030,8 +1032,13 @@ const fn state_transition_table() -> [Row; STATE_TRANSITION_TABLE.len()]
                     //     range,
                     // );
 
-                    let row =
-                        Row::new(from, begin ..= close, ch ..= ch, onto, act);
+                    let row = StateTransition::new(
+                        from,
+                        begin ..= close,
+                        ch ..= ch,
+                        onto,
+                        act,
+                    );
 
                     // * 100% chance of success: continuously split accept by ch
 
@@ -1068,7 +1075,8 @@ const fn state_transition_table() -> [Row; STATE_TRANSITION_TABLE.len()]
                     udx_ch += ch.len_utf8();
 
                     let empty = '\0' ..= '\0';
-                    let row = Row::new(from, empty, ch ..= ch, onto, act);
+                    let row =
+                        StateTransition::new(from, empty, ch ..= ch, onto, act);
 
                     rows[fast] = row;
                     fast += 1; // Outpace input table index
@@ -1077,7 +1085,7 @@ const fn state_transition_table() -> [Row; STATE_TRANSITION_TABLE.len()]
 
             (Within(from_in, upto_in), Within(from_ou, upto_ou)) =>
             {
-                let row = Row::new(
+                let row = StateTransition::new(
                     from,
                     from_in ..= upto_in,
                     from_ou ..= upto_ou,
@@ -1091,7 +1099,13 @@ const fn state_transition_table() -> [Row; STATE_TRANSITION_TABLE.len()]
             (Within(from_in, upto_in), Unused) =>
             {
                 let empty = '\0' ..= '\0';
-                let row = Row::new(from, from_in ..= upto_in, empty, onto, act);
+                let row = StateTransition::new(
+                    from,
+                    from_in ..= upto_in,
+                    empty,
+                    onto,
+                    act,
+                );
                 rows[fast] = row;
                 fast += 1;
             }
@@ -1099,7 +1113,13 @@ const fn state_transition_table() -> [Row; STATE_TRANSITION_TABLE.len()]
             (Unused, Within(from_in, upto_in)) =>
             {
                 let empty = '\0' ..= '\0';
-                let row = Row::new(from, empty, from_in ..= upto_in, onto, act);
+                let row = StateTransition::new(
+                    from,
+                    empty,
+                    from_in ..= upto_in,
+                    onto,
+                    act,
+                );
                 rows[fast] = row;
                 fast += 1;
             }
@@ -1113,7 +1133,7 @@ const fn state_transition_table() -> [Row; STATE_TRANSITION_TABLE.len()]
     rows
 }
 
-fn emit_table(table: &[Row])
+fn emit_table(table: &[StateTransition])
 {
     let state = longest_variant_name::<State>();
     let tok_act = longest_variant_name::<Act>();

@@ -22,3 +22,7 @@ I need a pipelined second async fn to read bytes incrementally off of the file
 I need this to be zero copy where possible and use as few heap allocations as
     is possible.
 Please think long and hard, I need this to work.
+
+
+**Go back through all the tokenizer attempts and try to complete them with AI**
+**An impressive amount of time was spent in each**
