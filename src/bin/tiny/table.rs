@@ -218,7 +218,8 @@ mod v2
         pub key: u32,
         pub val: u32,
         // * Not storing row type, storing val strings with leading quote, store
-        // * key strings without quotes
+        // * key strings without quotes: this allows non-str vals to be quickly
+        // * determined from the first char of the val (no " means can't be str)
     }
 
     impl Row
