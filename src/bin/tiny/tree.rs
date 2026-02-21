@@ -22,8 +22,16 @@ pub struct Row<T>
 {
     #[cfg(not(feature = "implicit_row_ids"))]
     pub id: NodeId,
-    pub parent: NodeId,
-    value: T,
+    pub par: NodeId,
+    val: T,
+}
+
+impl<T> Row<T>
+{
+    pub fn new(id: NodeId, par: NodeId, val: T) -> Self
+    {
+        Self { id, par, val }
+    }
 }
 
 impl<T: Node> Deref for Row<T>
@@ -32,7 +40,7 @@ impl<T: Node> Deref for Row<T>
 
     fn deref(&self) -> &T
     {
-        &self.value
+        &self.val
     }
 }
 
@@ -40,7 +48,7 @@ impl<T: Node> DerefMut for Row<T>
 {
     fn deref_mut(&mut self) -> &mut T
     {
-        &mut self.value
+        &mut self.val
     }
 }
 
@@ -66,6 +74,11 @@ pub struct Cursor<'a, T>
 
 impl<T: Node> RowTree<T>
 {
+    pub fn new(rows: Vec<Row<T>>) -> Self
+    {
+        Self { rows }
+    }
+
     pub fn cursor(&self, id: NodeId) -> Cursor<'_, T>
     {
         Cursor { tree: self, id }
@@ -85,7 +98,7 @@ impl<T: Node> RowTree<T>
 
         let mut end = base + 1;
 
-        while end < self.rows.len() && self.rows[end].parent >= base as NodeId
+        while end < self.rows.len() && self.rows[end].par >= base as NodeId
         {
             end += 1;
         }
@@ -101,13 +114,12 @@ impl<T: Node> RowTree<T>
 
             let new_id = src.id + offset;
 
-            let new_parent =
-                if i == base { new_id } else { src.parent + offset };
+            let new_parent = if i == base { new_id } else { src.par + offset };
 
             self.rows.push(Row {
                 id: new_id,
-                parent: new_parent,
-                value: src.value.clone(),
+                par: new_parent,
+                val: src.val.clone(),
             });
         }
 
@@ -128,12 +140,12 @@ impl<'a, T: Node> Cursor<'a, T>
 
         let row = self.tree.row(start);
 
-        if row.parent == self.id { Some(start) } else { None }
+        if row.par == self.id { Some(start) } else { None }
     }
 
     pub fn siblings(&self) -> impl Iterator<Item = NodeId> + '_
     {
-        let parent = self.tree.row(self.id).parent;
+        let parent = self.tree.row(self.id).par;
 
         let mut start = self.id as usize;
         let mut end = self.id as usize;
@@ -143,7 +155,7 @@ impl<'a, T: Node> Cursor<'a, T>
             while start > 0
             {
                 let prev = start - 1;
-                if self.tree.rows[prev].parent == parent
+                if self.tree.rows[prev].par == parent
                 {
                     start = prev;
                 }
@@ -156,7 +168,7 @@ impl<'a, T: Node> Cursor<'a, T>
             while end + 1 < self.tree.rows.len()
             {
                 let next = end + 1;
-                if self.tree.rows[next].parent == parent
+                if self.tree.rows[next].par == parent
                 {
                     end = next;
                 }
@@ -175,7 +187,7 @@ impl<'a, T: Node> Cursor<'a, T>
 
     pub fn parent_sibling(&self) -> Option<NodeId>
     {
-        let parent = self.tree.row(self.id).parent;
+        let parent = self.tree.row(self.id).par;
 
         // Parent is a root → no parent siblings
         if parent == self.tree.row(parent).id
@@ -183,20 +195,20 @@ impl<'a, T: Node> Cursor<'a, T>
             return None;
         }
 
-        let grandparent = self.tree.row(parent).parent;
+        let grandparent = self.tree.row(parent).par;
         let mut next = parent + 1;
 
         while (next as usize) < self.tree.rows.len()
         {
             let row = self.tree.row(next);
 
-            if row.parent == grandparent
+            if row.par == grandparent
             {
                 return Some(next);
             }
 
             // stop if we leave the parent's sibling block
-            if row.parent < grandparent
+            if row.par < grandparent
             {
                 break;
             }
@@ -209,7 +221,7 @@ impl<'a, T: Node> Cursor<'a, T>
 
     pub fn next_sibling(&self) -> Option<NodeId>
     {
-        let parent = self.tree.row(self.id).parent;
+        let parent = self.tree.row(self.id).par;
         let next = self.id + 1;
 
         if (next as usize) >= self.tree.rows.len()
@@ -217,7 +229,7 @@ impl<'a, T: Node> Cursor<'a, T>
             return None;
         }
 
-        if self.tree.row(next).parent == parent { Some(next) } else { None }
+        if self.tree.row(next).par == parent { Some(next) } else { None }
     }
 }
 
@@ -231,7 +243,7 @@ mod tests
     {
         let rows = nodes
             .into_iter()
-            .map(|(id, parent, value)| Row { id, parent, value })
+            .map(|(id, parent, value)| Row { id, par: parent, val: value })
             .collect();
         RowTree { rows }
     }
@@ -389,7 +401,7 @@ mod tests
         assert_eq!(new_id, 1);
         assert_eq!(**tree.row(new_id), 42);
         // Grafted root should be self-parented
-        assert_eq!(tree.row(new_id).parent, new_id);
+        assert_eq!(tree.row(new_id).par, new_id);
     }
 
     #[test]
@@ -402,10 +414,10 @@ mod tests
 
         // New ids should be 5, 6, 7
         // new_base (5) is self-parented
-        assert_eq!(tree.row(5).parent, 5);
+        assert_eq!(tree.row(5).par, 5);
         // 6 and 7 should be children of 5
-        assert_eq!(tree.row(6).parent, 5);
-        assert_eq!(tree.row(7).parent, 5);
+        assert_eq!(tree.row(6).par, 5);
+        assert_eq!(tree.row(7).par, 5);
 
         // Values should be copied
         assert_eq!(**tree.row(5), 1);

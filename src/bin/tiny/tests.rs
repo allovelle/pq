@@ -1,16 +1,20 @@
-use super::*;
-use crate::formatter::FormatConfig;
-use crate::formatter::format_table;
-use crate::lexer::*;
-use crate::parser::*;
+// use super::*;
+// use crate::formatter::FormatConfig;
+// use crate::formatter::format_table;
+// use crate::lexer::*;
+// use crate::parser::*;
 
 /// Tests [json_tokens_from_str], [classify_token], and [token_value]
 /// together to verify individual tokens are in the right order and
 /// correctly classified while also proving actual token values.
 /// Does not invoke the parser so invalid source is allowed.
 #[test]
-fn test_token_index_and_order()
+fn token_index_and_order()
 {
+    use crate::lexer::{
+        TokVal, TokenKind, classify_token, json_tokens_from_str, token_value,
+    };
+
     let code = r#"[1, 2, [3, 4], 5, 6]"#;
     for token in json_tokens_from_str(code)
     {
@@ -58,8 +62,10 @@ fn test_token_index_and_order()
 /// scrambled tokens. The parser must enforce structure.
 /// Does not invoke the parser so invalid source is allowed.
 #[test]
-fn test_valid_tokens_from_invalid_source()
+fn valid_tokens_from_invalid_source()
 {
+    use crate::lexer::{classify_token, json_tokens_from_str, token_value};
+
     let code = r#"[1, 2, [3, 4], 5, 6"#;
     let tokens: Vec<usize> =
         json_tokens_from_str(code).map(|row| row.unwrap()).collect();
@@ -70,10 +76,12 @@ fn test_valid_tokens_from_invalid_source()
 /// Verifies that structured values correctly return their direct subnodes.
 /// Invokes the parser so invalid source should be rejected.
 #[test]
-fn test_subnodes()
+fn subnodes()
 {
+    use crate::parser::{RowType, parse_from_str};
+
     let code = r#"[1, 2, [3, 4], 5, 6]"#;
-    let table = parser::parse_from_str(code).unwrap();
+    let table = parse_from_str(code).unwrap();
     assert_eq!(table[0].ty, RowType::Arr);
     assert_eq!(table[3].ty, RowType::Arr);
     let subnodes = table[3].subnodes(&table).collect::<Vec<_>>();
@@ -83,8 +91,10 @@ fn test_subnodes()
 }
 
 #[test]
-fn test_parser_json_structure()
+fn parser_json_structure()
 {
+    use crate::parser::{RowType, parse_from_str};
+
     let code = r#"[1, 2, [3, 4], 5, 6]"#;
     let table = parse_from_str(code).unwrap();
 
@@ -185,8 +195,11 @@ fn test_parser_json_structure()
 }
 
 #[test]
-fn test_format_simple_array()
+fn format_simple_array()
 {
+    use crate::formatter::{FormatConfig, format_table};
+    use crate::parser::parse_from_str;
+
     let json = r#"[1, 2, 3]"#;
     let table = parse_from_str(json).unwrap();
     let config = FormatConfig::new().with_colors(false);
@@ -202,8 +215,11 @@ fn test_format_simple_array()
 }
 
 #[test]
-fn test_format_nested_object()
+fn format_nested_object()
 {
+    use crate::formatter::{FormatConfig, format_table};
+    use crate::parser::parse_from_str;
+
     let json = r#"{"name": "test", "nested": {"key": "value"}}"#;
     let table = parse_from_str(json).unwrap();
     let config = FormatConfig::new().with_colors(false);
@@ -218,8 +234,11 @@ fn test_format_nested_object()
 }
 
 #[test]
-fn test_format_complex()
+fn format_complex()
 {
+    use crate::formatter::{FormatConfig, format_table};
+    use crate::parser::parse_from_str;
+
     let json = r#"[1, 2, [3, 4], 5, 6]"#;
     let table = parse_from_str(json).unwrap();
     let config = FormatConfig::new().with_colors(false);
@@ -234,8 +253,11 @@ fn test_format_complex()
 }
 
 #[test]
-fn test_format_with_colors()
+fn format_with_colors()
 {
+    use crate::formatter::{FormatConfig, format_table};
+    use crate::parser::parse_from_str;
+
     let json = r#"{"key": "value", "num": 42}"#;
     let table = parse_from_str(json).unwrap();
     let config = FormatConfig::new().with_colors(true);
@@ -246,4 +268,51 @@ fn test_format_with_colors()
     {
         println!("{}", line);
     }
+}
+
+#[test]
+fn table_api()
+{
+    use crate::table::{JsonTable, Row, RowType};
+
+    let mut table = JsonTable::new(vec![
+        Row::new(0, 0, 0, "", "{", RowType::Obj),
+        Row::new(1, 0, 0, "a1", "a2", RowType::Str),
+        Row::new(2, 0, 0, "a3", "818", RowType::Num),
+    ]);
+
+    let first = table.first_child(0).unwrap();
+    assert_eq!(first, 1);
+
+    let next = table.next_sibling(first).unwrap();
+    assert_eq!(next, 2);
+}
+
+#[test]
+fn tree_api()
+{
+    use crate::parser::RowType;
+    use crate::tree::{Row, RowTree};
+
+    #[derive(Debug, Clone, Copy, PartialEq)]
+    struct Val
+    {
+        key: &'static str,
+        val: &'static str,
+        ty: RowType,
+    }
+
+    impl Val
+    {
+        pub fn new(key: &'static str, val: &'static str, ty: RowType) -> Self
+        {
+            Self { key, val, ty }
+        }
+    }
+
+    let mut tree: RowTree<Val> = RowTree::new(vec![
+        Row::new(0, 0, Val::new("", "{", RowType::Obj)),
+        Row::new(1, 0, Val::new("a1", "a2", RowType::Str)),
+        Row::new(2, 0, Val::new("a3", "818", RowType::Num)),
+    ]);
 }

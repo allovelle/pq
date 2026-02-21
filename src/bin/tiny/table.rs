@@ -37,6 +37,20 @@ pub struct Row
     pub ty: RowType,
 }
 
+impl Row
+{
+    #[rustfmt::skip]
+    pub fn new<S: AsRef<str>>(
+        id: u32, par: u32, root: u32, key: S, val: S, ty: RowType
+    ) -> Self {
+        Self {
+            id, par, root, ty,
+            key: key.as_ref().to_string(),
+            val: val.as_ref().to_string(),
+        }
+    }
+}
+
 /// # Row-based JSON table
 /// A table of JSON rows, each containing a key and value, with an ID and parent
 /// that allows for tree navigation. Allows any row to be accessed by index, and
@@ -72,7 +86,11 @@ pub struct JsonTable
 
 impl JsonTable
 {
-    // Core navigation
+    pub fn new(rows: Vec<Row>) -> Self
+    {
+        Self { rows }
+    }
+
     pub fn parent(&self, row_id: u32) -> Option<u32>
     {
         let row = &self.rows[row_id as usize];

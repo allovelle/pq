@@ -10,13 +10,20 @@
 use crate::{TokVal, TokenKind};
 
 type TokId = u32;
+
 fn append_string(buf: &mut Vec<u8>, text: &[u8]) {}
+
 fn handle_type(buf: &mut Vec<u8>, handle: TokId) -> TokenKind
 {
     TokenKind::Null
 }
+
 fn ref_handle(buf: &mut Vec<u8>, offset: usize) -> TokId
 {
     0
 }
-fn deref_handle(buf: &mut Vec<u8>, handle: TokId) -> TokVal {}
+
+fn deref_handle(buf: &mut Vec<u8>, handle: TokId) -> TokVal
+{
+    TokVal::Txt("hello")
+}
