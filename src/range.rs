@@ -37,6 +37,8 @@ mod tests
 {
     use super::*;
 
+    // Split ranges over characters, useful for testing UTF-8.
+
     fn collect_range(r: std::ops::Range<char>) -> String
     {
         r.collect::<String>()
@@ -96,5 +98,85 @@ mod tests
         let r = 'a' .. 'c'; // 'a','b'
         assert!(split_range(r, 'z').is_none());
         assert!(split_range_inclusive('a' ..= 'c', 'z').is_none());
+    }
+
+    // Split ranges over numbers, useful for testing indices.
+
+    #[test]
+    fn test_split_range_middle()
+    {
+        let (l, r) = split_range(0 .. 10, 3).unwrap();
+        assert_eq!(l, 0 .. 3);
+        assert_eq!(r, 4 .. 10);
+    }
+
+    #[test]
+    fn test_split_range_near_end()
+    {
+        let (l, r) = split_range(0 .. 10, 8).unwrap();
+        assert_eq!(l, 0 .. 8);
+        assert_eq!(r, 9 .. 10);
+    }
+
+    #[test]
+    fn test_split_range_start()
+    {
+        let (l, r) = split_range(0 .. 10, 0).unwrap();
+        assert_eq!(l, 0 .. 0);
+        assert_eq!(r, 1 .. 10);
+    }
+
+    #[test]
+    fn test_split_range_last_element()
+    {
+        let (l, r) = split_range(0 .. 10, 9).unwrap();
+        assert_eq!(l, 0 .. 9);
+        assert_eq!(r, 10 .. 10);
+    }
+
+    #[test]
+    fn test_split_range_out_of_bounds()
+    {
+        assert!(split_range(0 .. 10, 10).is_none());
+        assert!(split_range(0 .. 10, 99).is_none());
+    }
+
+    // split_range_inclusive tests
+    #[test]
+    fn test_split_range_inclusive_middle()
+    {
+        let (l, r) = split_range_inclusive(0 ..= 10, 3).unwrap();
+        assert_eq!(l, 0 .. 3);
+        assert_eq!(r, 4 .. 11);
+    }
+
+    #[test]
+    fn test_split_range_inclusive_near_end()
+    {
+        let (l, r) = split_range_inclusive(0 ..= 10, 8).unwrap();
+        assert_eq!(l, 0 .. 8);
+        assert_eq!(r, 9 .. 11);
+    }
+
+    #[test]
+    fn test_split_range_inclusive_start()
+    {
+        let (l, r) = split_range_inclusive(0 ..= 10, 0).unwrap();
+        assert_eq!(l, 0 .. 0);
+        assert_eq!(r, 1 .. 11);
+    }
+
+    #[test]
+    fn test_split_range_inclusive_end()
+    {
+        let (l, r) = split_range_inclusive(0 ..= 10, 10).unwrap();
+        assert_eq!(l, 0 .. 10);
+        assert_eq!(r, 11 .. 11);
+    }
+
+    #[test]
+    fn test_split_range_inclusive_out_of_bounds()
+    {
+        assert!(split_range_inclusive(0 ..= 10, 11).is_none());
     }
 }
