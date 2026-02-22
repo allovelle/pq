@@ -1,5 +1,5 @@
 use crate::PqResult;
-use crate::iter::Replayable;
+use crate::replayable_iterator::Replayable;
 use crossterm::style::Stylize;
 use std::collections::{HashMap, HashSet};
 use std::ops::{Deref, RangeInclusive};

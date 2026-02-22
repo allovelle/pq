@@ -1,10 +1,7 @@
-pub mod ast;
-pub mod cli;
 pub mod diagnostics;
 pub mod inc;
 pub mod iter;
 pub mod range;
-pub mod tok;
 pub mod tokv1;
 pub mod txt;
 
@@ -23,9 +20,9 @@ pub enum PqErr
     #[error(transparent)]
     Json(#[from] serde_json::Error),
 
-    #[error(transparent)]
-    LexErr(#[from] crate::tok::LexErr),
-
+    // #[error(transparent)]
+    // LexErr(#[from] crate::tok::LexErr),
+    //
     #[error(transparent)]
     ParseIntErr(#[from] std::num::ParseIntError),
 

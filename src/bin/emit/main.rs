@@ -1,11 +1,13 @@
 #![allow(clippy::unit_arg)]
 
+mod ast;
+mod cli;
+mod replayable_iterator;
+mod tok;
+
+use crate::cli::*;
+use crate::tok::{Tok, tokenize};
 use crossterm::style::Stylize;
-use pq::cli::*;
-use pq::{
-    PqResult,
-    tok::{Tok, tokenize},
-};
 use serde_json::Value;
 use std::fmt::Display;
 use std::{
@@ -14,6 +16,33 @@ use std::{
     io::{self, IsTerminal, Write},
 };
 use strum::VariantNames;
+
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+#[error("Pique Error")]
+pub enum PqErr
+{
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+
+    #[error(transparent)]
+    Json(#[from] serde_json::Error),
+
+    #[error(transparent)]
+    LexErr(#[from] crate::tok::LexErr),
+
+    #[error(transparent)]
+    ParseIntErr(#[from] std::num::ParseIntError),
+
+    #[error(transparent)]
+    ParseFloatErr(#[from] std::num::ParseFloatError),
+
+    #[error(transparent)]
+    CliErr(#[from] clap::Error),
+}
+
+pub type PqResult<T> = Result<T, PqErr>;
 
 const DEBUG_TAGS: bool = true;
 
@@ -48,9 +77,9 @@ where
 // TODO: JsonStyler::new(theme2).key("k1").val(3.14).style();
 
 /// Idea: for any single row, render with proper indents using only the table
-fn view_table(table: &[StateTransition])
+fn view_table(table: &[JsonRow])
 {
-    use RowType::*;
+    use JsonRowTy::*;
 
     // ! Invariants:
     // ! Table must not allow row modification (immutable)
@@ -171,7 +200,7 @@ fn view_table(table: &[StateTransition])
         }
 
         // End means end of collection (place end brackets all the way up)
-        let _is_end = |node: &StateTransition| {
+        let _is_end = |node: &JsonRow| {
             let _parent = table.get(node.parent as usize).unwrap_or(node);
             let _first = table.get(node.parent as usize + 1).unwrap_or(node);
             let next = table.get(node.id as usize + 1).unwrap_or(node);
@@ -256,44 +285,30 @@ fn view_table(table: &[StateTransition])
     // TODO: use the 'only take 1/2' rule (example) or other constraints
 }
 
-fn traverse(
-    table: &mut Vec<StateTransition>,
-    key: String,
-    value: Value,
-    parent: u32,
-)
+fn traverse(table: &mut Vec<JsonRow>, key: String, value: Value, parent: u32)
 {
-    use RowType::*;
+    use JsonRowTy::*;
 
     let new_id = table.len() as u32;
 
     match value
     {
-        Value::Null =>
-        {
-            table.push(StateTransition::new(new_id, parent, key, "", Nil))
-        }
+        Value::Null => table.push(JsonRow::new(new_id, parent, key, "", Nil)),
         Value::Bool(tf) =>
         {
-            table.push(StateTransition::new(new_id, parent, key, tf, Bit))
+            table.push(JsonRow::new(new_id, parent, key, tf, Bit))
         }
         Value::Number(num) =>
         {
-            table.push(StateTransition::new(new_id, parent, key, num, Num))
+            table.push(JsonRow::new(new_id, parent, key, num, Num))
         }
         Value::String(txt) =>
         {
-            table.push(StateTransition::new(new_id, parent, key, txt, Txt))
+            table.push(JsonRow::new(new_id, parent, key, txt, Txt))
         }
         Value::Array(arr) =>
         {
-            table.push(StateTransition::new(
-                new_id,
-                parent,
-                key.clone(),
-                "[",
-                Arr,
-            ));
+            table.push(JsonRow::new(new_id, parent, key.clone(), "[", Arr));
 
             for (i, element) in arr.into_iter().enumerate()
             {
@@ -302,7 +317,7 @@ fn traverse(
         }
         Value::Object(map) =>
         {
-            table.push(StateTransition::new(new_id, parent, key, "{", Obj));
+            table.push(JsonRow::new(new_id, parent, key, "{", Obj));
 
             for (name, element) in map
             {
@@ -315,9 +330,9 @@ fn traverse(
 #[rustfmt::skip]
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(u8)]
-enum RowType { Arr, Obj, Nil, Bit, Txt, Num, }
+enum JsonRowTy { Arr, Obj, Nil, Bit, Txt, Num, }
 
-impl Display for RowType
+impl Display for JsonRowTy
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
     {
@@ -327,23 +342,23 @@ impl Display for RowType
 
 /// Invariant: Self::Id is the index within it's container.
 #[derive(Debug, Clone)]
-struct StateTransition
+struct JsonRow
 {
     id: u32,
     parent: u32,
     key: String,
     value: String,
-    ty: RowType,
+    ty: JsonRowTy,
 }
 
-impl StateTransition
+impl JsonRow
 {
     fn new<K: ToString, V: ToString>(
         id: u32,
         parent: u32,
         key: K,
         value: V,
-        ty: RowType,
+        ty: JsonRowTy,
     ) -> Self
     {
         let key = key.to_string();
@@ -356,7 +371,7 @@ impl StateTransition
 #[allow(non_camel_case_types, clippy::upper_case_acronyms)]
 #[derive(VariantNames, Debug, Clone, Copy, PartialEq, PartialOrd, Hash)]
 #[repr(u8)]
-enum TokTy
+enum JsonTokTy
 {
     NIL = 1, BIT, TXT, ESC, HEX, NUM, NEW_ARR, END_ARR, NEW_OBJ, END_OBJ,
     COM, COL,
@@ -380,13 +395,7 @@ pub enum Action
     FIN = 1, ACC, KEY, IDX, IGN, END,
 }
 
-// Expect/Accept
-// Tab/Nest record parent ID, clip/take astnode id
-// [ID][PARENT][KEY][VALUE][TYPE]
-struct AstRow(usize, usize, String, String, TokTy);
-struct Transition(State, TokTy, State, Action);
-
-impl From<Tok> for TokTy
+impl From<Tok> for JsonTokTy
 {
     fn from(value: Tok) -> Self
     {
@@ -409,23 +418,23 @@ impl From<Tok> for TokTy
     }
 }
 
-impl From<Tok> for RowType
+impl From<Tok> for JsonRowTy
 {
     fn from(value: Tok) -> Self
     {
         match value
         {
-            Tok::True => RowType::Bit,
-            Tok::False => RowType::Bit,
-            Tok::Null => RowType::Nil,
-            Tok::Text(_) => RowType::Txt,
-            Tok::Escape(_) => RowType::Txt,
-            Tok::EscapeHex(_) => RowType::Txt,
-            Tok::Number(_) => RowType::Num,
-            Tok::ArrayOpen => RowType::Arr,
-            Tok::ArrayClose => RowType::Arr,
-            Tok::ObjectOpen => RowType::Obj,
-            Tok::ObjectClose => RowType::Obj,
+            Tok::True => JsonRowTy::Bit,
+            Tok::False => JsonRowTy::Bit,
+            Tok::Null => JsonRowTy::Nil,
+            Tok::Text(_) => JsonRowTy::Txt,
+            Tok::Escape(_) => JsonRowTy::Txt,
+            Tok::EscapeHex(_) => JsonRowTy::Txt,
+            Tok::Number(_) => JsonRowTy::Num,
+            Tok::ArrayOpen => JsonRowTy::Arr,
+            Tok::ArrayClose => JsonRowTy::Arr,
+            Tok::ObjectOpen => JsonRowTy::Obj,
+            Tok::ObjectClose => JsonRowTy::Obj,
             Tok::Comma | Tok::Colon => panic!("nonsensical row type"),
         }
     }
@@ -500,11 +509,11 @@ fn main() -> PqResult<()>
     Ok(())
 }
 
-fn tokens_to_rows(tokens: &[Tok]) -> io::Result<Vec<StateTransition>>
+fn tokens_to_rows(tokens: &[Tok]) -> io::Result<Vec<JsonRow>>
 {
     use Action as Act;
+    use JsonTokTy as Tyk;
     use State as Stt;
-    use TokTy as Tyk;
 
     const BUF_MOD: &str = "misaligned parent indicies: buffer was \
         modified during row creation";
@@ -556,7 +565,7 @@ fn tokens_to_rows(tokens: &[Tok]) -> io::Result<Vec<StateTransition>>
         i += 1;
 
         // curr state, curr char, onto state, buffer action
-        let ty: TokTy = token.clone().into();
+        let ty: JsonTokTy = token.clone().into();
         let mut transition = None;
         'find_transition: for trans @ (from, tok, _to, _act) in table.iter()
         {
@@ -637,21 +646,19 @@ fn tokens_to_rows(tokens: &[Tok]) -> io::Result<Vec<StateTransition>>
                 id_counter += 1;
                 let parent = id_stack[id_stack.len() - 1];
 
-                let parent_node: &StateTransition =
+                let parent_node: &JsonRow =
                     rows.get(parent as usize).expect(BUF_MOD);
 
                 let mut key = String::new();
-                if let RowType::Obj = parent_node.ty
+                if let JsonRowTy::Obj = parent_node.ty
                 {
                     key = buffer.pop().expect(MISS_KEY).to_string();
                 }
 
                 let value = token.to_string();
-                let row_type = RowType::from(token.clone());
+                let row_type = JsonRowTy::from(token.clone());
 
-                rows.push(StateTransition::new(
-                    id, parent, key, value, row_type,
-                ));
+                rows.push(JsonRow::new(id, parent, key, value, row_type));
             }
             Act::END =>
             {
@@ -862,7 +869,7 @@ fn tokens_to_rows(tokens: &[Tok]) -> io::Result<Vec<StateTransition>>
     Ok(rows)
 }
 
-fn rows_to_json(rows: &[StateTransition]) -> String
+fn rows_to_json(rows: &[JsonRow]) -> String
 {
     let mut string = String::new();
     let mut is_array = true; // * All other values print their keys
@@ -870,23 +877,26 @@ fn rows_to_json(rows: &[StateTransition]) -> String
     {
         match row.ty
         {
-            RowType::Arr =>
+            JsonRowTy::Arr =>
             {
                 is_array = true;
                 string.push_str(&row.value)
             }
-            RowType::Obj =>
+            JsonRowTy::Obj =>
             {
                 is_array = false;
                 string.push_str(&row.value)
             }
-            RowType::Nil | RowType::Bit | RowType::Txt | RowType::Num =>
+            JsonRowTy::Nil
+            | JsonRowTy::Bit
+            | JsonRowTy::Txt
+            | JsonRowTy::Num =>
             {
                 if !is_array
                 {
                     let key = match row.ty
                     {
-                        RowType::Txt => format!("\"{}\"", row.key),
+                        JsonRowTy::Txt => format!("\"{}\"", row.key),
                         _ => row.key.clone(),
                     };
                     string.push_str(&key);
@@ -896,7 +906,7 @@ fn rows_to_json(rows: &[StateTransition]) -> String
 
                 let val = match row.ty
                 {
-                    RowType::Txt => format!("\"{}\"", row.value),
+                    JsonRowTy::Txt => format!("\"{}\"", row.value),
                     _ => row.value.clone(),
                 };
                 string.push_str(&val);
@@ -909,8 +919,8 @@ fn rows_to_json(rows: &[StateTransition]) -> String
     {
         let closing = match node.ty
         {
-            RowType::Arr => "]",
-            RowType::Obj => "}",
+            JsonRowTy::Arr => "]",
+            JsonRowTy::Obj => "}",
             _ => "",
         };
 
