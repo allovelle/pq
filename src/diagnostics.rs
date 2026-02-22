@@ -1,16 +1,8 @@
-use crate::iter::Replayable;
 use crate::ret_if;
-use crate::tokv1::{Act::*, CharMatch::*, State::*};
-use crate::tokv1::{Act::*, CharMatch::*, State::*, *};
+use crate::tokv1::{Act::*, *};
 use crate::txt::ToDebug;
 use crossterm::style::Stylize;
-use std::collections::{HashMap, HashSet};
-use std::ops::RangeInclusive;
-use std::{fmt, hash};
-use strum::*;
-use thiserror::Error;
-
-use crate::tokv1;
+use std::collections::HashSet;
 
 #[derive(Default, Clone)]
 pub struct UsageReport
