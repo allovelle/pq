@@ -48,7 +48,7 @@ where
 // TODO: JsonStyler::new(theme2).key("k1").val(3.14).style();
 
 /// Idea: for any single row, render with proper indents using only the table
-fn view_table(table: &[Row])
+fn view_table(table: &[StateTransition])
 {
     use RowType::*;
 
@@ -171,7 +171,7 @@ fn view_table(table: &[Row])
         }
 
         // End means end of collection (place end brackets all the way up)
-        let _is_end = |node: &Row| {
+        let _is_end = |node: &StateTransition| {
             let _parent = table.get(node.parent as usize).unwrap_or(node);
             let _first = table.get(node.parent as usize + 1).unwrap_or(node);
             let next = table.get(node.id as usize + 1).unwrap_or(node);
@@ -256,7 +256,12 @@ fn view_table(table: &[Row])
     // TODO: use the 'only take 1/2' rule (example) or other constraints
 }
 
-fn traverse(table: &mut Vec<Row>, key: String, value: Value, parent: u32)
+fn traverse(
+    table: &mut Vec<StateTransition>,
+    key: String,
+    value: Value,
+    parent: u32,
+)
 {
     use RowType::*;
 
@@ -264,19 +269,31 @@ fn traverse(table: &mut Vec<Row>, key: String, value: Value, parent: u32)
 
     match value
     {
-        Value::Null => table.push(Row::new(new_id, parent, key, "", Nil)),
-        Value::Bool(tf) => table.push(Row::new(new_id, parent, key, tf, Bit)),
+        Value::Null =>
+        {
+            table.push(StateTransition::new(new_id, parent, key, "", Nil))
+        }
+        Value::Bool(tf) =>
+        {
+            table.push(StateTransition::new(new_id, parent, key, tf, Bit))
+        }
         Value::Number(num) =>
         {
-            table.push(Row::new(new_id, parent, key, num, Num))
+            table.push(StateTransition::new(new_id, parent, key, num, Num))
         }
         Value::String(txt) =>
         {
-            table.push(Row::new(new_id, parent, key, txt, Txt))
+            table.push(StateTransition::new(new_id, parent, key, txt, Txt))
         }
         Value::Array(arr) =>
         {
-            table.push(Row::new(new_id, parent, key.clone(), "[", Arr));
+            table.push(StateTransition::new(
+                new_id,
+                parent,
+                key.clone(),
+                "[",
+                Arr,
+            ));
 
             for (i, element) in arr.into_iter().enumerate()
             {
@@ -285,7 +302,7 @@ fn traverse(table: &mut Vec<Row>, key: String, value: Value, parent: u32)
         }
         Value::Object(map) =>
         {
-            table.push(Row::new(new_id, parent, key, "{", Obj));
+            table.push(StateTransition::new(new_id, parent, key, "{", Obj));
 
             for (name, element) in map
             {
@@ -310,7 +327,7 @@ impl Display for RowType
 
 /// Invariant: Self::Id is the index within it's container.
 #[derive(Debug, Clone)]
-struct Row
+struct StateTransition
 {
     id: u32,
     parent: u32,
@@ -319,7 +336,7 @@ struct Row
     ty: RowType,
 }
 
-impl Row
+impl StateTransition
 {
     fn new<K: ToString, V: ToString>(
         id: u32,
@@ -483,7 +500,7 @@ fn main() -> PqResult<()>
     Ok(())
 }
 
-fn tokens_to_rows(tokens: &[Tok]) -> io::Result<Vec<Row>>
+fn tokens_to_rows(tokens: &[Tok]) -> io::Result<Vec<StateTransition>>
 {
     use Action as Act;
     use State as Stt;
@@ -620,7 +637,7 @@ fn tokens_to_rows(tokens: &[Tok]) -> io::Result<Vec<Row>>
                 id_counter += 1;
                 let parent = id_stack[id_stack.len() - 1];
 
-                let parent_node: &Row =
+                let parent_node: &StateTransition =
                     rows.get(parent as usize).expect(BUF_MOD);
 
                 let mut key = String::new();
@@ -632,7 +649,9 @@ fn tokens_to_rows(tokens: &[Tok]) -> io::Result<Vec<Row>>
                 let value = token.to_string();
                 let row_type = RowType::from(token.clone());
 
-                rows.push(Row::new(id, parent, key, value, row_type));
+                rows.push(StateTransition::new(
+                    id, parent, key, value, row_type,
+                ));
             }
             Act::END =>
             {
@@ -843,7 +862,7 @@ fn tokens_to_rows(tokens: &[Tok]) -> io::Result<Vec<Row>>
     Ok(rows)
 }
 
-fn rows_to_json(rows: &[Row]) -> String
+fn rows_to_json(rows: &[StateTransition]) -> String
 {
     let mut string = String::new();
     let mut is_array = true; // * All other values print their keys
