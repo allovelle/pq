@@ -375,7 +375,7 @@ mod impl_char_range_inclusive
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Hash)]
-struct Row
+struct StateTransition
 {
     /// The state performing an examination for transition determination
     from: State,
@@ -390,7 +390,7 @@ struct Row
     act: Act,
 }
 
-impl Row
+impl StateTransition
 {
     const fn zero() -> Self
     {
@@ -431,78 +431,199 @@ impl Row
     }
 }
 
-pub struct UsageReport
+use diagnostics::UsageReport;
+mod diagnostics
 {
-    used_transitions: HashSet<Row>,
-    expect_transitions: HashSet<Row>,
-    errors: usize,
-    documents_examined: usize,
-}
 
-impl UsageReport
-{
-    fn new() -> Self
+    use crate::ToDebug;
+    use crate::{
+        Act, State, StateTransition, Tok, longest_variant_name,
+        max_state_transitions, state_transition_table,
+    };
+    use crossterm::style::Stylize;
+    use std::collections::HashSet;
+
+    #[derive(Default, Clone)]
+    pub struct UsageReport
     {
-        let used_transitions = HashSet::with_capacity(max_state_transitions());
-        let expect_transitions = HashSet::from_iter(state_transition_table());
-        let (documents_examined, errors) = (0, 0);
-        Self {
-            used_transitions,
-            expect_transitions,
-            documents_examined,
-            errors,
+        used_transitions: HashSet<StateTransition>,
+        expect_transitions: HashSet<StateTransition>,
+        errors: usize,
+        documents_examined: usize,
+        w_state: usize,
+        w_tok_act: usize,
+        w_ch: usize,
+        w_buf: usize,
+    }
+
+    impl UsageReport
+    {
+        pub fn new() -> Self
+        {
+            let used_transitions =
+                HashSet::with_capacity(max_state_transitions());
+            let expect_transitions =
+                HashSet::from_iter(state_transition_table());
+            let mut this = Self {
+                used_transitions,
+                expect_transitions,
+                ..Default::default()
+            };
+            this.w_state = longest_variant_name::<State>();
+            this.w_tok_act = longest_variant_name::<Act>() + 2;
+            this.w_ch = format!("{:?}", '\u{10FFFF}').len();
+            this.w_buf = 8;
+            this
         }
-    }
 
-    fn new_document(&mut self)
-    {
-        self.documents_examined += 1;
-    }
-
-    fn log_row(&mut self, row: Row)
-    {
-        self.used_transitions.insert(row);
-    }
-
-    fn error(&mut self)
-    {
-        self.errors += 1;
-    }
-
-    fn report(&self)
-    {
-        let dbg_msg = format!(
-            "Hit {} out of {} state transitions, missed:",
-            self.used_transitions.len(),
-            self.expect_transitions.len(),
-        );
-
-        let style = if self.used_transitions.len()
-            < self.expect_transitions.len()
+        pub fn log_new_document(&self)
         {
-            <String as Stylize>::yellow
+            let Self { w_state, w_tok_act, w_ch, w_buf, .. } = self;
+
+            let header = format!(
+                "{:<w_state$} {:<w_ch$} {:<w_state$} {:<w_tok_act$} {:<16} {:<16} {:<w_buf$} {:<w_buf$}",
+                "State",
+                "Char",
+                "Next",
+                "Act",
+                "Accept",
+                "Except",
+                "PreBuf",
+                "EndBuf"
+            );
+            println!("\n\n\n{}", header.cyan().underlined());
         }
-        else
-        {
-            <String as Stylize>::reset
-        };
 
-        println!("{}", style(dbg_msg));
-
-        if self.used_transitions.len() < self.expect_transitions.len()
+        pub fn log_state_transition(
+            &mut self,
+            curr: State,
+            ch: char,
+            next: StateTransition,
+            buf: String,
+        )
         {
-            for unused in self
-                .expect_transitions
-                .difference(&self.used_transitions)
-                .take(4)
+            let row = next;
+            self.used_transitions.insert(row);
+            ret_if!(row.from == row.onto && row.act == Act::IGN, ());
+            let Self { w_state, w_tok_act, w_ch, w_buf, .. } = self;
+
+            println!(
+                "{from:<w_state$} {char:<w_ch$} {next:<w_state$} {act:<w_tok_act$} {acc:<16} {exc:<16} {prebuf:<w_buf$} {postbuf:w_buf$}",
+                from = format!("{:?}", curr),
+                char = format!("{:?}", ch),
+                next = format!("{:?}", row.onto),
+                act = format!("{:?}", row.act),
+                acc = format!("{:?}", row.accept),
+                exc = format!("{:?}", row.except),
+                prebuf = format!("{:?}", buf),
+                postbuf = format!("{:?}   ", match row.act
+                {
+                    Act::FIN => ch.to_string(),
+                    Act::TOK | Act::ATK => String::new(),
+                    Act::ACC => format!("{buf}{ch}"),
+                    Act::IGN => buf.clone(),
+                    Act::AGN => String::new(),
+                })
+            );
+
+            if row.onto == State::end_state()
             {
-                println!("{}", style(unused.to_debug()))
+                println!("Hit explicit {} state", "END".underlined());
             }
-            println!("{}", style("...".to_string()));
-            println!("{}", style("...".to_string()));
         }
 
-        println!("Hit {} errors", self.errors.to_string().red());
+        pub fn log_end_document(&self, toks: &Vec<Tok>)
+        {
+            println!("\n{}\n", format!("Tokens: {toks:?}").green());
+        }
+
+        pub fn new_document(&mut self)
+        {
+            self.documents_examined += 1;
+        }
+
+        pub fn log_row(&mut self, row: StateTransition)
+        {
+            self.used_transitions.insert(row);
+        }
+
+        pub fn error(&mut self)
+        {
+            self.errors += 1;
+        }
+
+        pub fn report(&self)
+        {
+            let dbg_msg = format!(
+                "Hit {} out of {} state transitions, missed:",
+                self.used_transitions.len(),
+                self.expect_transitions.len(),
+            );
+
+            let style = if self.used_transitions.len()
+                < self.expect_transitions.len()
+            {
+                <String as Stylize>::yellow
+            }
+            else
+            {
+                <String as Stylize>::reset
+            };
+
+            println!("{}", style(dbg_msg));
+
+            if self.used_transitions.len() < self.expect_transitions.len()
+            {
+                for unused in self
+                    .expect_transitions
+                    .difference(&self.used_transitions)
+                    .take(4)
+                {
+                    println!("{}", style(unused.to_debug()))
+                }
+                println!("{}", style("...".to_string()));
+                println!("{}", style("...".to_string()));
+            }
+
+            println!("Hit {} errors", self.errors.to_string().red());
+        }
+
+        pub fn emit_state_transition_table(table: &[StateTransition])
+        {
+            let state = longest_variant_name::<State>();
+            let tok_act = longest_variant_name::<Act>();
+            let accept = {
+                table
+                    .iter()
+                    .map(|s| {
+                        // Within('\u{10FFFF}', '\u{10FFFF}');
+                        let len_acc = format!("{:?}", s.accept).len();
+                        let len_exc = format!("{:?}", s.except).len();
+                        len_acc.max(len_exc)
+                    })
+                    .max()
+                    .unwrap_or_default()
+            };
+            let header = format!(
+                "| {:<state$} | {:^accept$} | {:^accept$} | {:<state$} | {:<tok_act$} |",
+                "From", "Accept", "Except", "Onto", "Action",
+            );
+
+            println!("{}", header.blue().underlined());
+
+            for row in table
+            {
+                println!(
+                    "| {fro:<state$} | {acc:^accept$} | {exc:^accept$} | {to:<state$} | {act:<tok_act$} |",
+                    fro = format!("{:?}", row.from),
+                    acc = format!("{:?}", row.accept),
+                    exc = format!("{:?}", row.except),
+                    to = format!("{:?}", row.onto),
+                    act = format!("{:?}", row.act),
+                );
+            }
+            println!();
+        }
     }
 }
 
@@ -510,7 +631,7 @@ pub fn tokenize(source: &str, usage_report: &mut UsageReport) -> PqResult<()>
 {
     usage_report.new_document();
 
-    let transitions: [Row; _] = state_transition_table();
+    let transitions: [StateTransition; _] = state_transition_table();
     let mut curr = BEG;
     let mut buf = String::with_capacity(32);
     let mut toks: Vec<Tok> = Vec::with_capacity(source.len());
@@ -980,19 +1101,20 @@ const fn max_state_transitions() -> usize
     transitions
 }
 
-const fn state_transition_table() -> [Row; STATE_TRANSITION_TABLE.len()]
+const fn state_transition_table()
+-> [StateTransition; STATE_TRANSITION_TABLE.len()]
 {
     #[cfg(false)]
     const EXPANDED_TABLE_LEN: usize = max_state_transitions();
     // let mut rows: [Row; EXPANDED_TABLE_LEN] = [Row::zero(); EXPANDED_TABLE_LEN];
-    let mut rows: [Row; STATE_TRANSITION_TABLE.len()] =
-        [Row::zero(); STATE_TRANSITION_TABLE.len()];
+    let mut rows: [StateTransition; STATE_TRANSITION_TABLE.len()] =
+        [StateTransition::zero(); STATE_TRANSITION_TABLE.len()];
 
     let mut row_udx = 0usize;
     while row_udx < rows.len()
     {
         let (from, accept, except, onto, act) = STATE_TRANSITION_TABLE[row_udx];
-        rows[row_udx] = Row { from, accept, except, onto, act };
+        rows[row_udx] = StateTransition { from, accept, except, onto, act };
         row_udx += 1;
     }
 
@@ -1021,7 +1143,8 @@ const fn state_transition_table() -> [Row; STATE_TRANSITION_TABLE.len()]
                     udx_ch += ch.len_utf8();
 
                     let empty = '\0' ..= '\0';
-                    let row = Row::new(from, ch ..= ch, empty, onto, act);
+                    let row =
+                        StateTransition::new(from, ch ..= ch, empty, onto, act);
 
                     rows[fast] = row;
                     fast += 1; // Outpace input table index
@@ -1051,8 +1174,13 @@ const fn state_transition_table() -> [Row; STATE_TRANSITION_TABLE.len()]
                     //     range,
                     // );
 
-                    let row =
-                        Row::new(from, begin ..= close, ch ..= ch, onto, act);
+                    let row = StateTransition::new(
+                        from,
+                        begin ..= close,
+                        ch ..= ch,
+                        onto,
+                        act,
+                    );
 
                     // * 100% chance of success: continuously split accept by ch
 
@@ -1089,7 +1217,8 @@ const fn state_transition_table() -> [Row; STATE_TRANSITION_TABLE.len()]
                     udx_ch += ch.len_utf8();
 
                     let empty = '\0' ..= '\0';
-                    let row = Row::new(from, empty, ch ..= ch, onto, act);
+                    let row =
+                        StateTransition::new(from, empty, ch ..= ch, onto, act);
 
                     rows[fast] = row;
                     fast += 1; // Outpace input table index
@@ -1098,7 +1227,7 @@ const fn state_transition_table() -> [Row; STATE_TRANSITION_TABLE.len()]
 
             (Within(from_in, upto_in), Within(from_ou, upto_ou)) =>
             {
-                let row = Row::new(
+                let row = StateTransition::new(
                     from,
                     from_in ..= upto_in,
                     from_ou ..= upto_ou,
@@ -1112,7 +1241,13 @@ const fn state_transition_table() -> [Row; STATE_TRANSITION_TABLE.len()]
             (Within(from_in, upto_in), Unused) =>
             {
                 let empty = '\0' ..= '\0';
-                let row = Row::new(from, from_in ..= upto_in, empty, onto, act);
+                let row = StateTransition::new(
+                    from,
+                    from_in ..= upto_in,
+                    empty,
+                    onto,
+                    act,
+                );
                 rows[fast] = row;
                 fast += 1;
             }
@@ -1120,7 +1255,13 @@ const fn state_transition_table() -> [Row; STATE_TRANSITION_TABLE.len()]
             (Unused, Within(from_in, upto_in)) =>
             {
                 let empty = '\0' ..= '\0';
-                let row = Row::new(from, empty, from_in ..= upto_in, onto, act);
+                let row = StateTransition::new(
+                    from,
+                    empty,
+                    from_in ..= upto_in,
+                    onto,
+                    act,
+                );
                 rows[fast] = row;
                 fast += 1;
             }
@@ -1134,7 +1275,7 @@ const fn state_transition_table() -> [Row; STATE_TRANSITION_TABLE.len()]
     rows
 }
 
-fn emit_table(table: &[Row])
+fn emit_table(table: &[StateTransition])
 {
     let state = longest_variant_name::<State>();
     let tok_act = longest_variant_name::<Act>();
@@ -1197,7 +1338,7 @@ fn main() -> PqResult<()>
         {"a": 0, "b": 1, "c": 2}
     "#;
 
-    let json = std::fs::read_to_string("json0.jsonl")?;
+    let json = include_str!("../../jsonl.jsonl");
 
     let mut usage_report = UsageReport::new();
 

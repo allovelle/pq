@@ -480,7 +480,10 @@ fn main() -> PqResult<()>
     traverse(&mut table, String::new(), value.clone(), 0);
     // ! view_table(&table);
 
-    let tokens = tokenize(&value.to_string())?;
+    let mut usage_report = tok::diagnostics::UsageReport::new();
+    let tokens = tokenize(&value.to_string(), &mut usage_report)?;
+    usage_report.report();
+
     let rows = tokens_to_rows(&tokens)?;
 
     println!("{GREEN}{:#?}{RESET}", table);

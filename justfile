@@ -1,7 +1,7 @@
 stream:
     #!/usr/bin/env python3
     import time, random, sys
-    buffer = open('json1.json').read()
+    buffer = open('json.json').read()
     offset, length = 0, random.randint(1, 8)
     while buffer[offset:offset + length]:
         try:

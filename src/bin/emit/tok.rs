@@ -1,7 +1,7 @@
 use crate::PqResult;
 use crate::replayable_iterator::Replayable;
 use crossterm::style::Stylize;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::ops::{Deref, RangeInclusive};
 use std::{fmt, hash};
 use strum::*;
@@ -384,82 +384,205 @@ impl StateTransition
     }
 }
 
-pub struct UsageReport
+use diagnostics::UsageReport;
+pub mod diagnostics
 {
-    used_transitions: HashSet<StateTransition>,
-    expect_transitions: HashSet<StateTransition>,
-    errors: usize,
-    documents_examined: usize,
-}
+    use super::ToDebug;
+    use super::{
+        Act, State, StateTransition, Tok, longest_variant_name,
+        max_state_transitions, state_transition_table,
+    };
+    use crossterm::style::Stylize;
+    use std::collections::HashSet;
 
-impl UsageReport
-{
-    fn new() -> Self
+    #[derive(Default, Clone)]
+    pub struct UsageReport
     {
-        let used_transitions = HashSet::with_capacity(max_state_transitions());
-        let expect_transitions = HashSet::from_iter(state_transition_table());
-        let (documents_examined, errors) = (0, 0);
-        Self {
-            used_transitions,
-            expect_transitions,
-            documents_examined,
-            errors,
+        used_transitions: HashSet<StateTransition>,
+        expect_transitions: HashSet<StateTransition>,
+        errors: usize,
+        documents_examined: usize,
+        w_state: usize,
+        w_tok_act: usize,
+        w_ch: usize,
+        w_buf: usize,
+    }
+
+    impl UsageReport
+    {
+        pub fn new() -> Self
+        {
+            let used_transitions =
+                HashSet::with_capacity(max_state_transitions());
+            let expect_transitions =
+                HashSet::from_iter(state_transition_table());
+            let mut this = Self {
+                used_transitions,
+                expect_transitions,
+                ..Default::default()
+            };
+            this.w_state = longest_variant_name::<State>();
+            this.w_tok_act = longest_variant_name::<Act>() + 2;
+            this.w_ch = format!("{:?}", '\u{10FFFF}').len();
+            this.w_buf = 8;
+            this
         }
-    }
 
-    fn new_document(&mut self)
-    {
-        self.documents_examined += 1;
-    }
-
-    fn log_row(&mut self, row: StateTransition)
-    {
-        self.used_transitions.insert(row);
-    }
-
-    fn error(&mut self)
-    {
-        self.errors += 1;
-    }
-
-    fn report(&self)
-    {
-        let dbg_msg = format!(
-            "Hit {} out of {} state transitions, missed:",
-            self.used_transitions.len(),
-            self.expect_transitions.len(),
-        );
-
-        let style = if self.used_transitions.len()
-            < self.expect_transitions.len()
+        pub fn log_new_document(&self)
         {
-            <String as Stylize>::yellow
+            let Self { w_state, w_tok_act, w_ch, w_buf, .. } = self;
+
+            let header = format!(
+                "{:<w_state$} {:<w_ch$} {:<w_state$} {:<w_tok_act$} {:<16} {:<16} {:<w_buf$} {:<w_buf$}",
+                "State",
+                "Char",
+                "Next",
+                "Act",
+                "Accept",
+                "Except",
+                "PreBuf",
+                "EndBuf"
+            );
+            println!("\n\n\n{}", header.cyan().underlined());
         }
-        else
-        {
-            <String as Stylize>::reset
-        };
 
-        println!("{}", style(dbg_msg));
-
-        if self.used_transitions.len() < self.expect_transitions.len()
+        pub fn log_state_transition(
+            &mut self,
+            curr: State,
+            ch: char,
+            next: StateTransition,
+            buf: String,
+        )
         {
-            for unused in self
-                .expect_transitions
-                .difference(&self.used_transitions)
-                .take(4)
+            let row = next;
+            self.used_transitions.insert(row);
+            ret_if!(row.from == row.onto && row.act == Act::IGN, ());
+            let Self { w_state, w_tok_act, w_ch, w_buf, .. } = self;
+
+            println!(
+                "{from:<w_state$} {char:<w_ch$} {next:<w_state$} {act:<w_tok_act$} {acc:<16} {exc:<16} {prebuf:<w_buf$} {postbuf:w_buf$}",
+                from = format!("{:?}", curr),
+                char = format!("{:?}", ch),
+                next = format!("{:?}", row.onto),
+                act = format!("{:?}", row.act),
+                acc = format!("{:?}", row.accept),
+                exc = format!("{:?}", row.except),
+                prebuf = format!("{:?}", buf),
+                postbuf = format!("{:?}   ", match row.act
+                {
+                    Act::FIN => ch.to_string(),
+                    Act::TOK | Act::ATK => String::new(),
+                    Act::ACC => format!("{buf}{ch}"),
+                    Act::IGN => buf.clone(),
+                    Act::AGN => String::new(),
+                })
+            );
+
+            if row.onto == State::end_state()
             {
-                println!("{}", style(unused.to_debug()))
+                println!("Hit explicit {} state", "END".underlined());
             }
-            println!("{}", style("...".to_string()));
-            println!("{}", style("...".to_string()));
         }
 
-        println!("Hit {} errors", self.errors.to_string().red());
+        pub fn log_end_document(&self, toks: &Vec<Tok>)
+        {
+            println!("\n{}\n", format!("Tokens: {toks:?}").green());
+        }
+
+        pub fn new_document(&mut self)
+        {
+            self.documents_examined += 1;
+        }
+
+        pub fn log_row(&mut self, row: StateTransition)
+        {
+            self.used_transitions.insert(row);
+        }
+
+        pub fn error(&mut self)
+        {
+            self.errors += 1;
+        }
+
+        pub fn report(&self)
+        {
+            let dbg_msg = format!(
+                "Hit {} out of {} state transitions, missed:",
+                self.used_transitions.len(),
+                self.expect_transitions.len(),
+            );
+
+            let style = if self.used_transitions.len()
+                < self.expect_transitions.len()
+            {
+                <String as Stylize>::yellow
+            }
+            else
+            {
+                <String as Stylize>::reset
+            };
+
+            println!("{}", style(dbg_msg));
+
+            if self.used_transitions.len() < self.expect_transitions.len()
+            {
+                for unused in self
+                    .expect_transitions
+                    .difference(&self.used_transitions)
+                    .take(4)
+                {
+                    println!("{}", style(unused.to_debug()))
+                }
+                println!("{}", style("...".to_string()));
+                println!("{}", style("...".to_string()));
+            }
+
+            println!("Hit {} errors", self.errors.to_string().red());
+        }
+
+        pub fn emit_state_transition_table(table: &[StateTransition])
+        {
+            let state = longest_variant_name::<State>();
+            let tok_act = longest_variant_name::<Act>();
+            let accept = {
+                table
+                    .iter()
+                    .map(|s| {
+                        // Within('\u{10FFFF}', '\u{10FFFF}');
+                        let len_acc = format!("{:?}", s.accept).len();
+                        let len_exc = format!("{:?}", s.except).len();
+                        len_acc.max(len_exc)
+                    })
+                    .max()
+                    .unwrap_or_default()
+            };
+            let header = format!(
+                "| {:<state$} | {:^accept$} | {:^accept$} | {:<state$} | {:<tok_act$} |",
+                "From", "Accept", "Except", "Onto", "Action",
+            );
+
+            println!("{}", header.blue().underlined());
+
+            for row in table
+            {
+                println!(
+                    "| {fro:<state$} | {acc:^accept$} | {exc:^accept$} | {to:<state$} | {act:<tok_act$} |",
+                    fro = format!("{:?}", row.from),
+                    acc = format!("{:?}", row.accept),
+                    exc = format!("{:?}", row.except),
+                    to = format!("{:?}", row.onto),
+                    act = format!("{:?}", row.act),
+                );
+            }
+            println!();
+        }
     }
 }
 
-pub fn tokenize(source: &str) -> PqResult<Vec<Tok>>
+pub fn tokenize(
+    source: &str,
+    usage_report: &mut UsageReport,
+) -> PqResult<Vec<Tok>>
 {
     let transitions: [StateTransition; _] = state_transition_table();
     let mut curr = BEG;
@@ -555,6 +678,8 @@ pub fn tokenize(source: &str) -> PqResult<Vec<Tok>>
             Act::IGN => (),
         }
 
+        usage_report.log_row(row);
+
         if row.onto == State::end_state()
         {
             if false
@@ -567,12 +692,9 @@ pub fn tokenize(source: &str) -> PqResult<Vec<Tok>>
         curr = row.onto;
     }
 
-    if false
-    {
-        println!();
-        println!("{}", format!("Tokens: {toks:?}").green());
-        println!();
-    }
+    println!();
+    println!("{}", format!("Tokens: {toks:?}").green());
+    println!();
 
     Ok(toks)
 }
@@ -1196,19 +1318,24 @@ fn main() -> PqResult<()>
         {"a": 0, "b": 1, "c": 2}
     "#;
 
-    let json = std::fs::read_to_string("json0.jsonl")?;
+    let json = include_str!("../../../jsonl.jsonl");
+
+    let mut usage_report = UsageReport::new();
 
     for line in json.lines().filter(|line| {
         let trim = line.trim();
         !trim.is_empty() && !trim.starts_with("//")
     })
     {
-        if let Err(err) = tokenize(line)
+        if let Err(err) = tokenize(line, &mut usage_report)
         {
+            usage_report.error();
             println!("{}", format!("{err}").red().bold());
             println!("{}", format!("tokenizing line: {}", line).red().italic());
         }
     }
+
+    usage_report.report();
 
     Ok(())
 }
