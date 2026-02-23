@@ -1,4 +1,15 @@
+// ? Basic query parser using Crossterm so it's a TUI, but it's very basic
+// ? Basic query parser using Crossterm so it's a TUI, but it's very basic
+// ? Basic query parser using Crossterm so it's a TUI, but it's very basic
+// ? Basic query parser using Crossterm so it's a TUI, but it's very basic
+// ? Basic query parser using Crossterm so it's a TUI, but it's very basic
+// ? Basic query parser using Crossterm so it's a TUI, but it's very basic
+// ? Basic query parser using Crossterm so it's a TUI, but it's very basic
+// ? Basic query parser using Crossterm so it's a TUI, but it's very basic
+// ? Basic query parser using Crossterm so it's a TUI, but it's very basic
+
 use crossterm::style::{Attribute, Color, Stylize};
+// ? Basic query parser using Crossterm so it's a TUI, but it's very basic
 use crossterm::{ExecutableCommand, QueueableCommand, cursor, style, terminal};
 use std::io::{self, Write, stdout};
 
@@ -40,21 +51,21 @@ fn parse_slice(input: &str, len: usize) -> Option<Vec<usize>>
     // Parse syntax like: start:stop:step
     let parts: Vec<&str> = input.split(':').collect();
 
-    if let &[a, b, c] = parts.as_slice()
-    {
-    }
-    else
-    {
-        panic!()
-    };
+    // if let &[a, b, c] = parts.as_slice()
+    // {
+    // }
+    // else
+    // {
+    //     panic!()
+    // };
 
-    match &parts[..]
+    match parts[..]
     {
-        &[index] =>
+        [_index] =>
         {}
-        &[start, stop] =>
+        [_start, _stop] =>
         {}
-        &[start, stop, step] =>
+        [_start, _stop, _step] =>
         {}
         _ => panic!(),
     }
@@ -149,7 +160,6 @@ fn main() -> Result<(), Box<dyn Error>>
 
     loop
     {
-        // Clear + redraw
         execute!(
             stdout,
             terminal::Clear(ClearType::All),
@@ -163,44 +173,46 @@ fn main() -> Result<(), Box<dyn Error>>
                 if let Some(line) = lines.get(i)
                 {
                     execute!(stdout, cursor::MoveToColumn(0))?;
-                    writeln!(stdout, "{line}")?;
+                    execute!(stdout, style::Print(format!("{line}\r\n")))?;
                 }
             }
         }
         else
         {
-            execute!(stdout, cursor::MoveToColumn(0))?;
-            writeln!(stdout, "(invalid slice)")?;
+            execute!(stdout, style::Print("(invalid slice)\r\n"))?;
         }
 
-        // Draw input at bottom
         let size = terminal::size()?;
         let last_line = size.1 - 1;
 
-        execute!(stdout, cursor::MoveTo(0, last_line))?;
-        write!(stdout, "slice> {input}")?;
+        execute!(
+            stdout,
+            cursor::MoveTo(0, last_line),
+            style::Print(format!("slice using start:stop:step > {input}"))
+        )?;
+        execute!(
+            stdout,
+            cursor::MoveTo(0, last_line - 1),
+            style::Print(format!("ESC to exit"))
+        )?;
         stdout.flush()?;
 
         // Handle events
         if event::poll(Duration::from_millis(100))?
+            && let Event::Key(k) = event::read()?
         {
-            match event::read()?
+            match k.code
             {
-                Event::Key(k) => match k.code
+                KeyCode::Esc => break,
+                KeyCode::Char(c) => input.push(c),
+                KeyCode::Backspace =>
                 {
-                    KeyCode::Esc => break,
-                    KeyCode::Char(c) => input.push(c),
-                    KeyCode::Backspace =>
-                    {
-                        input.pop();
-                    }
-                    KeyCode::Enter =>
-                    {
-                        input.clear();
-                    }
-                    _ =>
-                    {}
-                },
+                    input.pop();
+                }
+                KeyCode::Enter =>
+                {
+                    input.clear();
+                }
                 _ =>
                 {}
             }
