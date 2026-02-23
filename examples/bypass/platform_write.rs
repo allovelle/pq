@@ -1,8 +1,7 @@
-// main.rs
-//
-// Cross-platform unbuffered stdout writer.
-// Writes 2 bytes every 10ms directly to stdout.
-
+//! main.rs
+//!
+//! Cross-platform unbuffered stdout writer.
+//! Writes 2 bytes every 10ms directly to stdout.
 use std::time::Duration;
 
 #[cfg(unix)]

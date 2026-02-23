@@ -7,24 +7,42 @@ use platform_read::*;
 use platform_read_async::*;
 use platform_write::*;
 use platform_write_async::*;
-
-pub use clap::Parser;
 use std::fs::File;
-use std::io::{self, ErrorKind, Read};
+use std::io::{ErrorKind, Read};
 use std::os::unix::io::{AsRawFd, FromRawFd};
 
-/// Queries JSON from the CLI
+use clap::{Parser, Subcommand};
+
+/// Reads and writes using unbuffered io using sync or asynchronous code.
+///
+/// Examples:
+/// ```bash
+/// # Synchronous write and synchronous read
+/// cargo run --example bypass write | cargo run --example bypass read
+/// # Asynchronous write and asynchronous read
+/// cargo run --example bypass write-async | cargo run --example bypass read-async
+/// ```
 #[derive(Parser, Debug)]
-#[command()]
+#[command(version, about)]
 pub struct Cli
 {
-    // /// The JSON file path to ingest & query. Defaults to STDIN.
-    // #[arg(short, long)]
-    // pub file: Option<String>,
+    #[command(subcommand)]
+    pub command: Command,
+}
 
-    // /// The query to run on the provided JSON
-    // pub query: Option<String>,
-    command: String,
+#[derive(Subcommand, Debug)]
+pub enum Command
+{
+    /// Read from the platform
+    Read,
+    /// Read from the platform asynchronously
+    ReadAsync,
+    /// Write to the platform
+    Write,
+    /// Write to the platform asynchronously
+    WriteAsync,
+    /// Main handle would block
+    Blocking,
 }
 
 pub fn parse() -> Cli
@@ -34,17 +52,16 @@ pub fn parse() -> Cli
 
 fn main()
 {
-    let args = Cli::parse();
-    match args.command.as_str()
+    let args = parse();
+    match args.command
     {
-        "read" => main_platform_read(),
-        "read-async" => main_platform_read_async(),
-        "write" => main_platform_write(),
-        "write-async" => main_platform_write_async(),
-        _ => (),
+        Command::Read => main_platform_read(),
+        Command::ReadAsync => main_platform_read_async(),
+        Command::Write => main_platform_write(),
+        Command::WriteAsync => main_platform_write_async(),
+        Command::Blocking => main_handle_would_block(),
     }
 }
-
 fn main_handle_would_block()
 {
     let mut stdin = unsafe { File::from_raw_fd(std::io::stdin().as_raw_fd()) };
