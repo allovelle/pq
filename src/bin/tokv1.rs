@@ -47,8 +47,8 @@ From, Token, Next, Action:
     TxtEndOrEscHex, Esc, TxtOrEnd, _
 */
 
-use crate::{brk_if, iter::Replayable, ret_if};
 use crossterm::style::Stylize;
+use pq::{brk_if, iter::Replayable, ret_if};
 use std::ops::Deref;
 use strum::VariantNames;
 use thiserror::Error;
@@ -848,7 +848,8 @@ mod impl_char_range_inclusive
 {
     use std::{collections::HashMap, fmt, hash, ops::RangeInclusive};
 
-    use crate::{ret_if, txt::CodepointView};
+    use crate::ret_if;
+    use pq::txt::CodepointView;
 
     use super::*;
 
@@ -1031,4 +1032,10 @@ mod impl_char_range_inclusive
 pub fn longest_variant_name<E: VariantNames>() -> usize
 {
     E::VARIANTS.iter().map(Deref::deref).map(str::len).max().unwrap_or_default()
+}
+
+fn main() -> PqResult<()>
+{
+    tokenize(include_str!("../../json.json"))?;
+    Ok(())
 }
