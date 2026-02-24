@@ -1,5 +1,12 @@
 //! Row attributes to make editing, querying, and formatting easier.
 
+// TODO: The attriute-extraction phase determines the attributes that the
+// TODO: formatting engine uses to emit json
+
+// TODO: Formatting commands use Attributes for custom format settings
+// TODO: Rule: fmt-one-line-always = attr:lone & attr:txt
+// TODO: FmtCmd::ValTxt if fmt_one_line_always(row) => {}
+
 use crate::parser::Row;
 use smallvec::SmallVec;
 use strum::VariantNames;

@@ -4,6 +4,7 @@ mod formatter;
 mod lexer;
 mod parser;
 mod query;
+mod tab;
 mod table;
 mod tok_str_buf;
 mod token_index;
@@ -11,7 +12,6 @@ mod tree;
 
 #[cfg(test)]
 mod tests;
-
 
 use formatter::{FormatConfig, print_formatted};
 use lexer::*;
