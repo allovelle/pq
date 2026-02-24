@@ -37,16 +37,12 @@ pub enum ParseError
     },
 }
 
+#[rustfmt::skip]
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(u8)]
 pub enum RowType
 {
-    Obj,
-    Arr,
-    Str,
-    Num,
-    Bit,
-    Nil,
+    Obj, Arr, Str, Num, Bit, Nil,
 }
 
 /// Invariant: id is the index within its container.
@@ -320,10 +316,10 @@ impl<'src> Parser<'src>
     {
         if let Some((_, tk)) = self.peek_token()
             && tk == kind
-            {
-                self.token_idx += 1;
-                return true;
-            }
+        {
+            self.token_idx += 1;
+            return true;
+        }
         false
     }
 
@@ -815,11 +811,11 @@ impl<'src> Parser<'src>
         // If we have any containers left on the stack (except root), they're unclosed
         if self.container_stack.len() > 1
             && let Some(unclosed) = self.container_stack.last()
-            {
-                return Err(ParseError::UnclosedContainer {
-                    row_id: unclosed.row_id,
-                });
-            }
+        {
+            return Err(ParseError::UnclosedContainer {
+                row_id: unclosed.row_id,
+            });
+        }
 
         Ok(())
     }
