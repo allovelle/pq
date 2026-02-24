@@ -1,4 +1,4 @@
-use std::fmt;
+use crate::txt::iter::{ConstUtf8Iter, Utf8Iter};
 
 /// Returns the byte index of the codepoint *after* the one provided.
 pub const fn utf8_byte_udx_after(buffer: &[u8], udx: usize) -> Option<usize>
@@ -234,65 +234,9 @@ pub const fn utf8_char_on(buffer: &[u8], udx: usize) -> Option<char>
     None
 }
 
-/// Iterator for allowing looping over a string by char.
-#[derive(Debug)]
-pub struct Utf8Iter<'a>
-{
-    bytes: &'a [u8],
-    pos: usize,
-}
-
-impl<'a> Utf8Iter<'a>
-{
-    pub fn new(bytes: &'a [u8]) -> Self
-    {
-        Self { bytes, pos: 0 }
-    }
-}
-
-impl<'a> Iterator for Utf8Iter<'a>
-{
-    type Item = char;
-
-    fn next(&mut self) -> Option<Self::Item>
-    {
-        let codepoint = utf8_char_on(self.bytes, self.pos)?;
-        self.pos += codepoint.len_utf8();
-        Some(codepoint)
-    }
-}
-
 pub fn utf8_iter_chars<'buf>(txt: &'buf str) -> Utf8Iter<'buf>
 {
     Utf8Iter::new(txt.as_bytes())
-}
-
-#[derive(Debug)]
-pub struct ConstUtf8Iter<'a>
-{
-    bytes: &'a [u8],
-    pos: usize,
-}
-
-impl<'a> ConstUtf8Iter<'a>
-{
-    pub const fn new(bytes: &'a [u8]) -> Self
-    {
-        Self { bytes, pos: 0 }
-    }
-
-    pub const fn next(&mut self) -> Option<char>
-    {
-        if let Some(codepoint) = utf8_char_on(self.bytes, self.pos)
-        {
-            self.pos += codepoint.len_utf8();
-            Some(codepoint)
-        }
-        else
-        {
-            None
-        }
-    }
 }
 
 pub const fn utf8_iter_chars_const<'buf>(txt: &'buf str)
@@ -301,100 +245,7 @@ pub const fn utf8_iter_chars_const<'buf>(txt: &'buf str)
     ConstUtf8Iter::new(txt.as_bytes())
 }
 
-impl<T: fmt::Debug> ToDebug for T {}
-pub trait ToDebug: fmt::Debug
+pub fn utf8_iter_part_chars<'buf>(txt: &'buf str) -> Utf8Iter<'buf>
 {
-    /// Equivalent to `format!("{:?}", thing);`
-    fn to_debug(&self) -> String
-    {
-        format!("{self:?}")
-    }
-
-    /// Equivalent to `format!("{:#?}", thing);`
-    fn to_long_debug(&self) -> String
-    {
-        format!("{self:#?}")
-    }
-
-    /// A debug view of a debug view (includes the outer quotes)
-    fn to_debug_literal(&self) -> String
-    {
-        format!("{:?}", format!("{}", self.to_debug()))
-    }
-
-    /// Standard format does not allow for width & alignment formatting.
-    fn to_debug_left(&self, space: usize) -> String
-    {
-        format!("{:<space$}", format!("{self:?}"))
-    }
-
-    /// Standard format does not allow for width & alignment formatting.
-    fn to_debug_right(&self, space: usize) -> String
-    {
-        format!("{:>space$}", format!("{self:?}"))
-    }
-
-    /// Standard format does not allow for width & alignment formatting.
-    fn to_debug_center(&self, space: usize) -> String
-    {
-        format!("{:^space$}", format!("{self:?}"))
-    }
-}
-
-// TODO: This is a pretty formatter for 1-4 byte codepoints to use the U+... fmt
-/// **Format ASCII & multi-byte codepoints as either their escape-code format
-/// `\u{AB12}` or their Unicode codepoint `U+AB12`.**
-pub trait CodepointView
-{
-    fn fmt_escape(self) -> String;
-    fn fmt_unicode(self) -> String;
-}
-
-impl CodepointView for char
-{
-    fn fmt_escape(self) -> String
-    {
-        format!("\\u{:04X}", self as u32)
-    }
-
-    fn fmt_unicode(self) -> String
-    {
-        format!("U+{:04X}", self as u32)
-    }
-}
-
-/// Partial iterator for allowing looping over UTF-8 codepoint fragments.
-/// Terminates at end of buffer or when a partial fragment is hit. Returns the
-/// size of the partial character. 0-4 bytes, 0 for end of stream, 1-4 for valid
-/// codepoints that were sent fragmented.
-#[derive(Debug)]
-pub struct Utf8PartIter<'a>
-{
-    bytes: &'a [u8],
-    pos: usize,
-}
-
-impl<'a> Utf8PartIter<'a>
-{
-    pub fn new(bytes: &'a [u8]) -> Self
-    {
-        Self { bytes, pos: 0 }
-    }
-}
-
-impl<'a> Iterator for Utf8PartIter<'a>
-{
-    type Item = char;
-
-    fn next(&mut self) -> Option<Self::Item>
-    {
-        let codepoint = utf8_char_on(self.bytes, self.pos)?;
-        self.pos += codepoint.len_utf8();
-        Some(codepoint)
-    }
-}
-
-pub fn utf8_iter_part_chars<'buf>(txt: &'buf str) -> Utf8PartIter<'buf>
-{
-    Utf8PartIter::new(txt.as_bytes())
+    Utf8Iter::new(txt.as_bytes())
 }

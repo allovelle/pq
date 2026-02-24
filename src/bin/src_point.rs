@@ -74,7 +74,7 @@ fn main()
 
     let mut sent = Sentinel::new();
 
-    for (i, ch) in pq::txt::utf8_iter_chars(source).enumerate()
+    for (i, ch) in pq::txt::utf8::utf8_iter_chars(source).enumerate()
     {
         let point =
             SrcPoint::create(sent.max_line(), sent.max_char(), sent).unwrap();
