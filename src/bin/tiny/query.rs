@@ -123,6 +123,30 @@ pub fn execute_pipeline(
         {
             Query::SelectKey(select) =>
             {
+                if table[id].ty != RowType::Obj
+                {
+                    let err =
+                        PqErr::QueryErr("cannot select key from non-object");
+                    return Err(err);
+                }
+
+                // TODO: USE THE NEW TREE TABLE HERE
+                // TODO: USE THE NEW TREE TABLE HERE
+                // TODO: USE THE NEW TREE TABLE HERE
+                // TODO: USE THE NEW TREE TABLE HERE
+                // TODO: USE THE NEW TREE TABLE HERE
+                // TODO: USE THE NEW TREE TABLE HERE
+                // crate::tree::RowTree;
+                // TODO: USE THE NEW TREE TABLE HERE
+                // TODO: USE THE NEW TREE TABLE HERE
+                // TODO: USE THE NEW TREE TABLE HERE
+                // TODO: USE THE NEW TREE TABLE HERE
+                // TODO: USE THE NEW TREE TABLE HERE
+                // TODO: USE THE NEW TREE TABLE HERE
+            }
+
+            Query::SelectKey(select) if false =>
+            {
                 // If not first and no sibling and not last empty obj/arr?
                 // Find first child,
                 // Iter siblings
@@ -144,11 +168,6 @@ pub fn execute_pipeline(
                 {
                     id = selected.id as usize;
 
-                    // TODO: When new nodes are pushed, their id's no longer
-                    // TODO: equal their index in the overal tree. This is way
-                    // TODO: bad for subsequent queries.
-                    // TODO: Idea: graft the scratch buf into the existing tree
-                    // TODO: and overwrite rows.
                     // TODO: Idea: adjust each node's id with the last node's id
                     // TODO: by plus-ing it and setting the correct parent id as
                     // TODO: well. This requires some methods on the table.
