@@ -849,7 +849,7 @@ mod impl_char_range_inclusive
     use std::{collections::HashMap, fmt, hash, ops::RangeInclusive};
 
     use crate::ret_if;
-    use pq::txt::CodepointView;
+    use pq::txt::view::CodepointView;
 
     use super::*;
 

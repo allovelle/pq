@@ -3,6 +3,56 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
+use crate::parser::RowType;
+
+// Only store copy types for string keys, use string interning
+// Don't store interned string, store String directly
+#[cfg(feature = "store_heap_strs")]
+pub trait Node: Debug + Clone {}
+#[cfg(feature = "store_heap_strs")]
+impl<T: Debug + Clone> Node for T {}
+
+#[cfg(feature = "store_heap_strs")]
+#[derive(Debug, Clone, PartialEq)]
+pub struct Row
+{
+    #[cfg(not(feature = "implicit_row_ids"))]
+    pub id: NodeId,
+    pub par: NodeId,
+    key: String,
+    val: String,
+    ty: RowType,
+}
+
+// ? 1. Use dedicated Row type for the tree table parsing that doesn't require
+// ?     the <T> AND
+// ? 2. Create row type that the parser can use that utilizes the txt buffer for
+// ?     strings
+// ? 3. Create string interning type that hands out byte index offsets instead
+// ?     of references because offsets can be 32-bit instead of usize 64-bit
+
+// TODO: JUST MODIFY THE TXT BUF TO HAND OUT U32 HANDLE AND DEREF U32 HANDLE
+// TODO: INTO &'static str because it's already tracking byte-offsets anyway!
+
+#[cfg(not(feature = "store_heap_strs"))]
+#[cfg(feature = "store_heap_strs")]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Row
+{
+    #[cfg(not(feature = "implicit_row_ids"))]
+    pub id: NodeId,
+    pub par: NodeId,
+    // ! THIS REQUIRES UTF8_BUFFER YIELDING _STATIC_ STRING SLICE REFERENCES
+    // ! EVEN THOUGH THEY ARE _NOT_ STATIC
+    key: &'static str,
+    val: &'static str,
+    ty: RowType,
+}
+
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
 // TODO: *Remove the .root field gradually using .root() instead until removed*
 
 pub type NodeId = u32;
