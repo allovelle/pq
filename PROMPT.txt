@@ -1,0 +1,9 @@
+Please rewrite buf.rs so that it uses all the types in pq::txt::*. As implemented, the Utf8Buffer *panics* if appended bytes are partially missing. This is useless because it's even in it's name "Utf8Buffer" which should allow partial appends. Iteration should be straightforward since all the utf8.rs methods should allow char by char iteration directly. If any method would have panicked because it would have yielded partial codepoints, yield only valid characters and just keep building onto those bytes after every append. This is an append-only data structure. It can handle handing out slices of start->end &'static str (if possible).
+
+Use Vec of bytes so that reallocations occur as needed. Do not return references as this would invalidate them. Use only number indices as offsets and lengths if applicable to the api.
+
+Big feature:
+
+The buffer should directly allow indexing and slicing by usize to get at the raw utf8 data. This is safe because the indices have been returned by the buffer and so they are guaranteed to exist on valid codepoint boundaries.
+
+Cursor api: simple reticle to tick through the buffer using the iter.rs so that direct indices can be passed bypassing byte lengths and using direct char lengths using the cursor or the iter.rs, whichever is more usefule. Feel free to modify any types in pq::txt;
