@@ -6,8 +6,7 @@ use crate::txt::utf8::utf8_char_on;
 
 mod iter_char
 {
-    /// Iterator for allowing looping over a string by char.
-    #[derive(Debug)]
+    #[derive(Debug, Clone)]
     pub struct Utf8Iter<'a>
     {
         bytes: &'a [u8],
@@ -20,6 +19,16 @@ mod iter_char
         {
             Self { bytes, pos: 0 }
         }
+
+        pub fn with_pos(bytes: &'a [u8], pos: usize) -> Self
+        {
+            Self { bytes, pos }
+        }
+
+        pub fn pos(&self) -> usize
+        {
+            self.pos
+        }
     }
 
     impl<'a> Iterator for Utf8Iter<'a>
@@ -28,16 +37,16 @@ mod iter_char
 
         fn next(&mut self) -> Option<Self::Item>
         {
-            let codepoint = super::utf8_char_on(self.bytes, self.pos)?;
-            self.pos += codepoint.len_utf8();
-            Some(codepoint)
+            let ch = super::utf8_char_on(self.bytes, self.pos)?;
+            self.pos += ch.len_utf8();
+            Some(ch)
         }
     }
 }
 
 mod iter_const
 {
-    #[derive(Debug)]
+    #[derive(Debug, Clone, Copy)]
     pub struct ConstUtf8Iter<'a>
     {
         bytes: &'a [u8],
@@ -46,17 +55,17 @@ mod iter_const
 
     impl<'a> ConstUtf8Iter<'a>
     {
-        pub const fn new(bytes: &'a [u8]) -> Self
+        pub fn new(bytes: &'a [u8]) -> Self
         {
             Self { bytes, pos: 0 }
         }
 
-        pub const fn next(&mut self) -> Option<char>
+        pub fn next(&mut self) -> Option<char>
         {
-            if let Some(codepoint) = super::utf8_char_on(self.bytes, self.pos)
+            if let Some(ch) = super::utf8_char_on(self.bytes, self.pos)
             {
-                self.pos += codepoint.len_utf8();
-                Some(codepoint)
+                self.pos += ch.len_utf8();
+                Some(ch)
             }
             else
             {
@@ -68,11 +77,9 @@ mod iter_const
 
 mod iter_part
 {
-    /// Partial iterator for allowing looping over UTF-8 codepoint fragments.
-    /// Terminates at end of buffer or when a partial fragment is hit. Returns the
-    /// size of the partial character. 0-4 bytes, 0 for end of stream, 1-4 for valid
-    /// codepoints that were sent fragmented.
-    #[derive(Debug)]
+    /// Iterates valid UTF-8 chars and stops at the first invalid/partial
+    /// sequence.
+    #[derive(Debug, Clone)]
     pub struct Utf8PartIter<'a>
     {
         bytes: &'a [u8],
@@ -85,6 +92,16 @@ mod iter_part
         {
             Self { bytes, pos: 0 }
         }
+
+        pub fn pos(&self) -> usize
+        {
+            self.pos
+        }
+
+        pub fn remainder(&self) -> &'a [u8]
+        {
+            &self.bytes[self.pos ..]
+        }
     }
 
     impl<'a> Iterator for Utf8PartIter<'a>
@@ -93,9 +110,9 @@ mod iter_part
 
         fn next(&mut self) -> Option<Self::Item>
         {
-            let codepoint = super::utf8_char_on(self.bytes, self.pos)?;
-            self.pos += codepoint.len_utf8();
-            Some(codepoint)
+            let ch = super::utf8_char_on(self.bytes, self.pos)?;
+            self.pos += ch.len_utf8();
+            Some(ch)
         }
     }
 }

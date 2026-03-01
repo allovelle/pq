@@ -1,251 +1,106 @@
-use crate::txt::iter::{ConstUtf8Iter, Utf8Iter};
+use crate::txt::iter::{ConstUtf8Iter, Utf8Iter, Utf8PartIter};
 
-/// Returns the byte index of the codepoint *after* the one provided.
-pub const fn utf8_byte_udx_after(buffer: &[u8], udx: usize) -> Option<usize>
+#[inline]
+const fn utf8_expected_len(byte0: u8) -> Option<usize>
 {
-    if let Some(ch) = utf8_char_on(buffer, udx)
+    if byte0 <= 0x7F
     {
-        let stride = ch.len_utf8();
-        let start = udx + stride - 1;
-        return Some(udx + start);
+        Some(1)
     }
-    None
+    else if byte0 & 0b1110_0000 == 0b1100_0000
+    {
+        Some(2)
+    }
+    else if byte0 & 0b1111_0000 == 0b1110_0000
+    {
+        Some(3)
+    }
+    else if byte0 & 0b1111_1000 == 0b1111_0000
+    {
+        Some(4)
+    }
+    else
+    {
+        None
+    }
 }
 
-pub const fn utf8_codepoint_at(buffer: &[u8], udx: usize)
--> Result<char, usize>
+#[inline]
+const fn is_continuation(byte: u8) -> bool
 {
-    Err(0)
+    byte & 0b1100_0000 == 0b1000_0000
 }
 
-/// Returns the number of bytes of the first char in the buffer. Retrns none if
-/// char is invalid, and 1-4 for valid codepoints. If udx is none, index of 0 is
-/// assumed.
-pub const fn utf8_codepoint_len(buffer: &[u8], udx: usize) -> Option<usize>
+/// Returns the number of bytes in the codepoint starting at `udx`.
+/// Returns `None` if:
+/// 1. `udx` is out of range
+/// 2. `udx` is not on a codepoint start
+/// 3. bytes are incomplete/invalid UTF-8 for that codepoint
+pub fn utf8_codepoint_len(buffer: &[u8], udx: usize) -> Option<usize>
 {
-    const UTF8_MASKS: [[u8; 4]; 4] = [
-        [0b1000_0000, 0, 0, 0b1111_1111],
-        [0b1110_0000, 0b1100_0000, 1, 0b0001_1111],
-        [0b1111_0000, 0b1110_0000, 2, 0b0000_1111],
-        [0b1111_1000, 0b1111_0000, 3, 0b0000_0111],
-    ];
-
-    let udx = 0;
-    let byte0 = if udx < buffer.len() { buffer[udx] } else { 0 };
-    let mut udx_checker = 0;
-
-    while udx_checker < UTF8_MASKS.len()
+    if udx >= buffer.len()
     {
-        let [mask, valid_mask, additional_len, strip] = UTF8_MASKS[udx_checker];
-        udx_checker += 1;
-
-        if udx + additional_len as usize >= buffer.len()
-        {
-            // TODO: Return the delta
-            return None;
-        }
-
-        if byte0 & mask == valid_mask
-        {}
+        return None;
     }
 
-    let mut udx_checker = 0;
-    while udx_checker < UTF8_MASKS.len()
+    let byte0 = buffer[udx];
+    let len = utf8_expected_len(byte0)?;
+
+    if udx + len > buffer.len()
     {
-        let [mask, valid_mask, additional_len, strip] = UTF8_MASKS[udx_checker];
-        udx_checker += 1;
-
-        if udx + additional_len as usize >= buffer.len()
-        {
-            // TODO: Return the delta
-            return None;
-        }
-
-        let len = buffer.len();
-        let offsets =
-            [len.checked_sub(1), len.checked_sub(2), len.checked_sub(3)];
-        let offsets2 = [0; 3];
-
-        let byte1 = match buffer.len().checked_sub(1)
-        {
-            Some(_) => 0,
-            Some(offset) if udx < offset => buffer[udx + 1],
-            None => 0,
-        };
-
-        if byte0 & mask == valid_mask
-        {
-            let mut bytes = [byte0, 0, 0, 0];
-            let mut i = 1;
-            while let Some(boundary) = buffer.len().checked_sub(i)
-                && i < bytes.len()
-                && udx < boundary
-            {
-                bytes[i] = buffer[udx + i];
-                i += 1;
-            }
-
-            // let bytes = [byte0, byte1, byte2, byte3];
-            let strip_masks = [strip, 0b0011_1111, 0b0011_1111, 0b0011_1111];
-            let mut codepoint: u32 = 0;
-
-            let mut udx_i = 0usize;
-            while udx_i < additional_len as usize + 1
-            {
-                let shift = 6 * (additional_len - udx_i as u8);
-                let stripped_byte = bytes[udx_i] & strip_masks[udx_i];
-                codepoint |= (stripped_byte as u32) << (shift as u32);
-                udx_i += 1;
-            }
-
-            // TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above
-            // TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above
-            let char = std::char::from_u32(codepoint);
-            // return char.map(char::len_utf8);
-            return None;
-        }
+        return None;
     }
 
-    None
-}
-
-/// Returns a [char] for a specific byte index. If the byte index is not on a
-/// valid codepoint boundary (specifically the start byte of that codepoint),
-/// [Option::None] is returned.
-pub const fn utf8_char_on(buffer: &[u8], udx: usize) -> Option<char>
-{
-    const UTF8_MASKS: [[u8; 4]; 4] = [
-        [0b1000_0000, 0, 0, 0b1111_1111],
-        [0b1110_0000, 0b1100_0000, 1, 0b0001_1111],
-        [0b1111_0000, 0b1110_0000, 2, 0b0000_1111],
-        [0b1111_1000, 0b1111_0000, 3, 0b0000_0111],
-    ];
-
-    let byte0 = if udx < buffer.len() { buffer[udx] } else { 0 };
-
-    let mut udx_checker = 0;
-    while udx_checker < UTF8_MASKS.len()
+    let mut i = 1usize;
+    while i < len
     {
-        let [mask, valid_mask, additional_len, strip] = UTF8_MASKS[udx_checker];
-        udx_checker += 1;
-
-        if udx + additional_len as usize >= buffer.len()
+        if !is_continuation(buffer[udx + i])
         {
             return None;
         }
-
-        let len = buffer.len();
-        let offsets =
-            [len.checked_sub(1), len.checked_sub(2), len.checked_sub(3)];
-        let offsets2 = [0; 3];
-
-        let byte1 = match buffer.len().checked_sub(1)
-        {
-            Some(_) => 0,
-            Some(offset) if udx < offset => buffer[udx + 1],
-            None => 0,
-        };
-
-        if byte0 & mask == valid_mask
-        {
-            // let byte1 =
-            //     if udx < buffer.len() - 1 { buffer[udx + 1] } else { 0 };
-            // let byte2 =
-            //     if udx < buffer.len() - 2 { buffer[udx + 2] } else { 0 };
-            // let byte3 =
-            //     if udx < buffer.len() - 3 { buffer[udx + 3] } else { 0 };
-
-            // let mut bytes = [byte0, 0, 0, 0];
-            // let mut i = 1;
-            // while i < bytes.len()
-            // {
-            //     if let Some(boundary) = buffer.len().checked_sub(i)
-            //         && i < bytes.len()
-            //         && udx < boundary
-            //     {
-            //         bytes[i] = buffer[udx + i]
-            //     }
-            //     else
-            //     {
-            //         bytes[i] = 0;
-            //     }
-            //     i += 1;
-            // }
-
-            let mut bytes = [byte0, 0, 0, 0];
-            let mut i = 1;
-            while let Some(boundary) = buffer.len().checked_sub(i)
-                && i < bytes.len()
-                && udx < boundary
-            {
-                bytes[i] = buffer[udx + i];
-                i += 1;
-            }
-
-            // let bytes = [byte0, byte1, byte2, byte3];
-            let strip_masks = [strip, 0b0011_1111, 0b0011_1111, 0b0011_1111];
-            let mut codepoint: u32 = 0;
-
-            let mut udx_i = 0usize;
-            while udx_i < additional_len as usize + 1
-            {
-                let shift = 6 * (additional_len - udx_i as u8);
-                let stripped_byte = bytes[udx_i] & strip_masks[udx_i];
-                codepoint |= (stripped_byte as u32) << (shift as u32);
-                udx_i += 1;
-            }
-
-            return std::char::from_u32(codepoint);
-        }
+        i += 1;
     }
 
-    None
+    Some(len)
 }
 
-pub fn utf8_iter_chars<'buf>(txt: &'buf str) -> Utf8Iter<'buf>
+/// Returns the UTF-8 char starting at `udx`.
+pub fn utf8_char_on(buffer: &[u8], udx: usize) -> Option<char>
+{
+    let len = utf8_codepoint_len(buffer, udx)?;
+    let slice = &buffer[udx .. udx + len];
+    match std::str::from_utf8(slice)
+    {
+        Ok(s) => s.chars().next(),
+        Err(_) => None,
+    }
+}
+
+/// Returns char at `udx`, or an error with the furthest valid index.
+pub fn utf8_codepoint_at(buffer: &[u8], udx: usize) -> Result<char, usize>
+{
+    utf8_char_on(buffer, udx).ok_or(udx)
+}
+
+/// Returns the index immediately after the codepoint at `udx`.
+pub fn utf8_byte_udx_after(buffer: &[u8], udx: usize) -> Option<usize>
+{
+    let len = utf8_codepoint_len(buffer, udx)?;
+    Some(udx + len)
+}
+
+pub fn utf8_iter_chars(txt: &str) -> Utf8Iter<'_>
 {
     Utf8Iter::new(txt.as_bytes())
 }
 
-pub const fn utf8_iter_chars_const<'buf>(txt: &'buf str)
--> ConstUtf8Iter<'buf>
+pub fn utf8_iter_chars_const(txt: &str) -> ConstUtf8Iter<'_>
 {
     ConstUtf8Iter::new(txt.as_bytes())
 }
 
-pub fn utf8_iter_part_chars<'buf>(txt: &'buf str) -> Utf8Iter<'buf>
+/// Iterates valid UTF-8 chars until a partial/invalid sequence is hit.
+pub fn utf8_iter_part_chars(txt: &str) -> Utf8PartIter<'_>
 {
-    Utf8Iter::new(txt.as_bytes())
+    Utf8PartIter::new(txt.as_bytes())
 }
