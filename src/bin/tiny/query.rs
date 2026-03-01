@@ -1,4 +1,5 @@
 use super::parser::*;
+use super::tab::{JsonTab, RowType as TabRowType};
 
 #[derive(Debug)]
 pub enum Query
@@ -235,4 +236,78 @@ pub fn execute_pipeline(
     }
 
     Ok(id)
+}
+
+/// Input table is modified by appending resulting rows onto it.
+pub fn execute_pipeline_tab(
+    table: &mut JsonTab,
+    pipeline: &[Query],
+) -> PqResult<usize>
+{
+    let mut id: u32 = 0;
+
+    for query in pipeline
+    {
+        match query
+        {
+            Query::SelectKey(select) =>
+            {
+                if table.row_type(id) != Some(TabRowType::Obj)
+                {
+                    return Err(PqErr::QueryErr(
+                        "cannot select key from non-object",
+                    ));
+                }
+
+                let mut child = table.first_child(id);
+                let mut selected = None;
+                while let Some(row_id) = child
+                {
+                    if table.key(row_id) == Some(select.as_str())
+                    {
+                        selected = Some(row_id);
+                        break;
+                    }
+                    child = table.next_sibling(row_id);
+                }
+
+                let Some(selected) = selected
+                else
+                {
+                    return Err(PqErr::QueryErr("selected key not found"));
+                };
+
+                let new_root = table.graft(selected).ok_or(PqErr::QueryErr(
+                    "failed to graft selected subtree",
+                ))?;
+                id = new_root;
+            }
+            Query::FilterKey(_filter) => todo!(),
+            _ => todo!("query handler not implemented yet"),
+        }
+    }
+
+    Ok(id as usize)
+}
+
+#[cfg(test)]
+mod tests
+{
+    use super::{execute_pipeline_tab, Query};
+    use crate::tab::JsonTab;
+
+    #[test]
+    fn select_key_on_tab_table()
+    {
+        let mut table = JsonTab::parse_from_str(r#"{"obj":{"a":1,"b":2}}"#)
+            .expect("tab parse should succeed");
+        let root = execute_pipeline_tab(&mut table, &[Query::SelectKey(
+            "obj".to_string(),
+        )])
+        .expect("query should succeed");
+
+        assert_eq!(table.row_type(root as u32), Some(crate::tab::RowType::Obj));
+        assert_eq!(table.key(root as u32 + 1), Some("a"));
+        assert_eq!(table.val(root as u32 + 1), Some("1"));
+    }
 }
