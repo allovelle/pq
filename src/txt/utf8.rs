@@ -100,37 +100,68 @@ pub const fn utf8_codepoint_len(buffer: &[u8], udx: usize) -> Option<usize>
 
             // TODO: return how many bytes the char is, even if it is fragmented
             // TODO: that means remove some checks from above
+
             // TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
-            // TODO: that means remove some checks from above// TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above
+            // TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above
+            // TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above
+            // TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above
+            // TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above
+            // TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above
+            // TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above
+            // TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above
+            // TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above
+            // TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above
+            // TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above
+            // TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above
+            // TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above
+            // TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above
+            // TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above
+            // TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above
+            // TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above
+            // TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above
+            // TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above
+            // TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above
+            // TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above
+            // TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above
+            // TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above
+            // TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above
+            // TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above
+            // TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above
+            // TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above
+            // TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above
+            // TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above
+            // TODO: return how many bytes the char is, even if it is fragmented
+            // TODO: that means remove some checks from above
+            // TODO: return how many bytes the char is, even if it is fragmented
             // TODO: that means remove some checks from above
             let char = std::char::from_u32(codepoint);
             // return char.map(char::len_utf8);

@@ -106,7 +106,6 @@ pub type PqResult<T> = Result<T, PqErr>;
 // ! The table is append-only. Use scratch space for intermediary row results.
 // ! Every query in the pipeline represents a new json lines document
 
-// TODO: make this use [table::JsonTable] instead of solution in parser.rs
 /// Input table is modified by appending resulting rows onto it.
 pub fn execute_pipeline(
     table: &mut Vec<Row>,
