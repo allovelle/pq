@@ -17,7 +17,7 @@
 {"spaced key":"value", "quote\"key":"v\""}
 {"\u2603":"snow","emoji":"\uD83D\uDE00"}
 {"int":0,"neg":-42,"frac":0.001,"exp":6.022e23}
-{"arr":[{"n":-0,"s":""},[true,false,null],"str":"\n\t"],"obj":{"nested":{"deep":[1,2,3]}}}
+{"arr":[{"n":-0,"s":""},[true,false,null]],"str":"\n\t","obj":{"nested":{"deep":[1,2,3]}}}
 true
 false
 null

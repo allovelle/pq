@@ -1,0 +1,22 @@
+/* Minification just zeroes out all possible spacers */
+/* There is NO space between KEY and COL ever */
+/* There is NO space between VAL and COM ever */
+/* minify */
+/* newline */
+{ /* spacer */
+    "k": /*<minify>*/ "v", /*<spacer>*/
+    "num": /*<minify>*/ 123, /*<spacer>*/
+    "bit": /*<minify>*/ true, /*<spacer>*/
+    "nil": /*<minify>*/ null, /*<spacer>*/
+    "arr": /*<minify>*/ [
+        1, /*<spacer>*/
+        2, /*<spacer>*/
+        3 /*<spacer>*/
+    ],
+    "obj": {
+        "a": "b",
+        "c": "d"
+    },
+    "arr-inline": ["a0", "a1", "a3"],
+    "obj-inline": { "one": "two", "three": "four", "pie": 3.14 }
+}
