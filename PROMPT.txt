@@ -1,0 +1,89 @@
+I need to remake jq using Starlark as the query language.
+I need to use a particular architecture in order to implement the design I have
+    envisioned that makes use of pipelining where possible.
+
+There are no EndObj or EndArr because those rows are implied and calculated from
+    a walk up the parent tree to find each implied end row.
+
+All values are part of a JSON lines document. There can be multiple document
+    roots in one pipeline invocation and more document roots can be generated
+    during pipeline invocation arising from query outputs. CLI files and stdin
+    are all seperate root docs in one large table of rows.
+
+All input documents and all pipeline stages produce more rows that are all
+    appended to the original table. This means to copy a node, grafting it and
+    it's subnodes onto the end of the table vec adds it to a parent or as a root
+    document.
+
+The ATTRIBUTES.txt file contains some attributes for every row of the table
+    format. Every kv pair in JSON has attributes such as `parent` for nodes with
+    subnodes. NewObj and NewArr are also kv pairs. The key for NewObj is it's
+    key, and the value is `{`, same for NewArr with `[` instead. This system is
+    very powerful because it gaurantees that all rows are kv pairs, even
+    root nodes which just have "" as the key and a stringified value as the val.
+
+Implment an attribute/feature-extraction function to ensure that all rows can be
+    independently formatted using only their attributes and the vec of rows.
+
+The central design element is the Row type with copy semantics with string
+    fields that are simple u32 indexes into the input sources. These not being
+    ptrs/refs, they are able to index perfectly into the full JSON buffer. The
+    buffer itself can grow and be deallocated because all of the JSON text
+    is append-only. This means Vec<u8> is the backing store.
+
+The input buffer which collates all JSON inputs from stdio and disk is a UTF-8
+    buffer type that is modifiable and allows partial char writes and reads by
+    only allowing slicing and iteration up to the last full codepoint. Indexing
+    is unsafe as the raw buffer is read.
+
+The string interning type is an overlay ontop of the utf8 buffer type. It stores
+    the start of strings using the u32 index into the utf8 buffer (unsafe). This
+    means that the caller appending source JSON to the utf8 buffer explicitly
+    knows the start and end of the codepoints being appended. This is critical
+    for the tokenizer to store the start of a token as a single u32 in the str
+    interning type.
+
+The interner is InternJson because it only stores the *start* of the strings.
+    However, all JSON strings are wrapped in `"` so storing the start `"` and
+    running the tokenizer through to the end of the `"` successfully allows a
+    very fast dereference of all interned JSON strings as well as extremely tiny
+    type storage, using only 4 bytes per string index. Strings start with `"`
+    and end with `"` so they are easy to re-tokenize.
+
+So there will be these central types and memory stores:
+    utf8parts: Vec<u8> raw partial input codepoint JSON bytes
+    intern: Vec<u32> raw byte indexes to the start of individual codepoints
+        Tokens deref to u32 and re-parse themselves from first codepoint
+    table: Vec<Row> multiple JSONL document root
+
+All other data structures lean on the InternJson since tokens, rows, and queries
+    all dereference handles to JSON strings as a form of compact storage, to
+    keep the entire pipeline zero-copy or otherwise memory efficient.
+
+The table format is purposely simple: Vec<Row> where Row is:
+    Clone Copy
+    id  index in table
+    par  parent (and therefore index in table)
+    key  interned always string key
+    val  interned direct slices of input source (`false`, `nil`, `[`, `{`)
+    ty  (one of Obj, Arr, Txt, Nil, Num, or Bit)
+
+
+pub enum TokTy
+{
+    NewArr, EndArr, NewObj, EndObj, Col, Com, True, False, Nil, Num, Txt,
+}
+
+pub enum RowTy
+{
+    Obj, Arr, Str, Num, Bit, Nil,
+}
+
+pub struct Row
+{
+    pub id: u32, // index within parent container (also row index in table)
+    pub par: u32, // parent row ID
+    pub key: String, // empty for array elements (will use string index)
+    pub val: String, // empty for objects/arrays
+    pub ty: RowType,
+}
