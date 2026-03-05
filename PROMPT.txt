@@ -1,0 +1,35 @@
+I need to remake jq using Starlark as the query language.
+I need to use a particular architecture in order to implement the design I have
+    envisioned that makes use of pipelining where possible.
+
+The table format is purposely simple: Vec<Row> where Row is:
+    id  index in table
+    par  parent (and therefore index in table)
+    key  always string key
+    val  direct slices of input source (`false`, `nil`, `[`, `{`)
+    ty  (one of Obj, Arr, Txt, Nil, Num, or Bit)
+
+There are no EndObj or EndArr because those rows are implied and calculated from
+    a walk up the parent tree to find each implied end row.
+
+All values are part of a JSON lines document. There can be multiple document
+    roots in one pipeline invocation and more document roots can be generated
+    during pipeline invocation arising from query outputs. CLI files and stdin
+    are all seperate root docs in one large table of rows.
+
+All input documents and all pipeline stages produce more rows that are all
+    appended to the original table. This means to copy a node, grafting it and
+    it's subnodes onto the end of the table vec adds it to a parent or as a root
+    document.
+
+The ATTRIBUTES.txt file contains some attributes for every row of the table
+    format. Every kv pair in JSON has attributes such as `parent` for nodes with
+    subnodes. NewObj and NewArr are also kv pairs. The key for NewObj is it's
+    key, and the value is `{`, same for NewArr with `[` instead. This system is
+    very powerful because it gaurantees that all rows are kv pairs, even
+    root nodes which just have "" as the key and a stringified value as the val.
+
+Implment an attribute/feature-extraction function to ensure that all rows can be
+    independently formatted using only their attributes and the vec of rows.
+
+String interning, token-optimized
