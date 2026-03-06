@@ -363,6 +363,44 @@ I don't fully know if this makes sense, though I'm sensing that the JSONL
     system.
 
 
+JSONL output from pq can be piped back in for composability for free.
+
+
+**Lossless carrier / latent data:** Rows always carry both key and val.
+    Fanout operations shift which field is "active" for the current
+    operation but never drop the other. The formatter simply ignores
+    fields that have no meaningful context — a root row's key is present
+    but silently skipped because there's no parent to render it into.
+    The data is available for subsequent operations without ever having
+    been lost.
+
+**Re-rooting after a query:** Each query produces a new JSONL doc. The
+    result rows get new root ids, cleaning up parent references so the
+    formatter sees unambiguous document boundaries. Stale keys or vals
+    from fanout ancestry are still carried, but the formatter is bounded
+    by the new root so it never sees the prior tree.
+
+**Flat root stream:**
+    [root A] [children of A...] [root B] [children of B...]
+    [root C] ...
+    No root-of-roots, no nesting above the root level. Root rows are
+    self-identifying, so document boundaries are found by simple forward
+    scan — no stack, no sentinel.
+
+**Stateless per-row formatting:** The formatter only needs the
+    in-progress table of rows belonging to the current doc. It resolves
+    parent context by walking `par` pointers upward, but that walk
+    terminates at the current root — rows from prior documents are
+    irrelevant and can be discarded. This means the formatter can stream
+    output without buffering entire documents, regardless of how large
+    the overall JSONL input is.
+
+
+3/6/26: I learned from Claude that keys and vals can be preserved between
+    queries to allow fanout/fanin operations to reconstruct the original parent.
+    Furthermore, this lets queries simply refer to key/val based on context.
+
+
 Attribute extraction is important for formatting.
 Can you provide a summary of this design?
 Queries can run piecemeal row by row.
