@@ -247,8 +247,6 @@ fuzzy find files golang fzf
 • SQLite?
 • Breadcrumbs progressive filtering
 • Char Tokenizer: Emit Events: BeginArr, EndObj, KeyName, etc. that allows the parser to push JSON objects to SQL
-• Each sql row is one formatted line so limit queries can directly display terminal height
-• json is formatted from sql rows
 • Custom type in Starlark for reading JSON io
 • Pq: foo.bar.baz streaming flat namespaces
 • width handling for simple objs/arrs [1,2,3] {a:b}

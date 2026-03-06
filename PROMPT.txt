@@ -68,22 +68,301 @@ The table format is purposely simple: Vec<Row> where Row is:
     val  interned direct slices of input source (`false`, `nil`, `[`, `{`)
     ty  (one of Obj, Arr, Txt, Nil, Num, or Bit)
 
+I need the row type fields to be named: id, par, key, val, ty
 
-pub enum TokTy
-{
-    NewArr, EndArr, NewObj, EndObj, Col, Com, True, False, Nil, Num, Txt,
-}
+I like these names and abbreviations:
+TokTy, NewArr, EndArr, NewObj, EndObj, Col, Com, True, False, Nil, Num, Txt,
+RowTy, Obj, Arr, Txt, Num, Bit, Nil
 
-pub enum RowTy
-{
-    Obj, Arr, Str, Num, Bit, Nil,
-}
+Rows have a few properties:
+    Doc root: row.par == row.id, basically restarting/trapping parent traversal.
+        row.key == "", row.val == "{" or "[" for array.
+    Parents: row.key != "", row.val = any json value
+    Last elements: next.par > row.par, true for new parents and/or last rows
 
-pub struct Row
-{
-    pub id: u32, // index within parent container (also row index in table)
-    pub par: u32, // parent row ID
-    pub key: String, // empty for array elements (will use string index)
-    pub val: String, // empty for objects/arrays
-    pub ty: RowType,
-}
+The rows are a tree structure, but the rows can also contain multiple doc roots.
+    This perfectly represents JSONL documents and allows this amazing property:
+    There is only 1 stdin "file" and there can be multiple files listed on the
+    cli, so that means all files can be collated into one big file for querying
+    and formatting.
+
+The formatter has one central goal: correctly format & emit a JSON key-value row
+    using only the row, the interner, and the table reference. This should mean
+    all rows can be formatted entirely in parallel, a massively parallel op. The
+    formatting logic and the async or rayon harness should be separated so that
+    sync formatting operations can be created.
+
+query.txt
+
+
+
+Tokenizer => tokens -> Parser => one trees of rows -> Query Engine => one trees
+    of rows -> Formatter => formatted lines of text
+
+Can you help me think through something? In rust I imagine a
+    vector of rows and these rows have ID numbers and parent ID
+    numbers to effectively build a tree structure within the
+    table. What I want to know is how I can take the whole tree
+    document root and graft it at the very end of the table,
+    setting the root node's parent ID to its own parent ID. This
+    would only be for the new graft. Now assuming there are
+    multiple document roots, how can I process them all such that
+    they can all append their results to the end of the vector
+    and create a new tree with that state. I'm fairly certain that
+    unless multi thread is used this should be entirely possible
+    if the trees are handled one by one. Can you tell me if that
+    is correct and if there's a better way to describe it?
+
+Concurrency:
+    There's a unique concurrency story here with PQ because of the handling of
+    all the root documents. Each document root is still really just a single
+    JSON value of any kind, including txt, num, bit, and nil. This means that
+    the same queries that handle array values can operate on each doc root. For
+    this to happen, the initial JSON ingestion from CLI & STDIN must end in a
+    collation of all documents into one big row tree. From there, the pipeline
+    can commence using the full definition of all rows. Typically, however,
+    there will only be one doc root.
+
+    Can precompute each new subtree length by peeking the incoming rows.
+    Like the parser, rows may not be generated without enough incoming items.
+
+    Json lines spawns more individual trees
+
+    Fanout into multiple docs
+        /-->
+    --> [*] --->
+        \-->
+
+    Faninto single document
+    --\
+    ---> [-] -->
+    --/
+
+    1. A single JSON document `pq json.json` contains JSON, yet can be queried with
+        a fanout query, producing JSON LINES
+    2. A JSONL document starts out immediately as multiple JSON documents
+    3. JSONL can be fanned into an array, producing a single JSON document
+    4. Every query produces a new root tree
+
+    Jobs take 1 query each with 1 root doc each
+
+    queryies are already performed on each root node in a fanout.
+    this works just as if it's multiple docs on the cli or stdin pipes
+    fanning into an array pipes them all into a single root
+
+Doc roots are identified by the property: self.par = self.id. This works
+    for row 0 and all other top-level root trees such that self.par =
+    self.id.
+
+I want to do this piecemeal if possible. Seeing that iteration through the
+    rows can know precisely where to stop, at every row that is self.par =
+    self.id, will it be troublesome to first process each row, appending to
+    the end, and then going on to the next root, and so one? What about if
+    there are a number of queries such as:
+
+SelectKey (drop all others), FilterKey (keep all others), IndexArr (start
+    stop step), IndexObj (key names), Fanout (each arr item is a new doc
+    root), Join (each doc root becomes an arr item), and Expr (Starlark
+    query language or expr-lang, depending on how I proceed with it) which
+    allows the result of a single expression to be the next element(s).
+    Naturally, Expr queries won't be able to be pre-computed how many rows
+    they will produce. Is there any problems with how I've laid this out?
+    Although doing this one by one, one doc, by one doc, I understand that
+    in order to multithreaded this, the vector capacity needs to be extended
+    to fit the results of a query using the current JOSNL items as inputs.
+    Each query takes JSONL as input, but may not produce JSONL (meaning more
+    than one root doc). As such, I understand that all query types except
+    Expr can be scouted, taking the query type and the given doc root, and
+    produce a number of new rows that the table should make room for for the
+    query results exactly.
+
+For expr queries, no such precomputation can be done. Thoughts?
+
+
+Copy Semantics: FanKeys, FanVals: (arr indices, obj keys, arr elems, obj vals),
+Reference Semantics: FanOut element references by index or FanIn references.
+    This is not the same as fanout by value because those are copies, the fanout
+    by reference allows in-place mutation (assumes the tree is part of a doc so
+    it doesn't discard the entire thing each query)
+
+
+I understand, it looks like I need to take the approach of process each query one at a time, taking each total JSONL input and doing 1 of 2 things:
+For Expr: process each JSONL root doc one at a time and append results accordingly. This can use a scratch buffer or directly append rows at the end. This is a fan-in, only one thread can execute this work item.
+All others: each JSONL root doc can be scouted with the input data to allocate the exact right number of output rows at the end of the table, allowing an exact start index for the new root node's query results. From there, each tree can be queried in parallel in its own thread, simply writing rows in the provided table index for the new root. This is a fan-out, multiple threads can execute each doc root as a work item.
+Can you envision a very simple work queue where query types auto-direct fanout and fan-in of JSON L root trees? Fan in represents dropping into one tree or array, and fan out is each element is it's own root doc.
+
+
+Ok trade-offs:
+
+For the parallel version, it's clear that collecting the full rows for a doc allows exact allocations and multiple threads.
+
+For the default single-threaded version, it works the same, but each thread is just a function call instead, making it far simpler.
+
+Additionally, there's a really nice property of the single threaded version: queries can begin processing even with partial rows! For arrays, the query engine can begin ArrIndex queries with just a single element, see if it is within the slice, then keep or discard it, piecemeal. This means that if the lexer and parser are designed to be piecemeal and yield rows as they are tokenized and parsed, the query engine can also keep, discard, or compute the final rows that get passed to the formatter, which is also designed to be able to emit a single JSON text row containing a key/value pair using the table and the row by themselves. Thoughts on this incremental design? It has some real interesting properties in relation to the amazing work queue design.
+
+
+WorkQueue:
+├── enqueue(query_type, jsonl_docs)
+│   ├── if query_type == "Expr"
+│   │   └── push({type: "fan-in", docs: jsonl_docs, buffer: []})
+│   │
+│   └── else (all others)
+│       ├── scout(jsonl_docs) → calculate total output rows needed
+│       └── pre-allocate table space with start_index for each doc
+│       └── push({type: "fan-out", docs: jsonl_docs, start_indices: [...]})
+│
+├── process()
+│   ├── while queue not empty
+│   │   ├── item = dequeue()
+│   │   │
+│   │   ├── if item.type == "fan-in"
+│   │   │   └── for doc in item.docs (sequential)
+│   │   │       ├── result = query(doc)
+│   │   │       └── item.buffer.append(result)
+│   │   │   └── flush buffer to single output location
+│   │   │
+│   │   └── else if item.type == "fan-out"
+│   │       └── threadpool.map(parallel_query, zip(docs, start_indices))
+│   │           └── each thread writes directly to table[start_index:end_index]
+
+
+
+I'm specifically trying to optimize for an interactive TUI that
+allows typing a query syntax like jmespath but incrementally
+evaluated and it recomputes as you type. I want this to work even if
+reading some JSON from a slow HTTP request and you start querying it
+immediately, like when waiting on AWS boto3 JSON to come back.
+The work queue just meant the threads running a query on each root
+doc. The concurrency seems to be revolving around JSONL vs single
+JSON values (or one JSONL root doc meaning the same as a JSON doc).
+The Fanout and Fanin queries determine this, although arrays can
+fanout and each of their elements queried by themselves, producing
+another array of the results.
+
+
+What do you think? Can you make another Ascii tree where you
+show the:
+
+stdin and/or multiple files on the cli represents precisely one
+jsonl document.
+
+The tokenizer can begin tokenizing all of the files, but might
+have to wait somewhat for the stdin json to buffer. It
+incrementally produces tokens. The parser then turns those into
+rows representing key-value pairs (every root doc is still a kv
+pair, it just has an empty string key as the key). It produces
+rows incrementally as tokens are available. The query engine
+starts with the next query to be executed, examines each row,
+and runs the query on them, possibly waiting for each element
+of an object to collected prior to execution, depending on the
+query type. Results are appended to the end of the table of
+json kv rows incrementally. Allocations are amortized. Finally,
+the formatter is purpose-built to be able to take any single
+row, along with the partial table, and emit a formatted &
+colored line to stdout, taking full advantage of the property
+of the tree that all parent nodes have a lesser id than
+subnodes, so indentation can be perfectly known for a given
+row.
+
+
+
+
+
+┌─────────────────────────────────────────────────────────────────┐
+│                         INPUT SOURCES                           │
+│  (stdin → buffer) + (files 1..N) = Single JSONL document        │
+└────────────────────────┬────────────────────────────────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                       TOKENIZER                                 │
+│  Incremental lexing across all sources                          │
+│  stdin may block briefly; produces tokens as data arrives       │
+│  Output: Token stream (name, value, delimiters)                 │
+└────────────────────────┬────────────────────────────────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                        PARSER                                   │
+│  Converts token stream → Rows (each = one kv pair)              │
+│  Root doc gets empty string "" as key                           │
+│  Incremental: emits rows as tokens complete structures          │
+│  Output: Table of (parent_id, id, key, value_idx, depth)        │
+└────────────────────────┬────────────────────────────────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                     QUERY ENGINE                                │
+│  Pulls next query from user (JMESPath-like syntax)              │
+│  For each new row from parser:                                  │
+│    ├─ Examine row (key, depth, parent_id)                       │
+│    ├─ Decide: can execute now? or wait for siblings?            │
+│    │  (Fan-out queries: apply to each array element)            │
+│    │  (Fan-in queries: wait for full object)                    │
+│    └─ Append result rows to output table                        │
+│  Amortized allocations; concurrent threads per root doc         │
+│  Output: Extended table of result rows (appended incrementally) │
+└────────────────────────┬────────────────────────────────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                      FORMATTER                                  │
+│  Takes: single row + partial output table                       │
+│  Uses invariant: parent_id < child_id always                    │
+│  ├─ Lookup ancestors by id to compute indentation               │
+│  ├─ Colorize based on type, depth, query context                │
+│  └─ Emit formatted line to stdout (non-blocking)                │
+│  Output: Live colored, indented lines as rows complete          │
+└─────────────────────────────────────────────────────────────────┘
+
+
+
+The parser takes raw unsorted tokens and produces a new JSONL root doc
+    row whenever it finds a document break like false\nfalse means two
+    document roots whereas "false false" is invalid JSON since it's not
+    separrated by newline to be treated as JSONL. This means JSON input
+    may result in JSONL output, as well as JSONL in and JSONL out.
+
+"Root doc" should be "Root documents" because there are potentially
+    several lines of them in a JSONL doc. So JSONL to be means a bunch of
+    JSON docs in a stream of newlines. As such, each new root doc in the
+    row stream is: id=0xA, par=0xA, key="", val="{", ty=Obj (assuming an
+    object is the root of that JSONL doc. Note that any valid JSON value
+    can be it's own line in JSONL, therefore can be it's own root doc in
+    the row stream.
+
+Yes the fanout/fanin behavior is subtle and perhaps the central
+    architecture decision that isn't about time/space. Essentially, there
+    are 2 types of fanout/in:
+
+1 Pure JSON one root design: FanKeys, FanVals means array indices or
+    array items, object keys, object vals. This means fanout behavior
+    always means JSON array, not JSONL document roots. I think this means
+    that these are always clone/copying out values rather than allowing
+    in-place modifications which would be required by JSONL whole
+    documents.
+
+Copy Semantics: FanKeys, FanVals: (arr indices, obj keys, arr elems,
+    obj vals),
+Reference Semantics: FanOut element references by index or FanIn
+    references.
+    This is not the same as fanout by value because those are copies, the
+    fanout by reference allows in-place mutation (assumes the tree is part
+    of a doc so it doesn't discard the entire thing each query)
+
+I don't fully know if this makes sense, though I'm sensing that the JSONL
+    design is very powerful but it sort of collides with arrays and objects
+    and strings since they can be iterated by character as well, producing
+    an array of 1-char strings. This means that querying by SelectKey some
+    array, then SomeQuery on the array means not every element, but the
+    array as a whole, meaning FanVals for an array is how you fanout and
+    process every item on it's own. Now, does that mean that FanVals
+    produces an array of the elements or a JSONL document of root docs?
+    Thoughts? What is more consistent with the design of the system seeing
+    as though JSONL is the central logical type progressing through the
+    system.
+
+
+Attribute extraction is important for formatting.
+Can you provide a summary of this design?
+Queries can run piecemeal row by row.
