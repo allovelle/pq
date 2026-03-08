@@ -1,0 +1,34 @@
+Ok another one, the Tee is something I need to remove as the design
+is supposed to be:
+
+accumulate all sources into one big buffer one at a time,
+
+during accumulation, send chars to the tokenizer, the tokenizer yields
+piecemeal tokens and then requires the source buffer in order to slice.
+
+So the Utf8Buf, Lex, and the Parser need to accumulate their own input
+and output buffers, defaulting to not retaining the input source in Lex
+as that is already retained in Utf8Buf. So with that design use case, I
+don't think that the Tee is necessary as it is always going in one
+direction.
+
+The apis of each class should be updated so that if a token is requested
+to deref, either, the Lex will have kept the bytes it's absorbed, OR,
+the caller must provide the Utf8Buf's reference to allow lookback. Now,
+using the Utf8Buf needs to not require anything fancy because tokens are
+guaranteed to be referencing prior bytes, so it's always safe to deref
+them.
+
+Utf8Buf: reference stored input bytes in buffer OR pass them along
+    without storing (pipeline)
+
+Lex: reference stored input bytes in buffer OR pass tokens along without
+    storing (pipeline)
+
+Parser: reference stored input tokens in buffer OR pass rows along
+    without storing (pipeline)
+
+The parser isn't implemented yet, let's keep it that way for now. What I
+need from you is to double-check my logic and then remove the tee
+because it's not quite necessary since it's just always going to pipe to
+one system byte by byte for incremental parsing, etc.
