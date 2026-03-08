@@ -71,8 +71,13 @@ The table format is purposely simple: Vec<Row> where Row is:
 I need the row type fields to be named: id, par, key, val, ty
 
 I like these names and abbreviations:
-TokTy, NewArr, EndArr, NewObj, EndObj, Col, Com, True, False, Nil, Num, Txt,
-RowTy, Obj, Arr, Txt, Num, Bit, Nil
+Tok, TokTy, TokVal, NewArr, EndArr, NewObj, EndObj, Col, Com, True, False, Nil, Num, Txt,
+Row, RowTy, Obj, Arr, Txt, Num, Bit, Nil
+
+Tok: Byte Index Into Src
+TokTy: u8 enum showing value
+TokVal: Dereference Tok byte index into wide value storing num, txt, bit (not
+    true or false variants, actual bool)
 
 Rows have a few properties:
     Doc root: row.par == row.id, basically restarting/trapping parent traversal.
@@ -400,7 +405,57 @@ JSONL output from pq can be piped back in for composability for free.
     queries to allow fanout/fanin operations to reconstruct the original parent.
     Furthermore, this lets queries simply refer to key/val based on context.
 
+3/8/26: Keys and vals can be preserved accross operations in some cases. This
+    means there will be an accumulation of state over time (query count).
+    Reconstructing parent objects is a lossy operation since there may be keys
+    missing, indices skipped, or vals computed and therefore lost.
 
+Parser can use structural indexing with values to accrue start positions of all
+    tokens. This means that a byte is marked pseudo-structural if the previous
+    byte is whitespace OR structural AND the current byte begins a JSON value:
+    "  string
+    -  number
+    0-9 number
+    t  true
+    f  false
+    n  null
+    {  object
+    [  array
+
+The lexer api needs to support being created with a slice of bytes or iterator
+    producing bytes. This allows arbitrary recreation of the lexer. Next, it
+    should allow dereferencing a token byte offset index by retokenizing only 1
+    token using the pseudo-structural index. The tokenizer can iterate through
+    itself and produce tokens, as well as allow random access to anywhere in the
+    source because as long as the offset is a valid JSON value & UTF-8 codepoint
+    then reparsing should work. Accrural of tokens is an optional setting in the
+    lexer's constructor so that it can be used incrementally using an iterator
+    interface and as-needed using the request-response interface. Create 2 ways
+    to get tokens:
+        1. Lex::iter(src).next(): Produce byte offsets, no tokens stored.
+        2. Lex::lex(src).tok(logical_index): parse whole source, store in
+            HashMap (log_idx, bit_idx), return logical token indexes mapped to
+            byte offsets that dereference into tokens.
+        3. Lex::lex(src).at(byte_offset): parse whole source, store in HashMap,
+            deref token index into tokens. Lex::at(Lex::tok(0)) = Tok.
+
+The partial UTF8 iterator Utf8Iter should yield codepoint byte offsets (1-4byt).
+    It should provide a Utf8Iter::partial() -> bool so iteration can continue
+    while partial or until EoF. Utf8Iter can be created from an arbitrary start
+    byte index Utf8Iter::seek(0)
+
+The tokenizer is it's own string interner since all token values are also just
+    slices into the JSON source.
+
+
+!!
+!! HEADING TOWARD UTF8-ITER -> LEXER -> PARSER FIRST
+!!
+
+
+GET TO A WORKING PARSER AND THEN ASK ABOUT ATTR EXTRACTION AND FORMATTING
 Attribute extraction is important for formatting.
 Can you provide a summary of this design?
-Queries can run piecemeal row by row.
+
+String interner using only token byte offset index: MUST have minimal retokenize
+    function to accomidate this
