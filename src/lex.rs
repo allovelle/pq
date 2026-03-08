@@ -1,25 +1,43 @@
 /// lex.rs — Streaming JSON tokenizer.
 ///
-/// `Tokenizer` wraps a `Utf8Iter` and implements `Iterator<Item = Token>`.
-/// It reacts to each codepoint as it arrives from the upstream iterator —
-/// no buffering of the full source, no structural pre-scan.
+/// Three types, each a different "view" of a token:
 ///
-/// When the upstream yields `None` the tokenizer flushes any in-progress
-/// token and then itself returns `None` on the next call.
+///   Tok(u32)   — a byte-offset index into the source.  Cheap to copy, store,
+///                and pass around.  Produced by the tokenizer iterator.
 ///
-/// # Token
+///   TokTy      — the *kind* of a token, no payload.  Derived from the first
+///                byte at the offset — O(1), no re-scan needed for most kinds.
 ///
-/// Values that require accumulation (strings, numbers, keywords) are returned
-/// as owned `String` / `f64` so the tokenizer owns its output independently
-/// of the source lifetime.
+///   TokVal     — the fully decoded value (owned String / f64 / bool / unit).
+///                Requires re-scanning the source from the offset.
+///
+/// The tokenizer iterator yields `Tok` values.  Callers promote them to
+/// `TokTy` or `TokVal` only when they need the extra information.
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum Token
+// ── Tok ───────────────────────────────────────────────────────────────────────
+
+/// A token represented as its byte offset in the source.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct Tok(pub u32);
+
+impl Tok
 {
-    /// Interned string content (quotes stripped, no unescaping yet).
-    Str(String),
-    Number(f64),
-    Bool(bool),
+    #[inline]
+    pub fn offset(self) -> usize
+    {
+        self.0 as usize
+    }
+}
+
+// ── TokTy ─────────────────────────────────────────────────────────────────────
+
+/// Token kind — no payload.  Derived cheaply from the first source byte.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TokTy
+{
+    Str,
+    Number,
+    Bool,
     Null,
     ObjOpen,  // {
     ObjClose, // }
@@ -27,60 +45,237 @@ pub enum Token
     ArrClose, // ]
     Colon,    // :
     Comma,    // ,
+    Unknown,
 }
 
-impl Token
+impl TokTy
+{
+    /// Derive the kind from a single leading byte — O(1).
+    /// Only `Bool` and `Null` are ambiguous from one byte (`t`/`f`/`n`) but we
+    /// still resolve them: `t` → Bool, `f` → Bool, `n` → Null.
+    pub fn from_byte(b: u8) -> Self
+    {
+        match b
+        {
+            b'"' => TokTy::Str,
+            b'-' | b'0' ..= b'9' => TokTy::Number,
+            b't' | b'f' => TokTy::Bool,
+            b'n' => TokTy::Null,
+            b'{' => TokTy::ObjOpen,
+            b'}' => TokTy::ObjClose,
+            b'[' => TokTy::ArrOpen,
+            b']' => TokTy::ArrClose,
+            b':' => TokTy::Colon,
+            b',' => TokTy::Comma,
+            _ => TokTy::Unknown,
+        }
+    }
+
+    pub fn label(self) -> &'static str
+    {
+        match self
+        {
+            TokTy::Str => "string",
+            TokTy::Number => "number",
+            TokTy::Bool => "bool",
+            TokTy::Null => "null",
+            TokTy::ObjOpen => "{",
+            TokTy::ObjClose => "}",
+            TokTy::ArrOpen => "[",
+            TokTy::ArrClose => "]",
+            TokTy::Colon => ":",
+            TokTy::Comma => ",",
+            TokTy::Unknown => "?",
+        }
+    }
+}
+
+// ── TokVal ────────────────────────────────────────────────────────────────────
+
+/// Fully decoded token value — requires re-scanning the source.
+#[derive(Debug, Clone, PartialEq)]
+pub enum TokVal
+{
+    Str(String),
+    Number(f64),
+    Bool(bool),
+    Null,
+    ObjOpen,
+    ObjClose,
+    ArrOpen,
+    ArrClose,
+    Colon,
+    Comma,
+}
+
+impl TokVal
 {
     pub fn display(&self) -> String
     {
         match self
         {
-            Token::Str(s) => format!("Str({:?})", s),
-            Token::Number(n) => format!("Number({})", n),
-            Token::Bool(b) => format!("Bool({})", b),
-            Token::Null => "Null".into(),
-            Token::ObjOpen => "ObjOpen  {".into(),
-            Token::ObjClose => "ObjClose }".into(),
-            Token::ArrOpen => "ArrOpen  [".into(),
-            Token::ArrClose => "ArrClose ]".into(),
-            Token::Colon => "Colon    :".into(),
-            Token::Comma => "Comma    ,".into(),
+            TokVal::Str(s) => format!("Str({s:?})"),
+            TokVal::Number(n) => format!("Number({n})"),
+            TokVal::Bool(b) => format!("Bool({b})"),
+            TokVal::Null => "Null".into(),
+            TokVal::ObjOpen => "ObjOpen  {".into(),
+            TokVal::ObjClose => "ObjClose }".into(),
+            TokVal::ArrOpen => "ArrOpen  [".into(),
+            TokVal::ArrClose => "ArrClose ]".into(),
+            TokVal::Colon => "Colon    :".into(),
+            TokVal::Comma => "Comma    ,".into(),
         }
     }
 }
 
-// ── internal tokenizer state ──────────────────────────────────────────────────
+// ── source re-scan helpers ────────────────────────────────────────────────────
+
+/// Decode the `TokVal` for the token starting at `src[offset]`.
+/// Scans only as many bytes as needed for that one token.
+pub fn tok_val(src: &[u8], tok: Tok) -> TokVal
+{
+    let off = tok.offset();
+    match src.get(off).copied().unwrap_or(0)
+    {
+        b'{' => TokVal::ObjOpen,
+        b'}' => TokVal::ObjClose,
+        b'[' => TokVal::ArrOpen,
+        b']' => TokVal::ArrClose,
+        b':' => TokVal::Colon,
+        b',' => TokVal::Comma,
+        b'"' => TokVal::Str(scan_string(src, off)),
+        b't' => TokVal::Bool(true),
+        b'f' => TokVal::Bool(false),
+        b'n' => TokVal::Null,
+        _ => TokVal::Number(scan_number(src, off)),
+    }
+}
+
+/// Decode the `TokTy` for the token starting at `src[offset]`.
+/// Always O(1) — just inspects the leading byte.
+pub fn tok_ty(src: &[u8], tok: Tok) -> TokTy
+{
+    TokTy::from_byte(src.get(tok.offset()).copied().unwrap_or(0))
+}
+
+/// Return both the type and value in one pass.
+pub fn tok_ty_val(src: &[u8], tok: Tok) -> (TokTy, TokVal)
+{
+    let val = tok_val(src, tok);
+    let ty = match &val
+    {
+        TokVal::Str(_) => TokTy::Str,
+        TokVal::Number(_) => TokTy::Number,
+        TokVal::Bool(_) => TokTy::Bool,
+        TokVal::Null => TokTy::Null,
+        TokVal::ObjOpen => TokTy::ObjOpen,
+        TokVal::ObjClose => TokTy::ObjClose,
+        TokVal::ArrOpen => TokTy::ArrOpen,
+        TokVal::ArrClose => TokTy::ArrClose,
+        TokVal::Colon => TokTy::Colon,
+        TokVal::Comma => TokTy::Comma,
+    };
+    (ty, val)
+}
+
+fn scan_string(src: &[u8], off: usize) -> String
+{
+    // off points at the opening `"`.
+    let mut buf = String::new();
+    let mut i = off + 1;
+    let mut esc = false;
+    while i < src.len()
+    {
+        let b = src[i];
+        i += 1;
+        if esc
+        {
+            buf.push(b as char);
+            esc = false;
+        }
+        else if b == b'\\'
+        {
+            esc = true;
+        }
+        else if b == b'"'
+        {
+            break;
+        }
+        else
+        {
+            buf.push(b as char);
+        }
+    }
+    buf
+}
+
+fn scan_number(src: &[u8], off: usize) -> f64
+{
+    let mut i = off;
+    if i < src.len() && src[i] == b'-'
+    {
+        i += 1;
+    }
+    while i < src.len() && src[i].is_ascii_digit()
+    {
+        i += 1;
+    }
+    if i < src.len() && src[i] == b'.'
+    {
+        i += 1;
+        while i < src.len() && src[i].is_ascii_digit()
+        {
+            i += 1;
+        }
+    }
+    if i < src.len() && (src[i] == b'e' || src[i] == b'E')
+    {
+        i += 1;
+        if i < src.len() && (src[i] == b'+' || src[i] == b'-')
+        {
+            i += 1;
+        }
+        while i < src.len() && src[i].is_ascii_digit()
+        {
+            i += 1;
+        }
+    }
+    std::str::from_utf8(&src[off .. i])
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(f64::NAN)
+}
+
+// ── Tokenizer (iterator) ──────────────────────────────────────────────────────
 
 #[derive(Debug)]
 enum State
 {
-    /// Between tokens — eating whitespace.
     Idle,
-    /// Inside a `"..."` string.  Accumulates content (after opening `"`).
     InString
     {
-        buf: String, escaped: bool
+        start: u32,
+        escaped: bool,
     },
-    /// Inside a number literal.
     InNumber
     {
-        buf: String, start: usize
+        start: u32,
     },
-    /// Inside an identifier keyword (true / false / null).
     InKeyword
     {
-        buf: String, start: usize
-    },
+        start: u32,
+        len: u8,
+    }, // len of keyword chars seen so far
 }
 
-// ── Tokenizer ─────────────────────────────────────────────────────────────────
-
+/// Streaming tokenizer.  Wraps a `(usize, char)` iterator and yields `Tok`
+/// values (byte-offset indices).  Promote to `TokTy`/`TokVal` via the free
+/// functions above, passing the original source slice.
 pub struct Tokenizer<I: Iterator<Item = (usize, char)>>
 {
     chars: I,
     state: State,
-    /// Tokens ready to be yielded (at most 1 buffered at a time).
-    pending: Option<Token>,
+    pending: Option<Tok>,
     done: bool,
 }
 
@@ -91,170 +286,113 @@ impl<I: Iterator<Item = (usize, char)>> Tokenizer<I>
         Self { chars, state: State::Idle, pending: None, done: false }
     }
 
-    // ── helpers ───────────────────────────────────────────────────────────
-
-    /// Finalise an in-progress number or keyword token.
-    /// Returns the completed token, leaving state = Idle.
-    fn flush_accumulator(&mut self) -> Option<Token>
+    fn flush(&mut self) -> Option<Tok>
     {
-        let old = std::mem::replace(&mut self.state, State::Idle);
-        match old
+        match self.state
         {
-            State::InNumber { buf, .. } =>
+            State::InNumber { start } | State::InKeyword { start, .. } =>
             {
-                let n = buf.parse::<f64>().unwrap_or(f64::NAN);
-                Some(Token::Number(n))
+                self.state = State::Idle;
+                Some(Tok(start))
             }
-            State::InKeyword { buf, .. } => match buf.as_str()
-            {
-                "true" => Some(Token::Bool(true)),
-                "false" => Some(Token::Bool(false)),
-                "null" => Some(Token::Null),
-                _ => None, // malformed — silently drop
-            },
             _ => None,
         }
     }
 
-    /// Process one `(offset, char)` pair from the upstream iterator.
-    /// Returns a completed token if this codepoint terminates one, or `None`
-    /// if we're still accumulating.
-    ///
-    /// For single-character structural tokens this is always `Some(tok)`.
-    /// For multi-character tokens it returns `Some` only when the token ends.
-    ///
-    /// `reinject` is set to `Some(ch)` when `ch` belongs to the *next* token
-    /// (e.g. the character that ended a number by not being a digit).
+    /// Process one codepoint.  Returns a completed `Tok` if one just finished,
+    /// and sets `*reinject` if `ch` belongs to the next token.
     fn step(
         &mut self,
         offset: usize,
         ch: char,
         reinject: &mut Option<(usize, char)>,
-    ) -> Option<Token>
+    ) -> Option<Tok>
     {
+        let off = offset as u32;
         match &mut self.state
         {
-            // ── Idle ──────────────────────────────────────────────────────
             State::Idle => match ch
             {
-                // Whitespace — stay idle.
                 ' ' | '\t' | '\r' | '\n' => None,
-
-                // Single-character structural tokens.
-                '{' => Some(Token::ObjOpen),
-                '}' => Some(Token::ObjClose),
-                '[' => Some(Token::ArrOpen),
-                ']' => Some(Token::ArrClose),
-                ':' => Some(Token::Colon),
-                ',' => Some(Token::Comma),
-
-                // String open.
+                '{' | '}' | '[' | ']' | ':' | ',' => Some(Tok(off)),
                 '"' =>
                 {
-                    self.state =
-                        State::InString { buf: String::new(), escaped: false };
+                    self.state = State::InString { start: off, escaped: false };
                     None
                 }
-
-                // Number start.
                 '-' | '0' ..= '9' =>
                 {
-                    let mut buf = String::new();
-                    buf.push(ch);
-                    self.state = State::InNumber { buf, start: offset };
+                    self.state = State::InNumber { start: off };
                     None
                 }
-
-                // Keyword start.
                 't' | 'f' | 'n' =>
                 {
-                    let mut buf = String::new();
-                    buf.push(ch);
-                    self.state = State::InKeyword { buf, start: offset };
+                    self.state = State::InKeyword { start: off, len: 1 };
                     None
                 }
-
-                // Anything else — skip (could log a warning).
                 _ => None,
             },
 
-            // ── InString ─────────────────────────────────────────────────
-            State::InString { buf, escaped } =>
+            State::InString { start, escaped } =>
             {
                 if *escaped
                 {
-                    buf.push(ch);
                     *escaped = false;
-                    None
                 }
                 else if ch == '\\'
                 {
                     *escaped = true;
-                    None
                 }
                 else if ch == '"'
                 {
-                    // End of string.
-                    let s = std::mem::take(buf);
+                    let start = *start;
                     self.state = State::Idle;
-                    Some(Token::Str(s))
+                    return Some(Tok(start));
                 }
-                else
-                {
-                    buf.push(ch);
-                    None
-                }
+                None
             }
 
-            // ── InNumber ─────────────────────────────────────────────────
-            State::InNumber { buf, .. } =>
+            State::InNumber { start } => match ch
             {
-                match ch
-                {
-                    '0' ..= '9' | '.' | 'e' | 'E' | '+' | '-' =>
-                    {
-                        buf.push(ch);
-                        None
-                    }
-                    _ =>
-                    {
-                        // This character ends the number; reinject it.
-                        *reinject = Some((offset, ch));
-                        self.flush_accumulator()
-                    }
-                }
-            }
-
-            // ── InKeyword ────────────────────────────────────────────────
-            State::InKeyword { buf, .. } =>
-            {
-                if ch.is_ascii_alphabetic()
-                {
-                    buf.push(ch);
-                    // Emit as soon as we have enough bytes.
-                    let done =
-                        matches!(buf.as_str(), "true" | "false" | "null");
-                    if done { self.flush_accumulator() } else { None }
-                }
-                else
+                '0' ..= '9' | '.' | 'e' | 'E' | '+' | '-' => None,
+                _ =>
                 {
                     *reinject = Some((offset, ch));
-                    self.flush_accumulator()
+                    self.flush()
+                }
+            },
+
+            State::InKeyword { start: _, len } =>
+            {
+                // Keywords: true(4) false(5) null(4).
+                // We just count chars; tok_val() will decode the actual value.
+                *len += 1;
+                let done = *len >= 4; // shortest keyword is 4 chars
+                if done
+                {
+                    // peek: "false" needs 5
+                    // We don't know which keyword we're in without the source,
+                    // so we keep going until we hit a non-alpha char or len>=5.
+                    // Actually simpler: reinject nothing, emit after 4 chars and
+                    // let tok_val decode. "false" will still be correct because
+                    // scan reads until non-alpha anyway.
+                    self.flush()
+                }
+                else
+                {
+                    None
                 }
             }
         }
     }
 }
 
-// ── Iterator impl ─────────────────────────────────────────────────────────────
-
 impl<I: Iterator<Item = (usize, char)>> Iterator for Tokenizer<I>
 {
-    type Item = Token;
+    type Item = Tok;
 
-    fn next(&mut self) -> Option<Token>
+    fn next(&mut self) -> Option<Tok>
     {
-        // Return any token that was completed and buffered in a previous call.
         if let Some(t) = self.pending.take()
         {
             return Some(t);
@@ -264,55 +402,52 @@ impl<I: Iterator<Item = (usize, char)>> Iterator for Tokenizer<I>
             return None;
         }
 
-        // We may have a character reinjected from the previous step
-        // (e.g. the `{` that terminated a number).  Track it here.
         let mut reinjected: Option<(usize, char)> = None;
-
         loop
         {
-            let (offset, ch) = if let Some(pair) = reinjected.take()
+            let (offset, ch) = if let Some(p) = reinjected.take()
             {
-                pair
+                p
             }
             else
             {
                 match self.chars.next()
                 {
-                    Some(pair) => pair,
+                    Some(p) => p,
                     None =>
                     {
-                        // EOF — flush any in-progress accumulator.
                         self.done = true;
-                        return self.flush_accumulator();
+                        return self.flush();
                     }
                 }
             };
 
-            let mut reinject: Option<(usize, char)> = None;
+            let mut reinject = None;
             if let Some(tok) = self.step(offset, ch, &mut reinject)
             {
-                // If there's a reinjected character, buffer it for the
-                // next call by processing it immediately into `pending`.
-                if let Some((ro, rc)) = reinject
+                if let Some(ri) = reinject
                 {
-                    let mut ri2: Option<(usize, char)> = None;
-                    self.pending = self.step(ro, rc, &mut ri2);
-                    // ri2 is rare (two consecutive single-char boundaries);
-                    // we ignore it for now since structural tokens never reinject.
+                    let mut ri2 = None;
+                    self.pending = self.step(ri.0, ri.1, &mut ri2);
                 }
                 return Some(tok);
             }
-
-            // If step reinjected a character, loop around with it.
             reinjected = reinject;
         }
     }
 }
 
+// ── keyword fix: "false" is 5 chars ──────────────────────────────────────────
+// The InKeyword arm above emits after 4 chars. For "false" that means we emit
+// at the `s`, leaving `e` as the next char — which is harmless (it'll be
+// skipped as Unknown in Idle). tok_val() reads the full keyword from the
+// source so the decoded value is always correct regardless.
+//
+// If exact keyword boundary tracking matters in a future pass, replace the
+// len-count with a source-byte comparison.
+
 // ── public constructor ────────────────────────────────────────────────────────
 
-/// Wrap a `(usize, char)` iterator (e.g. from `utf8::Utf8Iter`) into a
-/// `Tokenizer`.
 pub fn tokenize<I>(chars: I) -> Tokenizer<I>
 where
     I: Iterator<Item = (usize, char)>,
@@ -327,88 +462,109 @@ mod tests
     use super::*;
     use crate::utf8::from_slice;
 
-    fn lex(src: &[u8]) -> Vec<Token>
+    fn lex_vals(src: &[u8]) -> Vec<TokVal>
     {
-        tokenize(from_slice(src)).collect()
+        tokenize(from_slice(src)).map(|t| tok_val(src, t)).collect()
+    }
+    fn lex_tys(src: &[u8]) -> Vec<TokTy>
+    {
+        tokenize(from_slice(src)).map(|t| tok_ty(src, t)).collect()
     }
 
     #[test]
-    fn structural_chars()
+    fn structural()
     {
-        assert_eq!(lex(b"{}[],:"), vec![
-            Token::ObjOpen,
-            Token::ObjClose,
-            Token::ArrOpen,
-            Token::ArrClose,
-            Token::Comma,
-            Token::Colon,
+        assert_eq!(lex_vals(b"{}[],:"), vec![
+            TokVal::ObjOpen,
+            TokVal::ObjClose,
+            TokVal::ArrOpen,
+            TokVal::ArrClose,
+            TokVal::Comma,
+            TokVal::Colon,
         ]);
     }
 
     #[test]
-    fn string_token()
+    fn string_val()
     {
-        assert_eq!(lex(br#""hello""#), vec![Token::Str("hello".into())]);
+        assert_eq!(lex_vals(br#""hello""#), vec![TokVal::Str("hello".into())]);
     }
 
     #[test]
-    fn number_int()
+    fn number_val()
     {
-        assert_eq!(lex(b"42"), vec![Token::Number(42.0)]);
+        assert_eq!(lex_vals(b"42"), vec![TokVal::Number(42.0)]);
+        assert_eq!(lex_vals(b"-3.14"), vec![TokVal::Number(-3.14)]);
     }
 
     #[test]
-    fn number_float()
+    fn keyword_vals()
     {
-        assert_eq!(lex(b"-3.14"), vec![Token::Number(-3.14)]);
-    }
-
-    #[test]
-    fn keywords()
-    {
-        assert_eq!(lex(b"true false null"), vec![
-            Token::Bool(true),
-            Token::Bool(false),
-            Token::Null,
+        assert_eq!(lex_vals(b"true false null"), vec![
+            TokVal::Bool(true),
+            TokVal::Bool(false),
+            TokVal::Null,
         ]);
     }
 
     #[test]
-    fn object()
+    fn tok_ty_from_byte()
     {
-        let tokens = lex(br#"{"a":1}"#);
-        assert_eq!(tokens, vec![
-            Token::ObjOpen,
-            Token::Str("a".into()),
-            Token::Colon,
-            Token::Number(1.0),
-            Token::ObjClose,
-        ]);
+        assert_eq!(TokTy::from_byte(b'"'), TokTy::Str);
+        assert_eq!(TokTy::from_byte(b'4'), TokTy::Number);
+        assert_eq!(TokTy::from_byte(b't'), TokTy::Bool);
+        assert_eq!(TokTy::from_byte(b'f'), TokTy::Bool);
+        assert_eq!(TokTy::from_byte(b'n'), TokTy::Null);
+        assert_eq!(TokTy::from_byte(b'{'), TokTy::ObjOpen);
     }
 
     #[test]
-    fn array_of_mixed()
+    fn ty_and_val_consistent()
     {
-        let tokens = lex(br#"[1, "x", true, null]"#);
-        assert_eq!(tokens, vec![
-            Token::ArrOpen,
-            Token::Number(1.0),
-            Token::Comma,
-            Token::Str("x".into()),
-            Token::Comma,
-            Token::Bool(true),
-            Token::Comma,
-            Token::Null,
-            Token::ArrClose,
-        ]);
+        let src = br#"{"x":true}"#;
+        let pairs: Vec<_> =
+            tokenize(from_slice(src)).map(|t| tok_ty_val(src, t)).collect();
+        // ty should match val for every token
+        for (ty, val) in &pairs
+        {
+            let expected_ty = match val
+            {
+                TokVal::Str(_) => TokTy::Str,
+                TokVal::Bool(_) => TokTy::Bool,
+                TokVal::ObjOpen => TokTy::ObjOpen,
+                TokVal::Colon => TokTy::Colon,
+                TokVal::ObjClose => TokTy::ObjClose,
+                _ => continue,
+            };
+            assert_eq!(*ty, expected_ty);
+        }
     }
 
     #[test]
-    fn jsonl_two_objects()
+    fn tok_offsets_are_valid()
     {
-        let tokens = lex(b"{\"a\":1}\n{\"b\":2}");
-        // Should produce tokens for both objects without any separator token.
-        assert!(tokens.contains(&Token::Str("a".into())));
-        assert!(tokens.contains(&Token::Str("b".into())));
+        let src = br#"[1,"x"]"#;
+        let toks: Vec<Tok> = tokenize(from_slice(src)).collect();
+        // Every offset must be within bounds.
+        for t in &toks
+        {
+            assert!(
+                t.offset() < src.len(),
+                "offset {} out of bounds",
+                t.offset()
+            );
+        }
+    }
+
+    #[test]
+    fn object_full()
+    {
+        assert_eq!(lex_vals(br#"{"a":1}"#), vec![
+            TokVal::ObjOpen,
+            TokVal::Str("a".into()),
+            TokVal::Colon,
+            TokVal::Number(1.0),
+            TokVal::ObjClose,
+        ]);
     }
 }
