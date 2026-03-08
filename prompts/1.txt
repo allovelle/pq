@@ -1,0 +1,65 @@
+I need to remake jq using Starlark as the query language, naming it pq instead.
+I need to use a particular architecture in order to implement the design I have
+    envisioned that makes use of pipelining where possible.
+Parser can use structural indexing with values to accrue start positions of all
+    tokens. This means that a byte is marked pseudo-structural if the previous
+    byte is whitespace OR structural AND the current byte begins a JSON value:
+    "  string
+    -  number
+    0-9 number
+    t  true
+    f  false
+    n  null
+    {  object
+    [  array
+The lexer api needs to support being created with a slice of bytes or iterator
+    producing bytes. This allows arbitrary recreation of the lexer. Next, it
+    should allow dereferencing a token byte offset index by retokenizing only 1
+    token using the pseudo-structural index. The tokenizer can iterate through
+    itself and produce tokens, as well as allow random access to anywhere in the
+    source because as long as the offset is a valid JSON value & UTF-8 codepoint
+    then reparsing should work. Accrural of tokens is an optional setting in the
+    lexer's constructor so that it can be used incrementally using an iterator
+    interface and as-needed using the request-response interface. Create 2 ways
+    to get tokens:
+        1. Lex::iter(src).next(): Produce byte offsets, no tokens stored.
+        2. Lex::lex(src).tok(logical_index): parse whole source, store in
+            HashMap (log_idx, bit_idx), return logical token indexes mapped to
+            byte offsets that dereference into tokens.
+        3. Lex::lex(src).at(byte_offset): parse whole source, store in HashMap,
+            deref token index into tokens. Lex::at(Lex::tok(0)) = Tok.
+The partial UTF8 iterator Utf8Iter should yield codepoint byte offsets (1-4byt).
+    It should provide a Utf8Iter::partial() -> bool so iteration can continue
+    while partial or until EoF. Utf8Iter can be created from an arbitrary start
+    byte index Utf8Iter::seek(0)
+The tokenizer is it's own string interner since all token values are also just
+    slices into the JSON source.
+Main function orchestration:
+    Read N filenames from CLI, read STDIN, and collate all into string of bytes
+    representing an JSONL document.
+    Invoke the lexer and pass results to the parser. Implement, but do not use
+    interfaces that parse the entire input (storing tokens or rows). Use the
+    incremental iterators that produce tokens and rows as they arrive. Raise
+    errors up to a global thiserror type wrapping the lex and parse module level
+    error types.
+    Make use of terminal raw mode to force incremental reading of STDIN without
+    buffering to ensure that it isn't waiting for a large buffer to fill or that
+    the entire input is read in one buffered read.
+    The tokenizer produces tokens regardless of how the input was read or
+    structured and just yields token byte offsets.
+    The parser organizes the tokens into rows separating each new JSON root from
+    the JSONL sources into it's own root doc using the property: if a node's ID
+    is the same as it's parent's ID, that means it's a root document.
+The input buffer which collates all JSON inputs from stdio and disk is a UTF-8
+    buffer type that is modifiable and allows partial char writes and reads by
+    only allowing slicing and iteration up to the last full codepoint. Indexing
+    is unsafe as the raw buffer is read.
+
+Please implement the main function, the tokenizer, and a small harness that
+    prints out each token as it is produced. The token value is scraped out of
+    the source file every time, so a txt-val token would take the byte offset
+    and pass it to the tokenizer which would start at that byte in the
+    incremental, possibly partially-ingested src and start tokenizing from
+    there, only yielding one token, representing the ability to rapidly and
+    simply jump to any token offset and scrape out a usable String or f64
+    (whatever is the JSON type) or bool.

@@ -448,6 +448,24 @@ The tokenizer is it's own string interner since all token values are also just
     slices into the JSON source.
 
 
+Main function orchestration:
+    Read N filenames from CLI, read STDIN, and collate all into string of bytes
+    representing an JSONL document.
+    Invoke the lexer and pass results to the parser. Implement, but do not use
+    interfaces that parse the entire input (storing tokens or rows). Use the
+    incremental iterators that produce tokens and rows as they arrive. Raise
+    errors up to a global thiserror type wrapping the lex and parse module level
+    error types.
+    Make use of terminal raw mode to force incremental reading of STDIN without
+    buffering to ensure that it isn't waiting for a large buffer to fill or that
+    the entire input is read in one buffered read.
+    The tokenizer produces tokens regardless of how the input was read or
+    structured and just yields token byte offsets.
+    The parser organizes the tokens into rows separating each new JSON root from
+    the JSONL sources into it's own root doc using the property: if a node's ID
+    is the same as it's parent's ID, that means it's a root document.
+
+
 !!
 !! HEADING TOWARD UTF8-ITER -> LEXER -> PARSER FIRST
 !!
