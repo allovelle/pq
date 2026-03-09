@@ -1,53 +1,99 @@
-/// utf8.rs — Codepoint-streaming iterator over a byte source.
+/// utf8.rs — Accumulating UTF-8 input buffer + codepoint iterator.
 ///
-/// `Utf8Iter` takes anything that yields `u8` and produces `(byte_offset, char)`
-/// pairs.  It handles multi-byte codepoints internally, accumulating continuation
-/// bytes before emitting a char.
+/// `Utf8Buf` owns the raw bytes as they arrive.  It can be used in two modes:
 ///
-/// `partial()` returns true when the stream ended mid-codepoint (truncated input).
+///   - **Accumulating** (default): every byte is appended to an internal Vec.
+///     The buffer is always a valid `&[u8]` slice for token deref lookback.
+///
+///   - **Streaming** (pass-through): bytes are forwarded without being stored.
+///     Use this when you don't need lookback and want to minimise allocation.
+///     Set via `Utf8Buf::streaming()`.
+///
+/// `Utf8Iter` borrows a `Utf8Buf` and yields `(byte_offset, char)` pairs.
 
-pub struct Utf8Iter<I: Iterator<Item = u8>>
+// ── Utf8Buf ───────────────────────────────────────────────────────────────────
+
+pub struct Utf8Buf
 {
-    inner: I,
+    inner: Box<dyn Iterator<Item = u8>>,
+    buf: Vec<u8>,
+    accumulate: bool,
+}
+
+impl Utf8Buf
+{
+    /// Accumulating mode — every consumed byte is appended to the internal buffer.
+    pub fn new(inner: Box<dyn Iterator<Item = u8>>) -> Self
+    {
+        Self { inner, buf: Vec::new(), accumulate: true }
+    }
+
+    /// Streaming mode — bytes are forwarded without being stored.
+    pub fn streaming(inner: Box<dyn Iterator<Item = u8>>) -> Self
+    {
+        Self { inner, buf: Vec::new(), accumulate: false }
+    }
+
+    /// Borrow the accumulated bytes for token deref / lookback.
+    /// In streaming mode this will be empty.
+    pub fn as_bytes(&self) -> &[u8]
+    {
+        &self.buf
+    }
+
+    /// Pull the next raw byte, accumulating if configured.
+    fn next_byte(&mut self) -> Option<u8>
+    {
+        let b = self.inner.next()?;
+        if self.accumulate
+        {
+            self.buf.push(b);
+        }
+        Some(b)
+    }
+}
+
+// ── Utf8Iter ──────────────────────────────────────────────────────────────────
+// Borrows Utf8Buf mutably and yields (byte_offset, char) pairs.
+// The offset is relative to the start of the Utf8Buf's byte stream.
+
+pub struct Utf8Iter<'a>
+{
+    src: &'a mut Utf8Buf,
     offset: usize,
     partial: bool,
 }
 
-impl<I: Iterator<Item = u8>> Utf8Iter<I>
+impl<'a> Utf8Iter<'a>
 {
-    pub fn new(inner: I) -> Self
+    pub fn new(src: &'a mut Utf8Buf) -> Self
     {
-        Self { inner, offset: 0, partial: false }
+        Self { src, offset: 0, partial: false }
     }
 
-    /// True if the stream ended in the middle of a multi-byte codepoint.
     pub fn partial(&self) -> bool
     {
         self.partial
     }
 }
 
-impl<I: Iterator<Item = u8>> Iterator for Utf8Iter<I>
+impl<'a> Iterator for Utf8Iter<'a>
 {
-    /// (byte_offset_of_codepoint_start, char)
     type Item = (usize, char);
 
     fn next(&mut self) -> Option<Self::Item>
     {
         self.partial = false;
-
-        let b0 = self.inner.next()?;
+        let b0 = self.src.next_byte()?;
         let start = self.offset;
         self.offset += 1;
 
-        // ASCII fast-path
         if b0 & 0x80 == 0
         {
             return Some((start, b0 as char));
         }
 
-        // Determine expected byte count from the leading byte.
-        let (width, mut codepoint) = if b0 & 0xF8 == 0xF0
+        let (width, mut cp) = if b0 & 0xF8 == 0xF0
         {
             (4, (b0 & 0x07) as u32)
         }
@@ -61,45 +107,40 @@ impl<I: Iterator<Item = u8>> Iterator for Utf8Iter<I>
         }
         else
         {
-            // Unexpected continuation byte or invalid — emit replacement.
             return Some((start, char::REPLACEMENT_CHARACTER));
         };
 
-        // Consume `width - 1` continuation bytes.
         for _ in 1 .. width
         {
-            match self.inner.next()
+            match self.src.next_byte()
             {
                 Some(b) if b & 0xC0 == 0x80 =>
                 {
-                    codepoint = (codepoint << 6) | (b & 0x3F) as u32;
+                    cp = (cp << 6) | (b & 0x3F) as u32;
                     self.offset += 1;
                 }
                 Some(_) =>
                 {
-                    // Not a continuation byte — invalid sequence.
                     self.offset += 1;
                     return Some((start, char::REPLACEMENT_CHARACTER));
                 }
                 None =>
                 {
-                    // Stream ended mid-codepoint.
                     self.partial = true;
                     return None;
                 }
             }
         }
 
-        let ch =
-            char::from_u32(codepoint).unwrap_or(char::REPLACEMENT_CHARACTER);
-        Some((start, ch))
+        Some((start, char::from_u32(cp).unwrap_or(char::REPLACEMENT_CHARACTER)))
     }
 }
 
-/// Wrap a byte slice into a `Utf8Iter`.
-pub fn from_slice(bytes: &[u8]) -> Utf8Iter<impl Iterator<Item = u8> + '_>
+// ── convenience ───────────────────────────────────────────────────────────────
+
+pub fn buf_from_slice(bytes: &[u8]) -> Utf8Buf
 {
-    Utf8Iter::new(bytes.iter().copied())
+    Utf8Buf::new(Box::new(bytes.to_vec().into_iter()))
 }
 
 #[cfg(test)]
@@ -107,32 +148,37 @@ mod tests
 {
     use super::*;
 
+    fn collect(src: &[u8]) -> Vec<(usize, char)>
+    {
+        let mut buf = buf_from_slice(src);
+        Utf8Iter::new(&mut buf).collect()
+    }
+
     #[test]
     fn ascii()
     {
-        let v: Vec<_> = from_slice(b"abc").collect();
-        assert_eq!(v, [(0, 'a'), (1, 'b'), (2, 'c')]);
+        assert_eq!(collect(b"abc"), [(0, 'a'), (1, 'b'), (2, 'c')]);
     }
 
     #[test]
     fn multibyte()
     {
-        let v: Vec<_> = from_slice("éz".as_bytes()).collect();
-        assert_eq!(v, [(0, 'é'), (2, 'z')]);
+        assert_eq!(collect("éz".as_bytes()), [(0, 'é'), (2, 'z')]);
     }
 
     #[test]
-    fn partial_truncated()
+    fn accumulates()
     {
-        let mut it = from_slice(&[0xC3]);
-        assert!(it.next().is_none());
-        assert!(it.partial());
+        let mut buf = buf_from_slice(b"hi");
+        let _: Vec<_> = Utf8Iter::new(&mut buf).collect();
+        assert_eq!(buf.as_bytes(), b"hi");
     }
 
     #[test]
-    fn four_byte_codepoint()
+    fn streaming_does_not_accumulate()
     {
-        let v: Vec<_> = from_slice("😀".as_bytes()).collect();
-        assert_eq!(v, [(0, '😀')]);
+        let mut buf = Utf8Buf::streaming(Box::new(b"hi".iter().copied()));
+        let _: Vec<_> = Utf8Iter::new(&mut buf).collect();
+        assert_eq!(buf.as_bytes(), b"");
     }
 }

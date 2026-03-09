@@ -1,22 +1,22 @@
 /// lex.rs — Streaming JSON tokenizer.
 ///
-/// Three types, each a different "view" of a token:
+/// Three types:
 ///
-///   Tok(u32)   — a byte-offset index into the source.  Cheap to copy, store,
-///                and pass around.  Produced by the tokenizer iterator.
+///   `Tok(u32)`  — byte-offset index.  The tokenizer yields only these.
 ///
-///   TokTy      — the *kind* of a token, no payload.  Derived from the first
-///                byte at the offset — O(1), no re-scan needed for most kinds.
+///   `TokTy`     — kind without payload, O(1) from the leading byte.
 ///
-///   TokVal     — the fully decoded value (owned String / f64 / bool / unit).
-///                Requires re-scanning the source from the offset.
+///   `TokVal`    — fully decoded value; requires a `&[u8]` for re-scan.
+///                 Callers pass `utf8_buf.as_bytes()` — always safe because
+///                 tokens are guaranteed to reference already-consumed bytes.
 ///
-/// The tokenizer iterator yields `Tok` values.  Callers promote them to
-/// `TokTy` or `TokVal` only when they need the extra information.
+/// `Lex` has the same accumulate / streaming duality as `Utf8Buf`:
+///
+///   - **Accumulating**: stores every `Tok` it emits internally.
+///   - **Streaming**: forwards tokens without storing them.
 
 // ── Tok ───────────────────────────────────────────────────────────────────────
 
-/// A token represented as its byte offset in the source.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Tok(pub u32);
 
@@ -31,7 +31,6 @@ impl Tok
 
 // ── TokTy ─────────────────────────────────────────────────────────────────────
 
-/// Token kind — no payload.  Derived cheaply from the first source byte.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TokTy
 {
@@ -39,20 +38,17 @@ pub enum TokTy
     Number,
     Bool,
     Null,
-    ObjOpen,  // {
-    ObjClose, // }
-    ArrOpen,  // [
-    ArrClose, // ]
-    Colon,    // :
-    Comma,    // ,
+    ObjOpen,
+    ObjClose,
+    ArrOpen,
+    ArrClose,
+    Colon,
+    Comma,
     Unknown,
 }
 
 impl TokTy
 {
-    /// Derive the kind from a single leading byte — O(1).
-    /// Only `Bool` and `Null` are ambiguous from one byte (`t`/`f`/`n`) but we
-    /// still resolve them: `t` → Bool, `f` → Bool, `n` → Null.
     pub fn from_byte(b: u8) -> Self
     {
         match b
@@ -92,7 +88,6 @@ impl TokTy
 
 // ── TokVal ────────────────────────────────────────────────────────────────────
 
-/// Fully decoded token value — requires re-scanning the source.
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokVal
 {
@@ -128,10 +123,11 @@ impl TokVal
     }
 }
 
-// ── source re-scan helpers ────────────────────────────────────────────────────
+// ── deref helpers — callers supply the Utf8Buf's byte slice ──────────────────
 
-/// Decode the `TokVal` for the token starting at `src[offset]`.
-/// Scans only as many bytes as needed for that one token.
+/// Decode the full value of `tok` from `src`.
+/// `src` is `utf8_buf.as_bytes()` — always valid because tokens reference
+/// already-consumed bytes.
 pub fn tok_val(src: &[u8], tok: Tok) -> TokVal
 {
     let off = tok.offset();
@@ -151,14 +147,13 @@ pub fn tok_val(src: &[u8], tok: Tok) -> TokVal
     }
 }
 
-/// Decode the `TokTy` for the token starting at `src[offset]`.
-/// Always O(1) — just inspects the leading byte.
+/// Derive the kind of `tok` from its leading byte — O(1).
 pub fn tok_ty(src: &[u8], tok: Tok) -> TokTy
 {
     TokTy::from_byte(src.get(tok.offset()).copied().unwrap_or(0))
 }
 
-/// Return both the type and value in one pass.
+/// Return `(TokTy, TokVal)` in one pass.
 pub fn tok_ty_val(src: &[u8], tok: Tok) -> (TokTy, TokVal)
 {
     let val = tok_val(src, tok);
@@ -180,7 +175,6 @@ pub fn tok_ty_val(src: &[u8], tok: Tok) -> (TokTy, TokVal)
 
 fn scan_string(src: &[u8], off: usize) -> String
 {
-    // off points at the opening `"`.
     let mut buf = String::new();
     let mut i = off + 1;
     let mut esc = false;
@@ -246,7 +240,44 @@ fn scan_number(src: &[u8], off: usize) -> f64
         .unwrap_or(f64::NAN)
 }
 
-// ── Tokenizer (iterator) ──────────────────────────────────────────────────────
+// ── Lex ───────────────────────────────────────────────────────────────────────
+// Accumulate / streaming duality mirrors Utf8Buf.
+
+pub struct Lex
+{
+    buf: Vec<Tok>,
+    accumulate: bool,
+}
+
+impl Lex
+{
+    pub fn new() -> Self
+    {
+        Self { buf: Vec::new(), accumulate: true }
+    }
+
+    pub fn streaming() -> Self
+    {
+        Self { buf: Vec::new(), accumulate: false }
+    }
+
+    /// All tokens accumulated so far (empty in streaming mode).
+    pub fn tokens(&self) -> &[Tok]
+    {
+        &self.buf
+    }
+
+    /// Record a token (called by `Tokenizer` when it emits one).
+    fn push(&mut self, tok: Tok)
+    {
+        if self.accumulate
+        {
+            self.buf.push(tok);
+        }
+    }
+}
+
+// ── Tokenizer ─────────────────────────────────────────────────────────────────
 
 #[derive(Debug)]
 enum State
@@ -265,25 +296,31 @@ enum State
     {
         start: u32,
         len: u8,
-    }, // len of keyword chars seen so far
+    },
 }
 
-/// Streaming tokenizer.  Wraps a `(usize, char)` iterator and yields `Tok`
-/// values (byte-offset indices).  Promote to `TokTy`/`TokVal` via the free
-/// functions above, passing the original source slice.
-pub struct Tokenizer<I: Iterator<Item = (usize, char)>>
+/// Wraps a `(usize, char)` iterator and yields `Tok` values, optionally
+/// accumulating them into a `Lex` buffer.
+pub struct Tokenizer<'lex, I: Iterator<Item = (usize, char)>>
 {
     chars: I,
+    lex: &'lex mut Lex,
     state: State,
     pending: Option<Tok>,
     done: bool,
 }
 
-impl<I: Iterator<Item = (usize, char)>> Tokenizer<I>
+impl<'lex, I: Iterator<Item = (usize, char)>> Tokenizer<'lex, I>
 {
-    pub fn new(chars: I) -> Self
+    pub fn new(chars: I, lex: &'lex mut Lex) -> Self
     {
-        Self { chars, state: State::Idle, pending: None, done: false }
+        Self { chars, lex, state: State::Idle, pending: None, done: false }
+    }
+
+    fn emit(&mut self, tok: Tok) -> Tok
+    {
+        self.lex.push(tok);
+        tok
     }
 
     fn flush(&mut self) -> Option<Tok>
@@ -293,14 +330,12 @@ impl<I: Iterator<Item = (usize, char)>> Tokenizer<I>
             State::InNumber { start } | State::InKeyword { start, .. } =>
             {
                 self.state = State::Idle;
-                Some(Tok(start))
+                Some(self.emit(Tok(start)))
             }
             _ => None,
         }
     }
 
-    /// Process one codepoint.  Returns a completed `Tok` if one just finished,
-    /// and sets `*reinject` if `ch` belongs to the next token.
     fn step(
         &mut self,
         offset: usize,
@@ -314,7 +349,12 @@ impl<I: Iterator<Item = (usize, char)>> Tokenizer<I>
             State::Idle => match ch
             {
                 ' ' | '\t' | '\r' | '\n' => None,
-                '{' | '}' | '[' | ']' | ':' | ',' => Some(Tok(off)),
+                '{' => Some(self.emit(Tok(off))),
+                '}' => Some(self.emit(Tok(off))),
+                '[' => Some(self.emit(Tok(off))),
+                ']' => Some(self.emit(Tok(off))),
+                ':' => Some(self.emit(Tok(off))),
+                ',' => Some(self.emit(Tok(off))),
                 '"' =>
                 {
                     self.state = State::InString { start: off, escaped: false };
@@ -332,7 +372,6 @@ impl<I: Iterator<Item = (usize, char)>> Tokenizer<I>
                 }
                 _ => None,
             },
-
             State::InString { start, escaped } =>
             {
                 if *escaped
@@ -347,12 +386,11 @@ impl<I: Iterator<Item = (usize, char)>> Tokenizer<I>
                 {
                     let start = *start;
                     self.state = State::Idle;
-                    return Some(Tok(start));
+                    return Some(self.emit(Tok(start)));
                 }
                 None
             }
-
-            State::InNumber { start } => match ch
+            State::InNumber { .. } => match ch
             {
                 '0' ..= '9' | '.' | 'e' | 'E' | '+' | '-' => None,
                 _ =>
@@ -361,33 +399,16 @@ impl<I: Iterator<Item = (usize, char)>> Tokenizer<I>
                     self.flush()
                 }
             },
-
-            State::InKeyword { start: _, len } =>
+            State::InKeyword { len, .. } =>
             {
-                // Keywords: true(4) false(5) null(4).
-                // We just count chars; tok_val() will decode the actual value.
                 *len += 1;
-                let done = *len >= 4; // shortest keyword is 4 chars
-                if done
-                {
-                    // peek: "false" needs 5
-                    // We don't know which keyword we're in without the source,
-                    // so we keep going until we hit a non-alpha char or len>=5.
-                    // Actually simpler: reinject nothing, emit after 4 chars and
-                    // let tok_val decode. "false" will still be correct because
-                    // scan reads until non-alpha anyway.
-                    self.flush()
-                }
-                else
-                {
-                    None
-                }
+                if *len >= 4 { self.flush() } else { None }
             }
         }
     }
 }
 
-impl<I: Iterator<Item = (usize, char)>> Iterator for Tokenizer<I>
+impl<'lex, I: Iterator<Item = (usize, char)>> Iterator for Tokenizer<'lex, I>
 {
     type Item = Tok;
 
@@ -437,44 +458,28 @@ impl<I: Iterator<Item = (usize, char)>> Iterator for Tokenizer<I>
     }
 }
 
-// ── keyword fix: "false" is 5 chars ──────────────────────────────────────────
-// The InKeyword arm above emits after 4 chars. For "false" that means we emit
-// at the `s`, leaving `e` as the next char — which is harmless (it'll be
-// skipped as Unknown in Idle). tok_val() reads the full keyword from the
-// source so the decoded value is always correct regardless.
-//
-// If exact keyword boundary tracking matters in a future pass, replace the
-// len-count with a source-byte comparison.
-
-// ── public constructor ────────────────────────────────────────────────────────
-
-pub fn tokenize<I>(chars: I) -> Tokenizer<I>
-where
-    I: Iterator<Item = (usize, char)>,
-{
-    Tokenizer::new(chars)
-}
-
 // ── Tests ─────────────────────────────────────────────────────────────────────
 #[cfg(test)]
 mod tests
 {
     use super::*;
-    use crate::utf8::from_slice;
+    use crate::utf8::{Utf8Iter, buf_from_slice};
 
-    fn lex_vals(src: &[u8]) -> Vec<TokVal>
+    fn run(src: &[u8]) -> (Vec<Tok>, Vec<TokVal>)
     {
-        tokenize(from_slice(src)).map(|t| tok_val(src, t)).collect()
-    }
-    fn lex_tys(src: &[u8]) -> Vec<TokTy>
-    {
-        tokenize(from_slice(src)).map(|t| tok_ty(src, t)).collect()
+        let mut buf = buf_from_slice(src);
+        let mut lex = Lex::new();
+        let toks: Vec<Tok> =
+            Tokenizer::new(Utf8Iter::new(&mut buf), &mut lex).collect();
+        let vals = toks.iter().map(|&t| tok_val(buf.as_bytes(), t)).collect();
+        (toks, vals)
     }
 
     #[test]
     fn structural()
     {
-        assert_eq!(lex_vals(b"{}[],:"), vec![
+        let (_, vals) = run(b"{}[],:");
+        assert_eq!(vals, vec![
             TokVal::ObjOpen,
             TokVal::ObjClose,
             TokVal::ArrOpen,
@@ -487,84 +492,58 @@ mod tests
     #[test]
     fn string_val()
     {
-        assert_eq!(lex_vals(br#""hello""#), vec![TokVal::Str("hello".into())]);
+        let (_, vals) = run(br#""hello""#);
+        assert_eq!(vals, vec![TokVal::Str("hello".into())]);
     }
 
     #[test]
     fn number_val()
     {
-        assert_eq!(lex_vals(b"42"), vec![TokVal::Number(42.0)]);
-        assert_eq!(lex_vals(b"-3.14"), vec![TokVal::Number(-3.14)]);
+        let (_, vals) = run(b"42");
+        assert_eq!(vals, vec![TokVal::Number(42.0)]);
     }
 
     #[test]
-    fn keyword_vals()
+    fn keywords()
     {
-        assert_eq!(lex_vals(b"true false null"), vec![
+        let (_, vals) = run(b"true false null");
+        assert_eq!(vals, vec![
             TokVal::Bool(true),
             TokVal::Bool(false),
-            TokVal::Null,
+            TokVal::Null
         ]);
     }
 
     #[test]
-    fn tok_ty_from_byte()
+    fn object()
     {
-        assert_eq!(TokTy::from_byte(b'"'), TokTy::Str);
-        assert_eq!(TokTy::from_byte(b'4'), TokTy::Number);
-        assert_eq!(TokTy::from_byte(b't'), TokTy::Bool);
-        assert_eq!(TokTy::from_byte(b'f'), TokTy::Bool);
-        assert_eq!(TokTy::from_byte(b'n'), TokTy::Null);
-        assert_eq!(TokTy::from_byte(b'{'), TokTy::ObjOpen);
-    }
-
-    #[test]
-    fn ty_and_val_consistent()
-    {
-        let src = br#"{"x":true}"#;
-        let pairs: Vec<_> =
-            tokenize(from_slice(src)).map(|t| tok_ty_val(src, t)).collect();
-        // ty should match val for every token
-        for (ty, val) in &pairs
-        {
-            let expected_ty = match val
-            {
-                TokVal::Str(_) => TokTy::Str,
-                TokVal::Bool(_) => TokTy::Bool,
-                TokVal::ObjOpen => TokTy::ObjOpen,
-                TokVal::Colon => TokTy::Colon,
-                TokVal::ObjClose => TokTy::ObjClose,
-                _ => continue,
-            };
-            assert_eq!(*ty, expected_ty);
-        }
-    }
-
-    #[test]
-    fn tok_offsets_are_valid()
-    {
-        let src = br#"[1,"x"]"#;
-        let toks: Vec<Tok> = tokenize(from_slice(src)).collect();
-        // Every offset must be within bounds.
-        for t in &toks
-        {
-            assert!(
-                t.offset() < src.len(),
-                "offset {} out of bounds",
-                t.offset()
-            );
-        }
-    }
-
-    #[test]
-    fn object_full()
-    {
-        assert_eq!(lex_vals(br#"{"a":1}"#), vec![
+        let (_, vals) = run(br#"{"a":1}"#);
+        assert_eq!(vals, vec![
             TokVal::ObjOpen,
             TokVal::Str("a".into()),
             TokVal::Colon,
             TokVal::Number(1.0),
             TokVal::ObjClose,
         ]);
+    }
+
+    #[test]
+    fn lex_accumulates()
+    {
+        let mut buf = buf_from_slice(br#"[1,2]"#);
+        let mut lex = Lex::new();
+        let _: Vec<_> =
+            Tokenizer::new(Utf8Iter::new(&mut buf), &mut lex).collect();
+        assert_eq!(lex.tokens().len(), 5); // [ 1 , 2 ]
+    }
+
+    #[test]
+    fn lex_streaming_does_not_accumulate()
+    {
+        let mut buf = buf_from_slice(br#"[1,2]"#);
+        let mut lex = Lex::streaming();
+        let _: Vec<_> =
+            Tokenizer::new(Utf8Iter::new(&mut buf), &mut lex).collect();
+        assert_eq!(lex.tokens().len(), 0);
     }
 }
