@@ -1,5 +1,7 @@
 mod err;
+mod io;
 mod lex;
+mod txt;
 mod utf8;
 
 use err::PqErr;

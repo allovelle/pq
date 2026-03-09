@@ -1,6 +1,1 @@
-{
-    "rust-analyzer.cargo.features": [
-        "query-engine-pyo3",
-        "query-parser-rustpython"
-    ]
-}
+{}

@@ -466,6 +466,19 @@ Main function orchestration:
     is the same as it's parent's ID, that means it's a root document.
 
 
+Combine stdin & files, read jsonl as seperate documents, tokenizer won't care,
+    parser will create many doc roots from these tokens. Utf8Buf accumulates
+    bytes &mut self. Utf8View returns readable char range &[u8], Utf8Iter stops
+    at partial, end of buf, or EoF.
+
+
+
+
+
+
+
+
+
 !!
 !! HEADING TOWARD UTF8-ITER -> LEXER -> PARSER FIRST
 !!
