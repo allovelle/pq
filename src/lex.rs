@@ -118,24 +118,69 @@ fn is_structural(b: u8) -> bool
 
 /// Collect all pseudo-structural byte offsets from `src`.
 ///
-/// A byte at position `i` is pseudo-structural when:
-/// - `src[i]` begins a JSON value (`is_value_start`), AND
-/// - `i == 0` OR `src[i-1]` is whitespace or a structural character.
+/// The scan is **string-aware**: whenever a `"` is encountered outside of a
+/// string context, the scanner records that position and then fast-forwards
+/// past the entire string body (honouring `\` escapes) to the closing `"`.
+/// This prevents bytes *inside* string values (e.g. `-` in `"Milky Way - Sol"`)
+/// from being misidentified as value-start positions.
 ///
-/// Additionally, structural punctuation characters (`:`, `,`, `}`, `]`) are
-/// always included so we can emit their tokens too.
+/// A byte at position `i` is pseudo-structural when one of:
+///
+/// 1. It is `"` and outside a string — the whole string starting here is one
+///    token; its interior bytes are skipped.
+/// 2. It is a non-string value-start (`-`, `0-9`, `t`, `f`, `n`, `{`, `[`)
+///    and the previous byte is whitespace or a structural character.
+/// 3. It is a structural punctuation character (`{`, `}`, `[`, `]`, `:`, `,`).
 pub fn structural_indices(src: &[u8]) -> Vec<u32>
 {
     let mut out = Vec::new();
-    for (i, &b) in src.iter().enumerate()
+    let mut i = 0usize;
+    while i < src.len()
     {
-        let prev_ok = i == 0 || {
-            let p = src[i - 1];
-            is_ws(p) || is_structural(p)
-        };
-        if (is_value_start(b) && prev_ok) || is_structural(b)
+        let b = src[i];
+        if b == b'"'
+        {
+            // Record the opening quote as a structural position, then skip
+            // past the entire string so its interior bytes are invisible.
+            out.push(i as u32);
+            i += 1; // step past opening `"`
+            while i < src.len()
+            {
+                match src[i]
+                {
+                    b'"' =>
+                    {
+                        i += 1;
+                        break;
+                    } // closing quote — done
+                    b'\\' =>
+                    {
+                        i += 2;
+                    } // escape sequence — skip both bytes
+                    _ =>
+                    {
+                        i += 1;
+                    }
+                }
+            }
+        }
+        else if is_structural(b)
         {
             out.push(i as u32);
+            i += 1;
+        }
+        else
+        {
+            // Non-string value-start only if preceded by ws or structural.
+            let prev_ok = i == 0 || {
+                let p = src[i - 1];
+                is_ws(p) || is_structural(p)
+            };
+            if is_value_start(b) && prev_ok
+            {
+                out.push(i as u32);
+            }
+            i += 1;
         }
     }
     out
@@ -524,7 +569,7 @@ mod tests
         let spans: Result<Vec<_>, _> = Lex::iter(SRC).collect();
         let spans = spans.unwrap();
         // { "key" : 42 , "arr" : [ true , false , null ] }
-        assert_eq!(spans.len(), 15);
+        assert_eq!(spans.len(), 13);
     }
 
     #[test]

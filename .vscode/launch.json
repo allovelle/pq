@@ -3,9 +3,9 @@
         {
             "type": "cppdbg",
             "request": "launch",
-            "name": "run emit",
+            "name": "run pq",
             "cwd": "${workspaceFolder}",
-            "program": "${workspaceFolder}/target/debug/emit",
+            "program": "${workspaceFolder}/target/debug/pq",
             "environment": [
                 {
                     "name": "RUST_BACKTRACE",
@@ -17,7 +17,7 @@
                 }
             ],
             "args": [
-                "${workspaceFolder}/smol.json"
+                "${workspaceFolder}/json/json.json"
             ],
             "sourceFileMap": {},
             "osx": {

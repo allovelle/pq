@@ -167,17 +167,19 @@ impl<'src> Parser<'src>
 
     fn skip_ws_structurals(&mut self) -> Result<Option<TokSpan>, ParseError>
     {
-        // The lexer already skips whitespace; we just need to skip `,` and `:`.
+        // The lexer already skips whitespace.  We skip `,` here because it is
+        // purely a separator with no semantic content.
+        //
+        // We do NOT skip `:` here.  Colons must remain visible to the `Str`
+        // arm so that key-detection via `peek_tok()` works correctly.  If we
+        // consumed `:` here, the peek in the `Str` arm would never see it and
+        // every object key would be misidentified as a value.
         loop
         {
             match self.consume_tok()?
             {
                 None => return Ok(None),
-                Some(t)
-                    if matches!(t.kind, TokKind::Comma | TokKind::Colon) =>
-                {
-                    continue;
-                }
+                Some(t) if t.kind == TokKind::Comma => continue,
                 Some(t) => return Ok(Some(t)),
             }
         }
@@ -331,21 +333,19 @@ impl<'src> Parser<'src>
             // ------------------------------------------------------------------
             TokKind::Str =>
             {
-                // Peek: if next real token is `:` we are an object key.
-                // (skip_ws_structurals already consumes `:`, so we peek raw)
-                let is_key = {
-                    // Look at raw next token before consuming.
-                    let next = self.peek_tok()?;
-                    matches!(next.map(|t| t.kind), Some(TokKind::Colon))
-                };
+                // Peek at the raw next token.  If it's `:` this string is an
+                // object key.  skip_ws_structurals intentionally leaves `:`
+                // in the stream so this peek always sees it when present.
+                let is_key = matches!(
+                    self.peek_tok()?.map(|t| t.kind),
+                    Some(TokKind::Colon)
+                );
 
                 if is_key
                 {
-                    // Consume the colon.
                     self.pending_key = Some(Self::span_text(&tok));
-                    let _ = self.consume_tok()?; // ':'
-                    // Recurse to get the value token.
-                    return self.advance();
+                    let _ = self.consume_tok()?; // consume the ':'
+                    return self.advance(); // tail-recurse for value
                 }
 
                 // It's a scalar value.

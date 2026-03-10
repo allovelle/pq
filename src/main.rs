@@ -167,11 +167,11 @@ fn emit_row(
 
     writeln!(
         out,
-        "id={:<4} par={:<4} root={} ty={:<10?} key={:<20} val={}",
+        "id={:<4} par={:<4} root={} ty={:<10} key={:<20} val={}",
         row.id,
         row.par,
         row.is_root() as u8,
-        row.ty,
+        format!("{:?}", row.ty),
         key_str,
         val_str,
     )
