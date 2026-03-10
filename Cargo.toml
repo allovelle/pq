@@ -8,7 +8,8 @@ edition = "2024"
 # Command line interfaces
 clap = { version = "4.5.51", features = ["derive"] }
 
-# Cross platform terminal handling and TUI library
+# Cross platform terminal handling and TUI library and allows for raw-mode
+# terminal for unbuffered STDIN
 crossterm = "0.29.0"
 
 # Error propagation and wrapper types
@@ -64,3 +65,8 @@ store_heap_strs = []
 #         "query-parser-rustpython"
 #     ]
 # }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
