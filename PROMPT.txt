@@ -472,8 +472,12 @@ Combine stdin & files, read jsonl as seperate documents, tokenizer won't care,
     at partial, end of buf, or EoF.
 
 
+Tokenizer can *prove* valid start..end slice by providing end byte and having
+    the Utf8Buf validate against it's buffer len *at that time*.
 
-
+Returning slices of usize,usize start,end would make it possible to store slices
+    This means &str == start..end
+    Tokenizer and parser could store strings by range
 
 
 
