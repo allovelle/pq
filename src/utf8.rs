@@ -262,25 +262,6 @@ fn utf8_leading_byte_width(b: u8) -> usize
 
 // ---------------------------------------------------------------------------
 
-/// [`Tok`] — a byte-offset pointer into a [`Utf8Buf`].
-///
-/// Stores the **start byte** of a token's slice in the buffer.  The token's
-/// end is determined by the lexer that produced it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct Tok(pub u32);
-
-impl Tok
-{
-    /// Dereference this token back into a byte offset.
-    #[inline]
-    pub fn offset(self) -> usize
-    {
-        self.0 as usize
-    }
-}
-
-// ---------------------------------------------------------------------------
-
 /// [`Utf8Iter`] — a codepoint iterator over a [`Utf8Buf`].
 ///
 /// Yields `(byte_offset, char)` pairs.  Always starts on a codepoint boundary.
