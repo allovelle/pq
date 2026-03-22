@@ -1,27 +1,66 @@
 use std::str;
 
-pub type TokIdx = usize;
+/// A [Tok] is literally these things:
+/// 1. An index into the source buffer
+/// 2. The start of a literal slice of text representing structural tokens (`{`,
+///     `[`, `,`, or `:`).
+/// 3. The start of a literal slice of text representing string keys and values
+///     such as boolean, number, and null.
+pub type Tok = u32;
 
-#[derive(Debug, PartialEq)]
-pub enum TokKind
+fn tok_on(idx: Tok) -> Tok
 {
-    LBrace,
-    RBrace,
-    LBracket,
-    RBracket,
-    Colon,
-    Comma,
-    String,
-    Number,
-    Bool,
-    Null,
+    0
 }
 
-#[derive(Debug)]
-pub struct Tok<'a>
+/// Vital: the next byte may not be next token start so the next token (or EOF)
+/// must be found as well.
+///
+/// The first time this is called, it returns the token at the index provided,
+/// if that index is a valid token (should be). Using the original token, and
+/// the bytes read from that call, the end byte of the next token can be
+/// calculated. This allows straightforward iteration by maintaining an offset.
+/// ### Return tuple
+/// `(offset, size)`
+///
+/// - **offset** — byte index of the token start
+/// - **size** — number of bytes consumed by the token
+fn tok_from(idx: Tok) -> Option<(Tok, Tok)>
 {
-    pub kind: TokKind,
-    pub val: &'a [u8],
+    None
+}
+
+/// A [crate::lex::TokTy]
+fn tok_ty(idx: Tok) {}
+
+/// A [crate::utf8::Text] value able to be dereferenced at any time.
+fn tok_view(idx: Tok) {}
+
+fn tok_val() {}
+
+// ! All token values are slices into the source buffer. They are all strings.
+// ? Is TokVal really just TokVal(u32)?
+
+/// Getting a token's value is only needed during querying and formatting.
+#[rustfmt::skip]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum TokVal
+{
+    NewObj, EndObj, NewArr, EndArr,
+    Col, Com, Nil,
+    Bit(bool), Num(f64), Txt(Tok),
+}
+
+/// Getting a token's type is a fundamental operation.
+#[rustfmt::skip]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum TokTy
+{
+    NewObj, EndObj,
+    NewArr, EndArr,
+    Col, Com,
+    Nil, Bit,
+    Num, Txt,
 }
 
 #[derive(Debug)]

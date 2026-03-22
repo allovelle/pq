@@ -179,10 +179,10 @@
 //     .map_err(AppError::Io)
 // }
 
-mod lex;
+// mod lex;
 mod utf8;
 
-fn main()
+/* fn main2()
 {
     use lex::*;
 
@@ -211,4 +211,50 @@ fn main()
         t.kind,
         str::from_utf8(t.val).unwrap()
     );
+}
+ */
+
+fn main()
+{
+    use utf8::*;
+
+    let json = br#"  { "key": -1.5e2, "ok": true, "arr": [null, false] }  "#;
+
+    let mut buffer: Utf8Buf = Utf8Buf::new();
+    assert_eq!(buffer.raw_len(), 0, "buf should be empty");
+    buffer.push_bytes(json);
+    assert_eq!(buffer.raw_len(), json.len(), "buf should contain the json");
+
+    let yu: [u8; 4] = [0xE8, 0xAA, 0x9E, 0x00]; // 語
+    buffer.push_byte(yu[0]);
+    buffer.push_byte(yu[1]);
+    buffer.push_byte(yu[2]);
+
+    // ? What is the expected use case of Utf8Buf? It's not for tokens, its for
+    // ? piecemeal iteration through the buffer.
+    // The use case of Utf8Buf is piecemeal indexing of the buffer while
+    // allowing synchronous appends consisting of partial or complete UTF-8
+    // codepoints.
+
+    // TODO: Iterator returns None when partial codepoint, yet the caller has no
+    // TODO: choice to continue until there are more bytes in the buffer
+
+    let mut iter = buffer.iter_from(0);
+    let mut offset = 0;
+    #[allow(clippy::while_let_on_iterator)]
+    while let Some((at, ch)) = iter.next()
+    {
+        // ? This is doing nothing:
+        // More bytes to read, yields the same char as before
+        /* if iter.partial() && at == iter.byte_pos()
+        {
+            println!("cancel");
+            continue;
+        } */
+
+        let codepoint = buffer.text(offset as u32, at as u32);
+        println!("{ch:?} <-> {codepoint:?}");
+
+        offset = at
+    }
 }

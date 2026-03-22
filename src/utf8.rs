@@ -25,10 +25,7 @@ impl Text
 
     /// Number of bytes in the slice (NOT codepoints).
     #[inline]
-    pub fn byte_len(self) -> usize
-    {
-        (self.to - self.from) as usize
-    }
+    pub fn byte_len(self) -> usize { (self.to - self.from) as usize }
 
     /// Resolve this `Text` against its owning buffer.
     ///
@@ -60,6 +57,10 @@ impl Text
 /// All writes are validated to end on a codepoint boundary before the
 /// "safe length" cursor is advanced, so partial codepoint writes are allowed
 /// in flight but are invisible to safe readers until the codepoint is complete.
+///
+/// The use case of Utf8Buf is piecemeal indexing of the buffer while
+/// allowing synchronous appends consisting of partial or complete UTF-8
+/// codepoints.
 pub struct Utf8Buf
 {
     buffer: Vec<u8>,
@@ -70,10 +71,7 @@ pub struct Utf8Buf
 
 impl Utf8Buf
 {
-    pub fn new() -> Self
-    {
-        Self { buffer: Vec::new(), safe_len: 0 }
-    }
+    pub fn new() -> Self { Self { buffer: Vec::new(), safe_len: 0 } }
 
     pub fn with_capacity(cap: usize) -> Self
     {
@@ -82,24 +80,15 @@ impl Utf8Buf
 
     /// Total byte capacity held in the underlying allocation.
     #[inline]
-    pub fn capacity(&self) -> usize
-    {
-        self.buffer.capacity()
-    }
+    pub fn capacity(&self) -> usize { self.buffer.capacity() }
 
     /// Number of bytes that are fully committed (end on a codepoint boundary).
     #[inline]
-    pub fn safe_len(&self) -> usize
-    {
-        self.safe_len
-    }
+    pub fn safe_len(&self) -> usize { self.safe_len }
 
     /// Raw byte length including any in-flight partial codepoint.
     #[inline]
-    pub fn raw_len(&self) -> usize
-    {
-        self.buffer.len()
-    }
+    pub fn raw_len(&self) -> usize { self.buffer.len() }
 
     /// Append a validated UTF-8 string, advancing `safe_len` to include it.
     pub fn push_str(&mut self, s: &str)
@@ -108,18 +97,21 @@ impl Utf8Buf
         self.safe_len = self.buffer.len();
     }
 
-    /// Append raw bytes (may form a partial codepoint).
+    /// Appends `bytes`, which may contain an incomplete trailing codepoint.
     ///
-    /// After this call `safe_len` is advanced to the last complete codepoint
-    /// boundary within the newly appended region.
+    /// `safe_len` is advanced to the last complete codepoint boundary within
+    /// the entire buffer after the append; any partial codepoint at the tail
+    /// remains buffered but invisible to safe readers until completed by a
+    /// subsequent push.
     pub fn push_bytes(&mut self, bytes: &[u8])
     {
         self.buffer.extend_from_slice(bytes);
         self.safe_len = last_codepoint_boundary(&self.buffer);
     }
 
-    /// Append a single byte that may be part of a multi-byte codepoint.
-    /// `safe_len` is advanced only when a complete codepoint is formed.
+    /// Appends a single byte, which may be a continuation byte of a multi-byte
+    /// codepoint.  `safe_len` advances only when the byte completes a
+    /// codepoint; until then [`has_partial`](Self::has_partial) returns `true`.
     pub fn push_byte(&mut self, byte: u8)
     {
         self.buffer.push(byte);
@@ -129,12 +121,10 @@ impl Utf8Buf
 
     /// Returns `true` if there are in-flight bytes past `safe_len`.
     #[inline]
-    pub fn has_partial(&self) -> bool
-    {
-        self.buffer.len() > self.safe_len
-    }
+    pub fn has_partial(&self) -> bool { self.buffer.len() > self.safe_len }
 
-    /// Slice the safe region as `&str`.
+    /// Returns the safe region as a `&str`, covering only fully committed
+    /// codepoints.  Any in-flight bytes past `safe_len` are excluded.
     #[inline]
     pub fn as_str(&self) -> &str
     {
@@ -142,26 +132,22 @@ impl Utf8Buf
         unsafe { std::str::from_utf8_unchecked(&self.buffer[.. self.safe_len]) }
     }
 
-    /// Raw byte slice — may contain partial codepoint at end.
+    /// Returns the raw byte slice including any partial codepoint at the tail.
+    ///
+    /// The last few bytes may not form valid UTF-8; prefer
+    /// [`as_str`](Self::as_str) or [`as_bytes`](Self::as_bytes) unless you
+    /// specifically need the raw buffer.
     #[inline]
-    pub fn as_bytes_raw(&self) -> &[u8]
-    {
-        &self.buffer
-    }
+    pub fn as_bytes_raw(&self) -> &[u8] { &self.buffer }
 
     /// Safe byte slice, ending on a codepoint boundary.
     #[inline]
-    pub fn as_bytes(&self) -> &[u8]
-    {
-        &self.buffer[.. self.safe_len]
-    }
+    pub fn as_bytes(&self) -> &[u8] { &self.buffer[.. self.safe_len] }
 
-    /// Resolve a [`Text`] to `&str` without a lifetime on `self`.
+    /// Resolve a [`Text`] to `&str` without a lifetime on `self`. Shorthand for
+    /// [`Text::resolve`].
     #[inline]
-    pub fn slice(&self, t: Text) -> &str
-    {
-        t.resolve(self)
-    }
+    pub fn slice(&self, t: Text) -> &str { t.resolve(self) }
 
     /// Create a [`Text`] that spans `[from, to)` bytes.
     ///
@@ -179,10 +165,7 @@ impl Utf8Buf
     }
 
     /// Create a [`Utf8Iter`] starting at byte offset 0.
-    pub fn iter(&self) -> Utf8Iter<'_>
-    {
-        Utf8Iter::new(self, 0)
-    }
+    pub fn iter(&self) -> Utf8Iter<'_> { Utf8Iter::new(self, 0) }
 
     /// Create a [`Utf8Iter`] starting at byte offset `start`.
     ///
@@ -195,16 +178,17 @@ impl Utf8Buf
 
 impl Default for Utf8Buf
 {
-    fn default() -> Self
-    {
-        Self::new()
-    }
+    #[rustfmt::skip]
+    fn default() -> Self { Self::new() }
 }
 
 // ---------------------------------------------------------------------------
 
-/// Walk backwards from the end of `buf` to find the largest prefix that is
-/// complete UTF-8 (i.e. ends on a codepoint boundary).
+/// Walks backward from the end of `buf` to find the largest prefix that
+/// consists entirely of complete UTF-8 codepoints, returning that length.
+///
+/// Used internally after every raw-byte push to keep `safe_len` accurate
+/// even when the last write ended mid-codepoint.
 fn last_codepoint_boundary(buf: &[u8]) -> usize
 {
     let len = buf.len();
@@ -238,7 +222,11 @@ fn last_codepoint_boundary(buf: &[u8]) -> usize
     0
 }
 
-/// Number of bytes in the codepoint starting with this leading byte.
+/// Returns total byte width of the UTF-8 codepoint whose leading byte is `b`.
+///
+/// Assumes `b` is a valid leading byte (0xxxxxxx, 110xxxxx, 1110xxxx, or
+/// 11110xxx).  Continuation bytes (10xxxxxx) are not valid inputs and will
+/// return 1, which the caller should never encounter on a valid boundary.
 #[inline]
 fn utf8_leading_byte_width(b: u8) -> usize
 {
@@ -300,22 +288,19 @@ impl<'buf> Utf8Iter<'buf>
         self.pos = byte_offset;
     }
 
-    /// Current byte offset (the offset of the **next** character to be yielded).
+    /// Current byte offset (offset of the **next** character to be yielded).
     #[inline]
-    pub fn byte_pos(&self) -> usize
-    {
-        self.pos
-    }
+    pub fn byte_pos(&self) -> usize { self.pos }
 
     /// Returns `true` if the backing buffer has bytes beyond the last complete
     /// codepoint — i.e. a partial codepoint write is in flight.
     #[inline]
-    pub fn partial(&self) -> bool
-    {
-        self.buf.has_partial()
-    }
+    pub fn partial(&self) -> bool { self.buf.has_partial() }
 
-    /// Peek at the next character without advancing.
+    /// Peeks at the next character without advancing the iterator.
+    ///
+    /// Returns `None` if the safe region is exhausted.  Does not account for
+    /// in-flight bytes; check [`partial`](Self::partial) separately if needed.
     pub fn peek(&self) -> Option<char>
     {
         let bytes = self.buf.as_bytes();
@@ -331,7 +316,21 @@ impl<'buf> Utf8Iter<'buf>
 
 impl<'buf> Iterator for Utf8Iter<'buf>
 {
-    /// `(byte_offset_of_char_start, char)`
+    /// Yields `(byte_offset, char)` pairs where `byte_offset` is the position
+    /// of the *start* of the codepoint within the buffer's safe region — i.e.
+    /// the offset you would pass to [`Utf8Buf::iter_from`] or use as the `from`
+    /// field of a [`Text`] to re-address this character later.
+    ///
+    /// The iterator advances its internal cursor past the codepoint after
+    /// yielding, so consecutive calls yield non-overlapping characters in
+    /// order.  The returned offset is a *snapshot before that advance*, making
+    /// it suitable as a stable byte address into the owning [`Utf8Buf`].
+    ///
+    /// Returns `None` when all complete codepoints in the safe region have been
+    /// consumed.  If [`Utf8Iter::partial`] returns `true` at that point, the
+    /// buffer holds in-flight bytes that may complete another codepoint once
+    /// further data is pushed — callers that care about streaming completeness
+    /// should check this flag rather than treating `None` as end-of-input.
     type Item = (usize, char);
 
     fn next(&mut self) -> Option<Self::Item>
@@ -345,7 +344,7 @@ impl<'buf> Iterator for Utf8Iter<'buf>
         let b = bytes[start];
         let width = utf8_leading_byte_width(b);
 
-        // SAFETY: safe region guarantees complete codepoints; pos is on boundary.
+        // SAFETY: safe region guarantees entire codepoints; pos is on boundary.
         let ch = unsafe {
             let slice = bytes.get_unchecked(start .. start + width);
             let s = std::str::from_utf8_unchecked(slice);
