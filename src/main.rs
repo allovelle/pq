@@ -180,6 +180,7 @@
 // }
 
 // mod lex;
+mod init;
 mod utf8;
 
 /* fn main2()
