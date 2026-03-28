@@ -1,5 +1,12 @@
 // ! This buffers over <T> but it needs to buffer over u8, index by usize over
 // ! <T>, iterate over <T>
+
+/// Allows concurrent appending, iteration, and random access over a buffer by
+/// taking advantage of the fact that all indices point to previous ranges due
+/// to the underlying append-only buffer.
+/// 1. Allows iteration
+/// 2. Append-only modification
+/// 3. Random access indexing
 struct BufIter<T>
 {
     buffer: Vec<T>,
@@ -31,11 +38,21 @@ impl<T: Copy> BufIter<T>
 fn main()
 {
     let mut iter = BufIter::new(vec![818, 616, 118, 8]).iter();
+    let mut range = 0 .. 10;
 
     while let Some(i) = iter.next()
     {
-        println!("{i:?}");
+        // Concurrent modification
+        if let Some(n) = range.next()
+        {
+            iter.push(i + n);
+            println!("{:?} push", i + n);
+        }
+        else
+        {
+            println!("{i:?} iter");
+        }
     }
 
-    println!("{:?}", iter.get(0));
+    println!("{:?} rand", iter.get(0));
 }
