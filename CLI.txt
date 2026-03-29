@@ -1,0 +1,285 @@
+pq - query json from the cli
+
+one notable feature is that there is no slurp command--all input document roots
+    are concatenated into one large jsonl document. queries are specifically
+    designed to treat multiple distinct roots as a logical array, allowing the
+    query layer to combine them manually.
+
+usage:
+    $ pq                                   # show help menu and exit
+    $ pq .                                 # hand-write live-query from file
+    $ pq . json.json                       # live-query from file
+    $ pq . json.json json.json             # live-query from file as jsonl
+    $ pq k1 json.json                      # query from file
+    $ stdout |
+    $     pq .                             # live query from stdin
+    $     pq . json.json                   # live query from stdin & from file
+    $     pq k1                            # query from stdin
+    $     pq k1 json.json                  # query from stdin & from file
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+PQ — JSONL query + interactive explorer
+
+USAGE:
+    pq [FLAGS...] [QUERY | "."] [INPUTS...]
+
+DESCRIPTION:
+    pq reads JSON from STDIN and/or files, concatenates all inputs into a
+    single JSONL stream of root values, and evaluates queries over that stream.
+
+    There is no slurp mode. All inputs are treated as independent roots in a
+    unified stream.
+
+ARGUMENT ORDER RULES:
+    1. FLAGS must appear first (if any)
+    2. QUERY or "." comes next (optional)
+    3. INPUTS (files) come last (optional)
+    4. STDIN is always implicitly included if present
+
+FLAGS:
+    (implementation-defined; must precede all other arguments)
+
+QUERY MODES:
+
+    [NO QUERY]
+        pq file.json
+        pq (with STDIN only)
+        → batch mode
+        → identity query ("pretty print")
+        → does NOT enter interactive mode
+
+    [EXPLICIT QUERY]
+        pq k1 file.json
+        bat x | pq k1
+        → batch mode
+        → executes query over JSONL stream
+
+    [INTERACTIVE MODE]
+        pq . file.json
+        pq .
+        bat x | pq .
+        → launches interactive TUI (fzf-like fuzzy query)
+        → "." means "query is deferred to runtime input"
+
+    IMPORTANT INTERACTIVE RULE:
+        "." is valid even when ONLY STDIN is present.
+        If STDIN exists:
+            - pq . reads until EOF
+            - then enters TUI mode over streamed dataset
+        If "." is used with NO STDIN and NO INPUT FILES:
+            → show help (do not block)
+
+INPUT RULES:
+    STDIN:
+        - always consumed fully if present
+        - blocks until EOF
+        - treated as JSONL root stream
+
+    FILES:
+        - appended after STDIN stream
+        - multiple files allowed
+
+    EXECUTION MODEL:
+        inputs → JSONL stream of roots
+        stream → query engine → output OR TUI
+
+SUMMARY:
+    pq file.json        → batch identity
+    pq k1 file.json     → batch query
+    pq . file.json      → interactive fuzzy mode
+    bat x | pq k1       → batch query over stdin
+    bat x | pq .        → interactive over stdin
+    pq                  → help
+
+    pq                   → pq .
+    pq file.json         → pq . file.json
+    pq . file.json       → explicit identity
+    pq k1 file.json      → query
+    stdout | pq          → pq .
+    stdout | pq k1       → query
+    stdout | pq . file.json file2.json → merge stream
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# MOST RECENT PROMPT:
+# MOST RECENT PROMPT:
+# MOST RECENT PROMPT:
+# MOST RECENT PROMPT:
+# MOST RECENT PROMPT:
+# MOST RECENT PROMPT:
+# MOST RECENT PROMPT:
+# MOST RECENT PROMPT:
+# MOST RECENT PROMPT:
+# MOST RECENT PROMPT:
+# MOST RECENT PROMPT:
+# MOST RECENT PROMPT:
+# MOST RECENT PROMPT:
+# MOST RECENT PROMPT:
+# MOST RECENT PROMPT:
+# MOST RECENT PROMPT:
+# MOST RECENT PROMPT:
+# MOST RECENT PROMPT:
+# MOST RECENT PROMPT:
+# MOST RECENT PROMPT:
+# MOST RECENT PROMPT:
+
+
+
+Can you tighten up this USAGE.txt about a utility I'm making called Pique?
+
+
+
+I see it nearly makes sense, it actually has a simple feel, though there are some complex situations to reconcile. The main things are:
+
+Stdin is really only used as an unnamed input file.
+
+Presence of Stdin modifies the formatter colorer but not the CLI interpretation.
+
+There is a nonstandard argument by the name of . and it has different semantics than usual. . usually means cwd, but here it means 'unspecified query' which actually means 'open tui for live-querying the data by entering in a query interactively'.  However, this also means that not specifying . triggers 'identity query' which basically just means format and highlight.
+
+The . can be there with either/or Stdin and file(s).
+
+Flags Must come before the . or filenames, but are easily parsed using the leading - or -- in Clap.
+
+When . is not specified, the first string after the last flag is interpreted as a query string. All other strings are treated as filenames.
+
+
+
+To sum it up, this cli needs to be rewritten to be:
+
+in | pq
+
+in | pq .
+
+in | pq -f json.json
+
+in | pq -f json.json .
+
+in | pq -f json.json -f json.json
+
+in | pq -f json.json -f json.json .
+
+pq  <- print help message and exit
+
+pq .  <- opens starlark python console when no stdin or file output
+
+pq -f json.json
+
+pq -f json.json -f json.json
+
+pq -f json.json .
+
+pq -f json.json -f json.json .
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Pique (pq) — JSONL formatter, highlighter, querier, and interactive explorer
+
+USAGE:
+    pq [-f FILE]... [QUERY | "."]
+
+    STDIN is always consumed if present, treated as an unnamed input file.
+    All inputs are concatenated into a single JSONL stream. No slurp mode.
+
+MODES:
+    pq                           Print this help and exit
+    pq .                         Open interactive Starlark console
+    pq 'expr'                    Format + query stdin
+    pq -f json.json              Format + highlight
+    pq -f json.json 'expr'       Query file
+    pq -f json.json .            Interactive console over file
+    pq -f json.json -f b.json    Merged stream, format + highlight
+
+    in | pq                      Format + highlight stdin
+    in | pq .                    Interactive console over stdin
+    in | pq 'expr'               Query stdin
+    in | pq -f json.json         Merged stream, format + highlight
+    in | pq -f json.json 'expr'  Query merged stream
+    in | pq -f json.json .       Interactive console over merged stream
+
+
+
+
+
+Pique (pq) — JSONL formatter, highlighter, querier, and interactive explorer
+
+one notable feature is that there is no slurp command—all input document roots
+    are concatenated into one large jsonl document. queries are specifically
+    designed to treat multiple distinct roots as a logical array, allowing the
+    query layer to combine them manually.
+
+usage:
+    $ pq                                   # show help menu and exit
+    $ pq .                                 # hand-write live-query from file
+    $ pq . json.json                       # live-query from file
+    $ pq . json.json json.json             # live-query from file as jsonl
+    $ pq k1 json.json                      # query from file
+    $ stdout |
+    $     pq .                             # live query from stdin
+    $     pq . json.json                   # live query from stdin & from file
+    $     pq k1                            # query from stdin
+    $     pq k1 json.json                  # query from stdin & from file
