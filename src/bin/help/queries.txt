@@ -1,0 +1,13 @@
+Query Types:
+
+Json lines spawns more individual trees
+
+Fanout into multiple docs
+      /-->
+--> [*] --->
+      \-->
+
+Faninto single document
+--\
+---> [-] -->
+--/

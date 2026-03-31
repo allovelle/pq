@@ -1,0 +1,3 @@
+┌──┐
+│🌸│ pique (pq) — jsonl formatter, highlighter, querier and interactive explorer
+└  ┘

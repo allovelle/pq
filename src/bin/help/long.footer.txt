@@ -1,0 +1,4 @@
+one notable feature is that there is no slurp command—all input document roots
+    are concatenated into one large jsonl document. queries are specifically
+    designed to treat multiple distinct roots as a logical array, allowing the
+    query layer to combine them manually.

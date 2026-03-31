@@ -1,34 +1,19 @@
 use clap::Parser;
 use std::{io::IsTerminal, path::PathBuf};
 
-/// pique (pq) — jsonl formatter, highlighter, querier, and interactive explorer
+/// Parsed command-line arguments for pique (pq).
 ///
-/// stdin is always consumed if present, treated as an unnamed input file.
-/// all inputs are concatenated into a single jsonl stream. no slurp mode.
-///
-/// Examples:
-///   pq                           → print this help and exit
-///   pq .                         → open interactive starlark console
-///   pq 'expr'                    → format + query stdin
-///   pq -f json.json              → format + highlight
-///   pq -f json.json 'expr'       → query file
-///   pq -f json.json .            → interactive console over file
-///   pq -f a.json -f b.json       → merged stream, format + highlight
-///
-///   cat f.json | pq              → format + highlight stdin
-///   cat f.json | pq .            → interactive console over stdin
-///   cat f.json | pq 'expr'       → query stdin
-///   cat f.json | pq -f json.json → merged stream, format + highlight
+/// Maps CLI input (file paths, query expression) to concrete runtime modes
+/// via the [`mode`](Self::mode) method. See CLI.txt for usage documentation.
 #[derive(Parser, Debug)]
 #[command(
-    name = "pq",
-    about = "pique — jsonl formatter, highlighter, querier, and interactive explorer",
-    // Disable the default --help short flag so `-h` can remain free if desired,
-    // but keep long --help. Clap will still show help on bare `pq` via override below.
-    disable_help_flag = false,
-    // Don't auto-exit on `pq` with no args — we handle that ourselves so we can
-    // distinguish "no args" (print help) from other modes.
-    arg_required_else_help = false,
+    about = include_str!("help/short.header.txt").trim_end_matches('\n'),
+    after_help = include_str!("help/short.footer.txt"),
+    long_about = include_str!("help/long.header.txt"),
+    after_long_help = concat!(
+        include_str!("help/long.footer.txt"),
+        include_str!("help/queries.txt")
+    ),
 )]
 pub struct Cli
 {
@@ -62,9 +47,6 @@ pub struct Cli
 #[derive(Debug, PartialEq)]
 pub enum Mode
 {
-    /// `pq` with no args and no stdin: print help and exit.
-    Help,
-
     /// Format + syntax-highlight the JSONL stream, no filtering.
     /// Triggered when no query is given (files and/or stdin present).
     FormatHighlight,
@@ -97,8 +79,9 @@ impl Cli
                 }
                 else
                 {
-                    // `pq` bare — no files, no stdin, no query → help.
-                    Mode::Help
+                    // `pq` bare — no files, no stdin, no query:
+                    // clap will handle help automatically.
+                    Mode::FormatHighlight
                 }
             }
 
@@ -125,14 +108,6 @@ fn main()
 
     match mode
     {
-        Mode::Help =>
-        {
-            use clap::CommandFactory;
-            Cli::command().print_help().unwrap();
-            println!();
-            std::process::exit(0);
-        }
-
         Mode::FormatHighlight =>
         {
             eprintln!(
@@ -174,13 +149,6 @@ mod tests
     }
 
     // ---- mode resolution ---------------------------------------------------
-
-    #[test]
-    fn bare_no_stdin_is_help()
-    {
-        let cli = parse(&[]);
-        assert_eq!(cli.mode(false), Mode::Help);
-    }
 
     #[test]
     fn bare_with_stdin_is_format_highlight()
