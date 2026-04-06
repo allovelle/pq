@@ -1,3 +1,39 @@
+// TODO: This is only for STDIN --> FILES use mmap so no memcp is necessary
+// TODO: This is only for STDIN --> FILES use mmap so no memcp is necessary
+// TODO: This is only for STDIN --> FILES use mmap so no memcp is necessary
+// TODO: This is only for STDIN --> FILES use mmap so no memcp is necessary
+// TODO: This is only for STDIN --> FILES use mmap so no memcp is necessary
+// TODO: This is only for STDIN --> FILES use mmap so no memcp is necessary
+// TODO: This is only for STDIN --> FILES use mmap so no memcp is necessary
+// TODO: This is only for STDIN --> FILES use mmap so no memcp is necessary
+// TODO: This is only for STDIN --> FILES use mmap so no memcp is necessary
+// TODO: This is only for STDIN --> FILES use mmap so no memcp is necessary
+// TODO: This is only for STDIN --> FILES use mmap so no memcp is necessary
+// TODO: This is only for STDIN --> FILES use mmap so no memcp is necessary
+// TODO: This is only for STDIN --> FILES use mmap so no memcp is necessary
+// TODO: This is only for STDIN --> FILES use mmap so no memcp is necessary
+// TODO: This is only for STDIN --> FILES use mmap so no memcp is necessary
+// TODO: This is only for STDIN --> FILES use mmap so no memcp is necessary
+// TODO: This is only for STDIN --> FILES use mmap so no memcp is necessary
+// TODO: This is only for STDIN --> FILES use mmap so no memcp is necessary
+// TODO: This is only for STDIN --> FILES use mmap so no memcp is necessary
+// TODO: This is only for STDIN --> FILES use mmap so no memcp is necessary
+// TODO: This is only for STDIN --> FILES use mmap so no memcp is necessary
+// TODO: This is only for STDIN --> FILES use mmap so no memcp is necessary
+// TODO: This is only for STDIN --> FILES use mmap so no memcp is necessary
+// TODO: This is only for STDIN --> FILES use mmap so no memcp is necessary
+// TODO: This is only for STDIN --> FILES use mmap so no memcp is necessary
+// TODO: This is only for STDIN --> FILES use mmap so no memcp is necessary
+// TODO: This is only for STDIN --> FILES use mmap so no memcp is necessary
+// TODO: This is only for STDIN --> FILES use mmap so no memcp is necessary
+// TODO: This is only for STDIN --> FILES use mmap so no memcp is necessary
+// TODO: This is only for STDIN --> FILES use mmap so no memcp is necessary
+// TODO: This is only for STDIN --> FILES use mmap so no memcp is necessary
+
+// TODO: THIS NEEDS TO IMPLEMENT A PARTIAL UTF-8 CODEPOINT BUFFER SO THAT ANY
+// TODO: AMOUNT OF BYTES CAN BE APPENDED WITHOUT INVALIDATING REFERENCES.
+// TODO: CAN USE THE UTF-8 ITER TYPE FROM THE TINY BRANCH.
+
 // ! This buffers over <T> but it needs to buffer over u8, index by usize over
 // ! <T>, iterate over <T>
 
@@ -22,6 +58,12 @@ impl<T: Copy> BufIter<T>
     fn iter(mut self) -> Self
     {
         self.counter = 0;
+        self
+    }
+
+    fn iter_from(mut self, index: usize) -> Self
+    {
+        self.counter = index;
         self
     }
 
