@@ -110,8 +110,8 @@ fn pipeline()
     }
 }
 
-// * Invoke with:
-// * bat json.json | cargo run --bin cli -- k1.k2.k3 -f json.json -f json.json
+// * CLI query expr & stdin & multiple files. Invoke with:
+// * bat json.json | cargo run --bin pq -- k1.k2.k3 -f json.json -f json.json
 fn main()
 {
     use clap::Parser;
@@ -148,4 +148,7 @@ fn main()
             );
         }
     }
+
+    // TODO: Send the input files to mem mapper
+    // TODO: Send the stdin to the UTF-8 buffer & iter
 }
