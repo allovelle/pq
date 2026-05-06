@@ -9,6 +9,7 @@
 
 mod cli;
 mod io;
+mod txt;
 
 struct State
 {
@@ -151,4 +152,7 @@ fn main()
 
     // TODO: Send the input files to mem mapper
     // TODO: Send the stdin to the UTF-8 buffer & iter
+
+    let (total_len, lengths) = txt::lengths(&cli);
+    eprintln!("total_len={total_len}, lengths={:?}", lengths);
 }

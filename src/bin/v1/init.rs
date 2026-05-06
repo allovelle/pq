@@ -290,7 +290,9 @@ impl<'pipe, Q: Query, F: Formatter> Pipeline<'pipe, Q, F>
         let row_iter = result.rows.iter();
         let access = Access::Stream(Box::new(row_iter));
 
-        self.formatter.format(access)
+        let _access = self.formatter.format(access);
+
+        Access::Stream(Box::new(std::iter::empty()))
     }
 }
 
@@ -305,13 +307,13 @@ fn main()
 
     fn main()
     {
-        let pipeline = Pipeline {
-            lexer: Lexer,
-            parser: Parser,
-            query: IdentityQuery,
-            formatter: SimpleFormatter,
-        };
+        // let pipeline = Pipeline {
+        // !    lexer: Lexer { utf8: Vec::new() },
+        //     parser: Parser,
+        //     query: IdentityQuery,
+        //     formatter: SimpleFormatter,
+        // };
 
-        let _output = pipeline.run(DummySource);
+        // let _output = pipeline.run(DummySource);
     }
 }
