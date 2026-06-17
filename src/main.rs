@@ -9,6 +9,7 @@
 
 mod cli;
 mod io;
+mod mem;
 mod txt;
 
 struct State
