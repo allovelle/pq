@@ -31,6 +31,7 @@ smallvec = "1.15.1"
 
 # Used by the ui_json_token_rows to open a beautiful HTML UI in the browser
 open = "5.3.3"
+memmap2 = "0.9.10"
 
 # TODO: For adding Rust extension types into Starlark
 # allocative = "0.3.4"
