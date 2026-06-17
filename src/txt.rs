@@ -51,6 +51,8 @@ pub struct StaticFiles<'buf>
     pub descriptors: Vec<(usize, String)>,
 }
 
+// ? WAIT WHERE IS THE BULK ALLOCATOR THAT GETS ALL FILE SIZES AND ALLOCATES IT?
+
 // ! This cannot handle UTF-8 decoding. This must be handled by another IO type
 impl StaticFiles
 {
