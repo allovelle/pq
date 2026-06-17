@@ -36,6 +36,22 @@ pub fn load_input_files(cli: &Cli) -> io::Result<InputFiles>
     eprintln!("total_len={total_len}, lengths={:?}", lengths);
 
     txtmmap::mmap_space(&cli.files)
+
+    // Read all files into mmaped pages -> there may be space at end of last
+    // 4kb page. If so, start reading in stdin into that page space or begin
+    // allocating more pages
+    //   Treat this as one big buffer, allow random access, allow iteration,
+    //   allow append-only modification, indices are not invalidate on page map
+    //   realloc. Ranges are not invalidated either. Pointers are tied only to
+    //   the allocated range itself, not any one memory region.
+
+    // Read in files, return struct to expose methods described above, then have
+    // users begin appending stdin (who handles this? special interface?)
+
+    // index()
+    // append()
+    // metadata_by_index() -> find page range, get filename, length, start
+    // metadata_by_filename() -> lookup filename, get length, start, range
 }
 
 mod txtmmap
