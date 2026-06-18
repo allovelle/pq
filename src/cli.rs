@@ -1,8 +1,9 @@
 use clap::Parser;
 use std::{
     fs::{self, File},
-    io,
+    io::{self, Read},
     path::PathBuf,
+    slice, thread,
 };
 
 /// Parsed command-line arguments for pique (pq).
@@ -116,11 +117,53 @@ impl Cli
         }
         (buffer, descriptors)
     }
+
+    /// Load all input files concurrently into a single buffer, returning the
+    /// buffer and file descriptors with offsets into the buffer.
+    pub fn load_input_files_concurrent(
+        &self,
+    ) -> (Vec<u8>, Vec<StaticFileDescriptor>)
+    {
+        // Preallocation prerequisite for buffer length and file offsets
+        let (total_len, descriptors) = self.total_input_file_lengths();
+
+        // Preallocate space manually since threads will write directly into it
+        // since Vec::with_capacity does not actually set the len of the buffer
+        let mut buffer = vec![0u8; total_len];
+
+        thread::scope(|scope| {
+            // Buffer base pointer as usize for pointer arithmetic in threads,
+            // safe since the buffer is not reallocated or dropped until all
+            // threads join due to preallocation
+            let buf_base_ptr = buffer.as_mut_ptr() as usize;
+
+            // Not zero copy but very tiny overhead. This is fixable by storing
+            // only the end offset of each file and counting backwards
+            for desc in descriptors.iter().cloned()
+            {
+                scope.spawn(move || {
+                    // File descriptor shows offset and length so overlap is not
+                    // possible as threads write to disjoint regions of the buf
+                    let mut file_desc = File::open(&desc.filename).unwrap();
+                    let dest = unsafe {
+                        slice::from_raw_parts_mut(
+                            (buf_base_ptr as *mut u8).add(desc.offset),
+                            desc.length,
+                        )
+                    };
+                    file_desc.read_exact(dest).unwrap();
+                });
+            }
+        });
+
+        // Same file descriptors, filled buffer with file contents
+        (buffer, descriptors)
+    }
 }
 
 /// There will be one less file descriptor than there are files since the last
 /// file is stdin.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct StaticFileDescriptor
 {
     pub offset: usize,

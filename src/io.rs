@@ -80,6 +80,7 @@ mod io
         StderrPipe,
         StderrFile(String),
     }
+
     enum InOutErrContext
     {
         StdinPipeStdoutTTY,

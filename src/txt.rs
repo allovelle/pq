@@ -1,8 +1,8 @@
 //! UTF-8 types and other supporting utilities
 
-// TODO: 1. Go get all lengths of input files
-// TODO: 2. Allocate a buffer of the total length
-// TODO: 3. Memory map all files into the buffer
+// // TODO: 1. Go get all lengths of input files
+// // TODO: 2. Allocate a buffer of the total length
+// // TODO: 3. Memory map all files into the buffer
 // TODO: 4. Graft the buffer for stdin onto the buffer
 
 use crate::cli::Cli;
