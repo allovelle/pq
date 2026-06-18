@@ -106,6 +106,7 @@ impl Cli
         (total_len, descriptors)
     }
 
+    #[deprecated(note = "Use load_input_files_concurrent for good performance")]
     pub fn load_all_input_files(&self) -> (Vec<u8>, Vec<StaticFileDescriptor>)
     {
         let (total_len, descriptors) = self.total_input_file_lengths();
@@ -159,6 +160,28 @@ impl Cli
         // Same file descriptors, filled buffer with file contents
         (buffer, descriptors)
     }
+
+    // TODO: We don't care about stdin since it's going to be processed by the
+    // TODO: downstream UTF-8 buffer and iter.
+    // Pass the stdin descriptor to txt here as it is leaving the user CLI layer
+
+    // ? 1. Make the buffer grow by exact amounts (chunks of stdin) so that we
+    // ? 2. don't have wasted space
+    // Random access index, seq iteration, iteration from offset, append-only
+    // modification, slicing regions, and indices do not invalidate on
+    // reallocations since indexing Vec is not based on pointers.
+    // ? 3. Slices may have token binding so that there's a sort of 'request->
+    // ? 3. response' pattern. In theory, appending to the buffer shouldn't
+    // ? 3. invalidate any other systems due to append only nature.
+
+    // TODO: Pass stdio and stdin buffer to the next phase for UTF-8 decoding
+    // TODO: and iter
+
+    // TODO: Pass stdio and stdin buffer to the next phase for UTF-8 decoding
+    // TODO: and iter
+
+    // TODO: Pass stdio and stdin buffer to the next phase for UTF-8 decoding
+    // TODO: and iter
 }
 
 /// There will be one less file descriptor than there are files since the last
