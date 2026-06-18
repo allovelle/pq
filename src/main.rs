@@ -113,7 +113,7 @@ fn pipeline()
 }
 
 // * CLI query expr & stdin & multiple files. Invoke with:
-// * bat json.json | cargo run --bin pq -- k1.k2.k3 -f json.json -f json.json
+// * bat json/json.json | cargo run --bin pq -- k1.k2.k3 -f json/json.json -f json/json.json
 fn main()
 {
     use clap::Parser;
@@ -154,6 +154,6 @@ fn main()
     // TODO: Send the input files to mem mapper
     // TODO: Send the stdin to the UTF-8 buffer & iter
 
-    let (total_len, lengths) = txt::lengths(&cli);
-    eprintln!("total_len={total_len}, lengths={:?}", lengths);
+    let (total_len, lengths) = cli.total_input_file_lengths();
+    eprintln!("total_len={total_len}, lengths={lengths:?}");
 }

@@ -1,5 +1,9 @@
 use clap::Parser;
-use std::path::PathBuf;
+use std::{
+    fs::{self, File},
+    io,
+    path::PathBuf,
+};
 
 /// Parsed command-line arguments for pique (pq).
 ///
@@ -71,25 +75,57 @@ impl Cli
         match &self.query
         {
             // No query arg at all.
-            None =>
-            {
-                if has_input
-                {
-                    Mode::FormatHighlight
-                }
-                else
-                {
-                    // `pq` bare — no files, no stdin, no query:
-                    // clap will handle help automatically.
-                    Mode::FormatHighlight
-                }
-            }
+            None if has_input => Mode::FormatHighlight,
+
+            // `pq` bare — no files, no stdin, no query:
+            // clap will handle help automatically.
+            None => Mode::FormatHighlight,
 
             Some(q) if q == "." => Mode::Interactive,
 
             Some(expr) => Mode::Query(expr.clone()),
         }
     }
+
+    pub fn total_input_file_lengths(&self)
+    -> (usize, Vec<StaticFileDescriptor>)
+    {
+        let mut descriptors = Vec::with_capacity(self.files.len());
+        let mut total_len = 0;
+        for file in &self.files
+        {
+            let file_len = fs::metadata(file).unwrap().len() as usize;
+            total_len += file_len;
+            descriptors.push(StaticFileDescriptor {
+                offset: total_len - file_len,
+                length: file_len,
+                filename: file.to_string_lossy().into_owned(),
+            });
+        }
+        (total_len, descriptors)
+    }
+
+    pub fn load_all_input_files(&self) -> (Vec<u8>, Vec<StaticFileDescriptor>)
+    {
+        let (total_len, descriptors) = self.total_input_file_lengths();
+        let mut buffer = Vec::with_capacity(total_len);
+        for file in &self.files
+        {
+            let mut file_descriptor = File::open(file).unwrap();
+            io::copy(&mut file_descriptor, &mut buffer).unwrap();
+        }
+        (buffer, descriptors)
+    }
+}
+
+/// There will be one less file descriptor than there are files since the last
+/// file is stdin.
+#[derive(Debug)]
+pub struct StaticFileDescriptor
+{
+    pub offset: usize,
+    pub length: usize,
+    pub filename: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -207,5 +243,24 @@ mod tests
     {
         let cli = parse(&["-f", "a.json"]);
         assert!(cli.query.is_none());
+    }
+
+    // ---- total_input_file_lengths -------------------------------------------
+    #[test]
+    fn total_input_file_lengths()
+    {
+        let cli = parse(&["-f", "a.json", "-f", "b.json"]);
+        let (total_len, descriptors) = cli.total_input_file_lengths();
+        assert_eq!(descriptors.len(), 2);
+        assert_eq!(total_len, 0); // Assuming empty files for this test
+    }
+
+    #[test]
+    fn load_all_input_files()
+    {
+        let cli = parse(&["-f", "a.json", "-f", "b.json"]);
+        let (buffer, descriptors) = cli.load_all_input_files();
+        assert_eq!(descriptors.len(), 2);
+        assert_eq!(buffer.len(), 0); // Assuming empty files for this test
     }
 }

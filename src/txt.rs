@@ -8,19 +8,6 @@
 use crate::cli::Cli;
 use std::{collections::HashMap, io, ops::Range};
 
-pub fn lengths(cli: &Cli) -> (usize, Vec<usize>)
-{
-    let mut total_len = 0;
-    let mut lengths = Vec::new();
-    for file in &cli.files
-    {
-        let file_len = std::fs::metadata(file).unwrap().len() as usize;
-        total_len += file_len;
-        lengths.push(file_len);
-    }
-    (total_len, lengths)
-}
-
 pub type InputFilesBuffer = Box<[u8]>;
 
 pub struct InputFilesDescriptor
@@ -30,25 +17,17 @@ pub struct InputFilesDescriptor
     pub files: Vec<String>,
 }
 
-/// There will be one less file descriptor than there are files since the last
-/// file is stdin.
-pub struct StaticFileDescriptor
-{
-    pub offset: usize,
-    pub length: usize,
-    pub filename: String,
-}
-
-pub struct StaticFiles<'buf>
+#[derive(Default)]
+pub struct StaticFiles
 {
     /// One big buffer containing all files contiguous, with stdin appended at
     /// the end as it is read in.
-    pub buffer: &'buf mut [u8],
+    pub buffer: Vec<u8>,
 
     /// Start Offset -> Filename. Lookup by any byte offset within the range of
     /// the file to get the filename. Stores the start of the stdin as the end
     /// of the last file. The stdin filename is named `<stdin>`.
-    pub descriptors: Vec<(usize, String)>,
+    pub descriptors: Vec<(usize, usize, String)>,
 }
 
 // ? WAIT WHERE IS THE BULK ALLOCATOR THAT GETS ALL FILE SIZES AND ALLOCATES IT?
@@ -58,6 +37,8 @@ impl StaticFiles
 {
     // TODO: Can you add new filenames as long as you don't snip into stdin?
     // TODO: IT would mean growable after initial CLI invocation, so I feel not.
+
+    pub fn new() -> Self { Self::default() }
 
     // This is called multiple times, once per chunk from stdin. File IO is not
     // handled here.
@@ -74,7 +55,7 @@ impl StaticFiles
         // stdin, and in cases where there is only stdin and no files
         let mut last_offset = 0;
 
-        for (offset, _filename) in &self.descriptors
+        for (offset, length, _filename) in &self.descriptors
         {
             if index > *offset
             {
